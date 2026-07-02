@@ -8,7 +8,7 @@ Runtime: **Deno + TypeScript**. Deno's sandbox permissions give runtime-enforced
 
 The unit of everything: one identity, one job. Defined entirely in one YAML file:
 
-- **identity** — name, description
+- **identity** — nickname + description. **Users don't name agents; agents name themselves.** The config's `nickname` is the stable operator handle (compose service, logs, CLI, session keys). On first boot the agent performs a one-time naming ritual — one LLM call given its job description — and the chosen name persists in SQLite for life, surviving restarts. The agent presents itself by its own name (e.g. signing Discord replies); the operator addresses it by nickname. A fresh volume means a new memory and a new self — the agent renames itself.
 - **model** — provider + model id (+ fallbacks, roles)
 - **system prompt** — the job description
 - **tools** — natives, skills, MCP servers, custom TS
@@ -115,7 +115,7 @@ Composition over orchestration: an agent exposed *as a tool* to another agent (`
 YAML-first, one file per agent. Current sketch of the MVP agent (see Plan 2 for the annotated version and the skill-based variant):
 
 ```yaml
-name: issue-bot
+nickname: issue-bot                  # operator handle; the agent names itself on first boot
 description: Turns team Discord messages into GitHub issues.
 
 model:
@@ -194,3 +194,4 @@ Docs rule: a feature PR that doesn't touch `docs/` isn't done. Examples are exec
 - Streaming results through triggers (progressive Discord edits) or final-result-only for v1?
 - Run traces: bespoke JSONL in SQLite vs OpenTelemetry from day one?
 - Eval harness (typed task I/O + `looped test`) — post-MVP, but the cheap-model story eventually needs it.
+- Self-naming edge cases: should agency/client deployments get a policy option to present the nickname externally instead of the self-chosen name (brand control)? And is volume-reset-means-new-name the right call, or should the name be exportable/restorable with memory?

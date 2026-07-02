@@ -5,7 +5,7 @@
 The idea: describing an agent should be a YAML file, and deploying it should be a `docker run`. Agents are long-running services that sit in a loop — wait for an event (a Discord message, a webhook, a cron tick), do their one job, deliver the result, go idle.
 
 ```yaml
-name: issue-bot
+nickname: issue-bot   # agents name themselves; you just give them a handle
 description: Turns team Discord messages into GitHub issues.
 model: { provider: anthropic, id: claude-sonnet-5 }
 triggers:
