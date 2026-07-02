@@ -2,22 +2,31 @@
 
 Research date: July 2026. Four research sweeps: the frameworks I used and disliked (OpenClaw, Hermes), the best-engineered agent runtimes in existence (Claude Code, OpenCode, Codex CLI), the current framework landscape (eve, Flue, Mastra, Docker Agent, n8n, durable-execution platforms), and the Open Agent Spec.
 
-## The gap
+## Positioning
 
-**"Config-driven + Docker-native + event-triggered" is an unoccupied intersection.** Every pair exists; the triple does not:
+**The position is a philosophy, not a feature set: fit-for-purpose agents for business process automation.** Everyone else in the market sells *generality* — a toolkit, canvas, or platform for building *anything*. Looped sells *narrowness*: one business process, one agent, automated end to end. That's the claim competitors can't fast-follow, because their positioning, economics, and existing users all demand breadth. Docker Agent can add a `triggers:` key next week; it cannot become "the framework for hiring a digital specialist" without abandoning what it is. A feature gap closes in a release; a contrary philosophy requires a different product.
 
-- **Docker Agent** (Docker's own `cagent`): pure-YAML agents, distributed as OCI artifacts — but **zero triggers**. Strictly request/response. Closest structural competitor, made by Docker themselves.
-- **Vercel eve** (launched June 2026, "Next.js for agents"): channels for Discord/Slack/GitHub, cron schedules, `instructions.md` agents — closest competitor **in spirit**, but the substrate is Vercel's cloud (Workflows, Sandbox, Cron Jobs), and the definition is a TypeScript-plus-markdown directory, not a portable config file.
-- **Inngest / Trigger.dev / Temporal / Hatchet**: triggers-first, durable — but code-first. No declarative agent definition.
-- **n8n / Dify**: triggers + self-hosting for the business-automation market — but visual-canvas-first, and n8n's fair-code license forbids building a platform business on it.
-- **Flue** (Fred Schott / Astro team, now Cloudflare): "Claude Code but 100% headless" — code-first TS harness, no config-driven story, no hosted offering.
-- **Mastra / LangGraph / CrewAI / OpenAI & Claude Agent SDKs**: libraries you embed in your own app. You bring the service, the trigger, and the deployment.
+Everything distinctive about Looped **derives from** the fit-for-purpose stance rather than sitting beside it:
 
-**Stated precisely: nobody ships "the trigger lives in the agent's config file, and `docker compose up` is the whole deployment story."** That's Looped AF.
+- **Minimalism** — a one-job agent needs three tools, not sixty; general frameworks *structurally can't* ship lean because every user needs a different sixty.
+- **Cheap-model economics** — narrow scope is what makes mini models reliable; frameworks built for open-ended agents are priced (in tokens and trust) for frontier models.
+- **Permissions without prompts** — you can write a tight, auditable allowlist for one process; nobody can for "anything the user might ask."
+- **Config over code** — one job fits in one YAML file; general-purpose behavior doesn't.
+- **The domain: business processes** — not coding (Claude Code/Flue's turf), not personal assistance (OpenClaw/Hermes's turf), not chat products. The repetitive, well-scoped work teams do by hand — the n8n job market, served with an agent instead of a canvas.
 
-> **An agent is a YAML file. `docker compose up` and it's listening.**
+The market map, read this way:
 
-Longer form, against the named competitors: *Looped AF is for the agents n8n is too clumsy for and eve is too Vercel for — single-purpose, event-triggered agents (Discord message in, GitHub issue out) defined in one config file, running as a container on your infrastructure. No canvas, no proprietary cloud, no orchestration framework to learn.*
+- **General-purpose assistants** (OpenClaw, Hermes): the opposite philosophy — one agent, every job. Their bloat and security record are the cautionary tale, and the source of our origin story.
+- **Build-anything toolkits** (Mastra, LangGraph, CrewAI, OpenAI/Claude SDKs, Flue): libraries for developers writing agent *applications*. Fine products; different job. You bring the service, trigger, deployment, and opinion.
+- **Vercel eve**: closest in spirit (single-purpose backend agents, channels, cron) — but positioned as infrastructure gravity for Vercel's cloud, and still developer-app-shaped (TS + markdown directories). Their thesis is "agents belong on our platform"; ours is "agents are containers you own."
+- **Docker Agent**: closest in format (pure YAML) — but a *runtime/packaging* play with no automation thesis, no triggers, no permission story.
+- **n8n / Dify / Zapier Agents / Lindy**: the same *buyer problem* (automate the process), a different *product theory* — visual workflows with AI nodes bolted in, vs. an agent given a job, tools, and boundaries. When the process is fuzzy ("read this message, create a sensible issue"), a canvas of boxes is the wrong abstraction and a scoped agent is the right one.
+
+Supporting evidence, not the moat: the feature intersection (config-driven + Docker-native + trigger-in-config) also happens to be unoccupied today. Useful for launch messaging; never the load-bearing argument.
+
+**Positioning statement:** *Looped AF is the framework for fit-for-purpose agents — hire an agent for one job. Describe the job in a YAML file, give it exactly the tools and permissions the job needs, and run it as a container on your own infrastructure. It automates business processes the way you'd staff them: one specialist at a time.*
+
+> **One job. One YAML file. `docker compose up` and it's hired.**
 
 ## Comparison
 
@@ -60,12 +69,12 @@ Philosophically aligned (declarative YAML, native/mcp/custom tools, sandbox allo
 
 ## Threat watch
 
-- **Docker** could add `triggers:` to Docker Agent any release (they ship weekly). 
-- **eve** has Vercel's distribution and is two weeks old.
-- Consequence: the durable moat is not the YAML format — it's the **opinionated trigger→agent→action product surface**, the permission story businesses can trust, and the platform/service layer. Ship the trigger-in-config primitive fast; it's the one piece with no incumbent.
+- **Docker** could add `triggers:` to Docker Agent any release (they ship weekly); **eve** has Vercel's distribution. Feature gaps close — that's exactly why the positioning is the philosophy, not the checklist.
+- What features can't buy them: the fit-for-purpose opinion baked into every default (minimal base image, cheap-model design targets, per-process permission ceilings, one-file agents), a portfolio of proven process agents, and the platform/agency layer that sells outcomes rather than tooling.
+- The real risk is not a competitor adding a feature but a competitor adopting the *category*. Move fast on owning the language ("fit-for-purpose agents", process agents as hires) and on shipping reference agents that make the philosophy tangible.
 
 ## Open questions
 
-- Exact license choice (Apache-2.0 vs MIT) — Apache-2.0 gives patent protection, fits the ecosystem norm (eve, Flue, Mastra, Docker Agent are all Apache-2.0).
+- ~~Exact license choice~~ — settled: Apache-2.0 (ecosystem norm, patent grant; copyright Looped Automation).
 - Do we consume models.dev directly or vendor a snapshot?
-- When Docker Agent inevitably adds triggers, what's our second differentiator? (Current answer: permissions + platform + minimalism-for-cheap-models.)
+- Category language: "fit-for-purpose agents"? "process agents"? Worth settling before the manifesto gets wide distribution — owning a term is part of the positioning.
