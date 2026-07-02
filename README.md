@@ -1,2 +1,32 @@
-# agent-framework
-Looped AF
+# Looped Agent Framework
+
+**Looped AF** — a Docker-native, config-driven framework for building single-purpose, event-driven AI agents that automate business processes.
+
+The idea: describing an agent should be a YAML file, and deploying it should be a `docker run`. Agents are long-running services that sit in a loop — wait for an event (a Discord message, a webhook, a cron tick), do their one job, deliver the result, go idle.
+
+```yaml
+name: issue-bot
+description: Turns team Discord messages into GitHub issues.
+model: { provider: anthropic, id: claude-sonnet-5 }
+triggers:
+  - type: discord
+    channels: ["issues"]
+tools:
+  mcp:
+    - name: github
+      command: ["docker", "run", "-i", "ghcr.io/github/github-mcp-server"]
+      env: { GITHUB_TOKEN: ${GITHUB_TOKEN} }
+permissions:
+  net: [discord.com, gateway.discord.gg, api.github.com]
+```
+
+## Status
+
+Planning. Start with the plans — they're the source of truth:
+
+- [Plan 0 — Vision](plans/000-vision.md): why this exists, principles, non-goals
+- [Plan 1 — Architecture](plans/001-architecture.md): core concepts and design
+- [Plan 2 — MVP](plans/002-mvp.md): the Discord → GitHub issue agent
+- [Plan 3 — Roadmap](plans/003-roadmap.md): milestones
+
+Runtime: [Deno](https://deno.com) + TypeScript.
