@@ -9,7 +9,9 @@ This directory is the source of truth for what Looped AF is and where it's going
 | 0 | [000-vision.md](000-vision.md) | Why this exists, goals, principles, non-goals |
 | 1 | [001-architecture.md](001-architecture.md) | Core concepts and system design |
 | 2 | [002-mvp.md](002-mvp.md) | The proving ground: Discord → GitHub issue agent |
-| 3 | [003-roadmap.md](003-roadmap.md) | Milestones from zero to deployed MVP |
+| 3 | [003-roadmap.md](003-roadmap.md) | Milestones from manifesto to deployed MVP and the meta-agent |
+| 4 | [004-landscape.md](004-landscape.md) | Competitive landscape, positioning, target market, adopted lessons |
+| 5 | [005-platform.md](005-platform.md) | Hosted platform, service business, agent hub |
 
 ## How to read and amend these
 

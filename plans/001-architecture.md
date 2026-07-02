@@ -1,20 +1,21 @@
 # Plan 1 — Architecture
 
-Runtime: **Deno + TypeScript**. Deno's sandbox permissions give the framework runtime-enforced isolation for free, `deno compile` gives single-binary agents, and containers stay small.
+Runtime: **Deno + TypeScript**. Deno's sandbox permissions give runtime-enforced isolation, `deno compile` gives single-binary agents, and containers stay small. Design lineage is deliberate (see Plan 4): Claude Code's permission grammar and harness discipline, OpenCode's server-first architecture and provider abstraction, Codex CLI's sandbox defaults.
 
 ## Core concepts
 
 ### Agent
 
-An agent is the unit of everything: one identity, one job. Defined entirely in config:
+The unit of everything: one identity, one job. Defined entirely in one YAML file:
 
 - **identity** — name, description
-- **model** — provider + model id
+- **model** — provider + model id (+ fallbacks, roles)
 - **system prompt** — the job description
-- **tools** — what it can do
+- **tools** — natives, skills, MCP servers, custom TS
 - **triggers** — what wakes it up
-- **permissions** — what it's allowed to touch
-- **memory** — what it remembers between events
+- **permissions** — what it may touch (deny-by-default)
+- **memory** — what persists between events
+- **limits** — max steps, max cost per run
 
 ### The Loop
 
@@ -30,18 +31,21 @@ outer loop (the service):
   → go idle
 ```
 
-The **outer loop** is what makes a Looped agent a service rather than a script. The **inner loop** is the standard LLM tool-use iteration, capped by turn/step limits from config.
+The **outer loop** makes a Looped agent a service, not a script. The **inner loop** is one flat tool-use loop — single message history, `while(tool_calls)`, deterministic harness around a thin model core. No graphs inside an agent; composition happens between agents. Inner-loop discipline (all of it exists because unattended + cheap models exercise these paths daily):
+
+- **Budgets as dead-man's switches**: `limits.max_steps` and `limits.max_cost` end runs with typed errors (`error_max_steps`, `error_max_cost`).
+- **Forgiving loop**: tool arguments validated against JSON Schema, validation errors fed back to the model for self-repair; provider retries classified (rate-limit vs overloaded); model fallback chain from config.
+- **Context discipline**: compact tool results, output token caps, lean history. Compaction is v1 scope for long-lived sessions: prune old tool outputs first, then summarize; reserve token headroom; anti-thrash cutoff.
+- **Read-only parallelism**: tools carry a `readOnly` hint; read-only calls run concurrently, mutating calls serialize.
 
 ### Triggers
 
-Pluggable event sources. A trigger connects to the outside world, converts happenings into events, and provides the reply channel for results.
+Pluggable event sources declared in config — the framework's core differentiator (no incumbent ships trigger-in-config; see Plan 4). A trigger connects outward, converts happenings into events, and provides the reply channel.
 
 v1 triggers:
-- **discord** — gateway connection; filters by channel/mention; replies in-thread
-- **webhook** — HTTP endpoint; responds with the run result or an ack + callback
-- **cron** — schedule expression; fires with no reply channel (results go to a configured sink)
-
-Trigger interface sketch (new triggers are additive, no core changes):
+- **discord** — gateway connection; channel/mention filters; replies in-thread
+- **webhook** — HTTP endpoint with bearer auth; responds with result or ack+callback
+- **cron** — schedule expression; results go to a configured sink
 
 ```ts
 interface Trigger {
@@ -51,64 +55,73 @@ interface Trigger {
 }
 ```
 
-### Tools
+Later: **a2a** (Agent2Agent protocol endpoint + generated agent card) as just another trigger type, making Looped agents callable by the broader ecosystem.
 
-Three sources, one uniform interface (name + JSON-schema input + async execute):
+### Tools — four sources, one interface
 
-1. **Native built-ins** — shipped with the framework: `run_bash`, `http_request`, `read_file`, `write_file`. Zero config to enable, always permission-gated.
-2. **MCP servers** — any Model Context Protocol server declared in config (e.g. the GitHub MCP server for the MVP). This is the primary extension surface.
-3. **Custom TypeScript tools** — a `.ts` file exporting a tool definition, referenced from config. The escape hatch.
+Uniform shape (name + JSON-Schema input + async execute + `readOnly` hint), honest hierarchy:
+
+1. **Natives** — the universal escape hatches, shipped with the framework, always permission-gated: `run_bash`, `http_request`, `read_file`, `write_file`. Between `run_bash` and `http_request`, *every* CLI and *every* API is reachable — MCP is an option, never a gate.
+2. **Skills** — markdown know-how packages (+ optional helper scripts) that make the natives effective: how to drive a CLI or API well. **Skills carry knowledge, never capability** — a skill cannot grant permissions; the agent.yaml permission block remains the sole authority, so a malicious skill is just misleading documentation with a permission-bounded blast radius (the inverse of the ClawHub disaster). Progressive disclosure: one description line in context until invoked — the cheap-model-friendly way to integrate anything.
+3. **MCP servers** — declared in config (stdio command or HTTP endpoint), tools namespaced `mcp__server__tool` so permission rules cover them uniformly. Hygiene: `include:` filtering (expose 3 tools from a 40-tool server), deferred schema loading, output token caps, health/reconnect supervision (long-running agents can't use per-session MCP lifecycles).
+4. **Custom TypeScript tools** — a `.ts` file exporting a typed tool definition, referenced from config. Full control.
+
+The default recipe for "use any API/CLI": **custom image provides the binary, skill provides the knowledge, permissions provide the safety.**
 
 ### Provider adapter
 
-A deliberately thin, owned interface — no third-party abstraction layer in the core:
+Owned, thin, three layers (OpenCode's proven blueprint):
 
-```ts
-interface Provider {
-  complete(req: {
-    model: string;
-    system: string;
-    messages: Message[];
-    tools?: ToolDef[];
-    stream?: boolean;
-  }): Promise<Completion>; // text | tool_calls, usage
-}
-```
+1. **Model metadata** — consume the open models.dev registry for context limits/costs/capabilities rather than hardcoding.
+2. **Adapters** behind one streaming interface (`complete()`: messages, tool defs, structured-output mode, stream). v1: **Anthropic** and **OpenAI-compatible** (co-equal citizens — the latter covers gpt-5.4-mini, Ollama, vLLM, proxies).
+3. **Config overrides** — `base_url`, `api_key_env`, custom model entries; any OpenAI-compatible endpoint is just config.
 
-v1 adapters: **Anthropic** and **OpenAI-compatible** (which also covers Ollama, vLLM, most proxies). Selecting a provider is one config line.
+Plus: **model roles** (`model.small:` for summarization/compaction/labels — route the boring calls to the cheapest model), per-agent fallback chains, structured-output/JSON-mode support (cheap models are far more reliable when boxed in), and per-call token/cost accounting into the audit trail.
 
-### Memory / state
+### Memory / persistence
 
-- Per-conversation history keyed by the trigger's conversation id (Discord thread, webhook correlation id).
-- Persistence: **SQLite on a mounted volume** — fits one-agent-one-container, survives restarts, no external service.
-- Context-window compaction (summarize old turns) is acknowledged future work, not v1.
+- **SQLite on a mounted volume** — the canonical store: sessions, messages, runs, tool calls, permission denials, token cost (the audit trail the platform later aggregates; see Plan 5).
+- **Markdown workspace** — optional human-readable agent memory (`MEMORY.md` pattern): greppable, editable by the operator, loaded per config.
+- Sessions keyed by the trigger's conversation identity (Discord thread, webhook correlation id). Compaction per the inner-loop rules above.
 
 ### Permissions
 
-Deny by default. Declared once in `agent.yaml`, never prompted at runtime:
+Deny by default. Declared once, enforced always, **never prompted**:
 
-- **Tool allowlist** — only listed tools exist for the agent.
-- **Host allowlist** — which domains `http_request` (and MCP servers) may reach → compiles to `--allow-net=<hosts>`.
-- **Command allowlist** — which executables `run_bash` may run → app-level gating (+ `--allow-run=<cmds>` where possible).
-- **Filesystem scope** — readable/writable paths → `--allow-read`/`--allow-write`.
+- Rule grammar: `Tool(specifier)` — `bash(gh *)` with compound-command splitting, `net(api.github.com)`, `read(/workspace/**)`, `mcp__github__create_issue`. Evaluated **deny → ask → allow, first match wins, no specificity reordering** (a broad deny beats a narrow allow — predictability over cleverness in a security boundary). Config gets a published JSON Schema.
+- **`ask` cannot exist at runtime.** Config validation resolves every `ask` to: deny, a declared fallback, or an **escalation event** — the undecided action is emitted to a configured channel (webhook, Discord message to an operator) and denies on timeout. Escalation-as-event fits the event-driven model; a waiting prompt does not (OpenCode's headless `ask` literally hangs the server — see Plan 4).
+- A permission denial is a normal tool result the model can adapt to, not a crash.
 
-Two enforcement layers: the framework checks before executing a tool call (clear error back to the model, which can adapt), and the Deno sandbox backstops it at the OS level. A permission failure is a normal tool result, not a crash.
+**Three-layer enforcement** (defense in depth — declarative rules decide *intent*, sandboxes enforce *capability*):
+
+1. **Deno sandbox** — permissions compile to `--allow-net=<hosts>`, `--allow-read/write=<paths>`, `--allow-run=<cmds>`. Tight for agents using only natives-without-bash, skills-via-http, MCP.
+2. **Container** — the real boundary once `run_bash` exists (a spawned subprocess escapes Deno's sandbox entirely). Hardened base image: non-root, read-only rootfs with explicit writable workspace, no capabilities, never mount docker.sock. **Network egress off by default**, opened per the config's net allowlist (container network policy / egress proxy) — Codex's defaults, adopted.
+3. **MicroVM isolation** (gVisor/Firecracker) — hosted-platform tier only; single-tenant self-hosting doesn't need it (Plan 5).
+
+### Secrets
+
+- Config holds **references, never values**: `${GITHUB_TOKEN}` / `api_key_env:`. Configs stay committable.
+- Resolution order: env var → `/run/secrets/<name>` (Compose file secrets) → external providers later (Vault/SOPS/1Password/cloud) as a platform-tier feature.
+- **Never in model context**: credentials are injected server-side at tool-execution time; the model sees that a tool exists, never the PAT.
+- **Scoped tool environments**: `run_bash` and MCP servers receive only the env vars the config explicitly grants them — no ambient inheritance of the agent process env.
+- Log/transcript redaction of known secret values.
 
 ### Multi-agent (later)
 
-Composition over orchestration: an agent can be exposed *as a tool* to another agent (`agent_call`). No graphs, no planners, no shared scratchpads — an agent that needs help calls a narrower agent the same way it calls any tool. Sketch only; no v1 commitment.
+Composition over orchestration: an agent exposed *as a tool* to another agent (`agent_call`), or reachable via A2A. No graphs, no planners, no shared scratchpads. Sketch only; no v1 commitment.
 
 ## Config
 
-YAML-first. The MVP agent, in full (annotated version lives in Plan 2):
+YAML-first, one file per agent. Current sketch of the MVP agent (see Plan 2 for the annotated version and the skill-based variant):
 
 ```yaml
 name: issue-bot
 description: Turns team Discord messages into GitHub issues.
 
 model:
-  provider: anthropic
-  id: claude-sonnet-5
+  provider: openai-compatible        # gpt-5.4-mini-class by default — see Plan 0 principle 9
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini                # role for summaries/compaction
 
 system_prompt: |
   You manage GitHub issues for the team. When someone describes work,
@@ -118,38 +131,66 @@ triggers:
   - type: discord
     channels: ["issues"]
 
-tools:
-  mcp:
-    - name: github
-      command: ["docker", "run", "-i", "ghcr.io/github/github-mcp-server"]
-      env: { GITHUB_TOKEN: ${GITHUB_TOKEN} }
+skills:
+  - ./skills/gh-issues.md            # teaches the gh CLI; binary comes from the image
 
 permissions:
   net: [discord.com, gateway.discord.gg, api.github.com]
+  run: [gh]
+
+env:
+  GITHUB_TOKEN: ${GITHUB_TOKEN}      # reference, resolved at runtime, scoped to gh
 
 memory:
   scope: thread
+
+limits:
+  max_steps: 10
+  max_cost: 0.10
 ```
 
-A programmatic `defineAgent()` (TypeScript config) variant is planned later for dynamic cases; YAML stays the canonical form.
+A programmatic `defineAgent()` variant is planned later; YAML stays canonical.
 
 ## Runtime & deployment
 
-- **One agent per container.** A fleet is a `docker compose` file.
-- Official base image: `looped/agent` — mounts `agent.yaml`, reads secrets from env, persists memory to a volume.
-- CLI (thin, comes after the core works):
-  - `looped init` — scaffold an agent directory
-  - `looped dev` — run locally with hot-reload of config
-  - `looped run agent.yaml` — run for real (what the container entrypoint calls)
+- **One agent per container; a fleet is a compose file.**
+- **The Dockerfile is the environment; the YAML is the agent.** Official base image `looped/agent` (Deno + framework + natives, hardened, minimal — no browser, no extras: Plan 0 principle 8). Custom environments are one layer away:
+
+```dockerfile
+FROM looped/agent
+RUN apk add --no-cache github-cli
+```
+
+- **Server-first**: every agent exposes an HTTP surface — health, sessions, runs, SSE event stream — with an OpenAPI spec. The CLI, `looped dev`, the future hub, and the hosted platform are all thin clients of the same API. Loopback-bound by default, auth token required even locally.
+- CLI: `looped init` (scaffold), `looped dev` (hot-reload local run), `looped run agent.yaml` (the container entrypoint).
 
 ```
 docker run -v ./agent.yaml:/agent/agent.yaml --env-file .env looped/agent
 ```
 
+## Repo structure
+
+This repo is a **monorepo** (Deno workspaces), with documentation as a first-class package from day one:
+
+```
+plans/          — this plan series
+packages/
+  core/         — agent loop, config loader, providers, permissions, memory
+  triggers/     — discord, webhook, cron (separately importable)
+  cli/          — looped init/dev/run
+docs/           — the documentation site (versioned with the code it documents)
+images/         — base image Dockerfile(s)
+examples/       — complete agents (issue-bot first), each a copy-paste starting point
+skills/         — first-party skills (gh-issues, ...)
+```
+
+Docs rule: a feature PR that doesn't touch `docs/` isn't done. Examples are executable documentation — CI runs them.
+
 ## Open questions
 
-- Config: YAML canonical + `defineAgent()` later is the plan — how do the two interact (does YAML compile to the programmatic form internally)?
-- MCP servers that are themselves containers: manage sibling containers, or require them as separate compose services?
-- Memory backend beyond SQLite (Postgres for fleets?) — when does that matter?
-- Streaming responses through triggers (progressive Discord edits?) or final-result-only for v1?
-- Structured run traces: bespoke JSONL, or OpenTelemetry from day one?
+- YAML ↔ `defineAgent()`: does YAML compile to the programmatic form internally?
+- MCP-servers-as-containers: sibling containers vs separate compose services?
+- Egress enforcement mechanism: per-container network policy vs a shared egress proxy sidecar?
+- Streaming results through triggers (progressive Discord edits) or final-result-only for v1?
+- Run traces: bespoke JSONL in SQLite vs OpenTelemetry from day one?
+- Eval harness (typed task I/O + `looped test`) — post-MVP, but the cheap-model story eventually needs it.

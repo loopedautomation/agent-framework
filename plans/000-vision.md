@@ -31,7 +31,14 @@ The "loop" in Looped: agents are long-running services. They sit in a loop waiti
 4. **Fire-and-forget UX.** Trigger the agent, get a result (usually a link), move on with your day. No babysitting.
 5. **Provider-agnostic.** A thin adapter over LLM providers. Swap Anthropic for OpenAI for a local model by changing one config line.
 6. **Permissions that don't get in the way.** Declared once in config, enforced at runtime (Deno sandbox where possible, app-level gating elsewhere). Deny by default. Never an interactive prompt in production.
-7. **Batteries included.** Native tools (`run_bash`, HTTP, files) for the common cases; MCP for everything else.
+7. **Batteries included, but only the ones you asked for.** Native tools (`run_bash`, HTTP, files) for the common cases; skills and MCP for everything else.
+8. **Minimalism.** My GitHub agent doesn't need a browser, so we don't ship one. Base image = runtime + a handful of native tools, nothing else; capability is added per-agent via custom images, skills, and MCP — never by default. Every other framework is bloated; small agents are cheaper, safer, and easier to trust.
+9. **Cheap models are the default.** A well-scoped agent on a mini model (gpt-5.4-mini-class) beats a general agent on a frontier model at a fraction of the cost. Narrow jobs, small toolsets, schema-constrained outputs, and lean context are what *make* cheap models reliable — the framework is designed so its agents live inside a small model's competence, with per-run cost visible in the audit trail.
+10. **Documentation is part of the product, from day one.** A framework lives or dies by its docs. Every milestone ships its documentation; the "newcomer to running agent in 30 minutes" success criterion is a docs test as much as a framework test.
+
+## Target market
+
+**Developers first, businesses after.** Phase one is an OSS framework for developers who are comfortable with Docker and YAML, allergic to canvases and proprietary clouds, and tired of week-long builds for day-one bots. Phase two reaches businesses through the hosted platform and the service business (Plan 5) — those buyers never see YAML; they see an automated process and an invoice. Positioning against the field is in Plan 4.
 
 ## Business context
 
@@ -54,5 +61,5 @@ Third time building this bot. This time it's a config file.
 ## Open questions
 
 - Name/branding: "Looped AF" as the public name, or reserve that as the informal one?
-- License and open-source posture (repo currently carries a standard license — is the framework itself open source while the service business builds on top?).
-- How early does observability (structured logs, run traces) enter the roadmap vs. staying post-MVP?
+- License: leaning Apache-2.0 (ecosystem norm — eve, Flue, Mastra, Docker Agent; patent grant; permissive enough that other agencies can build on Looped, which is strategic — see Plan 4).
+- How early does observability (structured logs, run traces) enter the roadmap vs. staying post-MVP? (Platform/agency needs pull it earlier — see Plan 5.)

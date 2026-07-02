@@ -27,6 +27,8 @@ Planning. Start with the plans — they're the source of truth:
 - [Plan 0 — Vision](plans/000-vision.md): why this exists, principles, non-goals
 - [Plan 1 — Architecture](plans/001-architecture.md): core concepts and design
 - [Plan 2 — MVP](plans/002-mvp.md): the Discord → GitHub issue agent
-- [Plan 3 — Roadmap](plans/003-roadmap.md): milestones
+- [Plan 3 — Roadmap](plans/003-roadmap.md): milestones, starting with the manifesto
+- [Plan 4 — Landscape](plans/004-landscape.md): positioning against eve, Docker Agent, n8n & co.
+- [Plan 5 — Platform](plans/005-platform.md): hosted platform, service business, agent hub
 
 Runtime: [Deno](https://deno.com) + TypeScript.
