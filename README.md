@@ -2,6 +2,8 @@
 
 **Looped AF** — a Docker-native, config-driven framework for building single-purpose, event-driven AI agents that automate business processes.
 
+**Start with the [Manifesto](MANIFESTO.md).** Three minutes; it's the whole philosophy.
+
 The idea: describing an agent should be a YAML file, and deploying it should be a `docker run`. Agents are long-running services that sit in a loop — wait for an event (a Discord message, a webhook, a cron tick), do their one job, deliver the result, go idle.
 
 ```yaml
