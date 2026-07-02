@@ -2,7 +2,7 @@
 
 ## Why
 
-Spinning up a fit-for-purpose agent should take minutes, not days.
+Spinning up a fit-for-purpose agent should take minutes, not hours.
 
 I've now built the same simple agent twice — a Discord bot that turns team messages into GitHub issues — once with OpenClaw and once with Hermes. Both times it worked, and both times it took stupidly long and demanded deep technical wrangling for what is conceptually a one-paragraph idea: *listen here, do this one job, reply with a link.*
 

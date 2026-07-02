@@ -1,6 +1,6 @@
 # The Looped Manifesto
 
-I built the same agent twice. A Discord bot: read what my team posts in a channel, create a well-formed GitHub issue, reply with the link. The whole idea fits in a paragraph. Both times, with two different frameworks, it took days of wrangling — gateway daemons, config files in four formats, pairing rituals, a general-purpose assistant prompt-steered into pretending to be a single-purpose bot.
+I built the same agent twice. A Discord bot: read what my team posts in a channel, create a well-formed GitHub issue, reply with the link. The whole idea fits in a paragraph. Both times, with two different frameworks, it took many hours of wrangling — gateway daemons, config files in four formats, pairing rituals, a general-purpose assistant prompt-steered into pretending to be a single-purpose bot.
 
 The models were never the problem. The models are astonishing. The problem is that every agent framework is either a library you embed in an app you now have to write, or a personal assistant you have to talk out of doing everything else. Nobody ships the thing I keep needing: a **runtime for deploying agents as services**.
 
