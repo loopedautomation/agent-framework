@@ -6,13 +6,13 @@ The models were never the problem. The models are astonishing. The problem is th
 
 So this is Looped AF — the Looped Agent Framework — and these are its convictions.
 
-## An agent is a YAML file
-
-Describe the agent: its job, its model, its tools, its triggers, its permissions. One file. `docker compose up`, and it's listening. No SDK to learn, no app to scaffold, no canvas to drag boxes across. Code is the escape hatch, never the entry point.
-
 ## One agent, one job
 
-Not a personal assistant. Not a do-anything companion. An agent with one job is easier to prompt, easier to permission, easier to test, and possible to trust. If you need a second job done, run a second agent. Containers are cheap.
+Not a personal assistant. Not a do-anything companion. A fit-for-purpose agent, hired for one business process — the way you'd staff it: one specialist at a time. An agent with one job is easier to prompt, easier to permission, easier to test, and possible to trust. Everything else in this manifesto follows from this. If you need a second job done, run a second agent. Containers are cheap.
+
+## An agent is a YAML file
+
+One job fits in one file: the job description, the model, the tools, the triggers, the permissions. `docker compose up`, and it's hired. No SDK to learn, no app to scaffold, no canvas to drag boxes across. Code is the escape hatch, never the entry point.
 
 ## Agents are services, not scripts
 
