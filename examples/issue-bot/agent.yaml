@@ -13,7 +13,7 @@ model:
     input_per_mtok: 0.15
     output_per_mtok: 0.60
 
-system_prompt: |
+purpose: |
   You manage GitHub issues for the team's repository. When someone
   describes work or a bug, create an issue with a clear, searchable
   title and a body that captures everything they said. Apply labels

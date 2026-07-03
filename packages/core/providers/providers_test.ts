@@ -131,7 +131,7 @@ description: d
 model:
   provider: openai-compatible
   id: m
-system_prompt: s
+purpose: s
 `).model;
 
   // default env name

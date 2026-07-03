@@ -34,7 +34,7 @@ model:
   pricing:
     input_per_mtok: 1.00
     output_per_mtok: 2.00
-system_prompt: You are a test agent.
+purpose: You are a test agent.
 limits:
   max_steps: 3
   max_cost: 5.00

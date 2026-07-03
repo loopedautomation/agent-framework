@@ -64,7 +64,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     try {
       completion = await provider.complete({
         model: config.model.id,
-        system: config.system_prompt,
+        system: config.purpose,
         messages,
         tools: tools.map((t) => t.def),
       });

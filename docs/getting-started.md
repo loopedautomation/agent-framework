@@ -23,7 +23,7 @@ model:
     input_per_mtok: 0.15
     output_per_mtok: 0.60
 
-system_prompt: |
+purpose: |
   You are a concise assistant. When asked about the current date or time,
   use the current_time tool rather than guessing.
 ```

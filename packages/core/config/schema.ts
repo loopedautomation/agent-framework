@@ -52,7 +52,7 @@ export const DiscordTriggerSchema = z.strictObject({
     "Channel id to post replies into instead of the source channel. Out-of-channel replies quote the triggering message and link back.",
   ),
   allow_silence: z.boolean().default(false).describe(
-    "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in system_prompt.",
+    "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
   ),
 }).describe("Listen to Discord messages via the gateway; replies go in-channel by default.");
 
@@ -142,7 +142,9 @@ export const AgentConfigSchema = z.strictObject({
     "One line: what job this agent does. Also shown to the agent during the naming ritual.",
   ),
   model: ModelConfigSchema,
-  system_prompt: z.string().min(1).describe("The job description the model runs with."),
+  purpose: z.string().min(1).describe(
+    "The agent's job description — what it does, how it behaves, when to stay quiet. Becomes the model's system prompt.",
+  ),
   triggers: z.array(TriggerSchema).optional().describe(
     "Event sources that wake the agent. With triggers, `af run` starts a long-lived service; without, an interactive REPL.",
   ),

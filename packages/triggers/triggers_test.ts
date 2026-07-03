@@ -35,7 +35,7 @@ description: M2 exit demo agent
 model:
   provider: openai-compatible
   id: test-model
-system_prompt: You run commands when asked.
+purpose: You run commands when asked.
 triggers:
   - type: webhook
     token_env: M2_WEBHOOK_TOKEN

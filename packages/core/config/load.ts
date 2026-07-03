@@ -20,6 +20,15 @@ export function parseAgentConfig(yamlText: string, source?: string): AgentConfig
       source,
     );
   }
+  // Renamed keys get a migration hint, not a generic unknown-key error.
+  if (typeof data === "object" && data !== null && "system_prompt" in data) {
+    throw new ConfigError(
+      `${
+        source ?? "config"
+      }: \`system_prompt\` was renamed to \`purpose\` — update the key and you're done`,
+      source,
+    );
+  }
   const result = AgentConfigSchema.safeParse(data);
   if (!result.success) {
     throw new ConfigError(

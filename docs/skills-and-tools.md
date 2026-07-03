@@ -78,7 +78,7 @@ The three optional keys together turn the trigger from a chatbot into an observe
 
 - `from_users` — handle only these authors. The filter runs *before* the model is called: everyone else's messages are dropped in the trigger and never reach the provider.
 - `reply_channel` — deliver replies to a dedicated channel instead of the source. Out-of-channel replies quote the triggering message and link back to it.
-- `allow_silence` — let the agent say nothing. Instruct it in `system_prompt` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message.
+- `allow_silence` — let the agent say nothing. Instruct it in `purpose` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message.
 
 ## First boot: the naming ritual
 

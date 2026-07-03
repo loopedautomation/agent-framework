@@ -12,7 +12,7 @@ model:
   provider: openai-compatible
   id: big-model
   small: small-model
-system_prompt: test
+purpose: test
 `);
 
 function namer(reply: string): Provider & { requests: CompletionRequest[] } {

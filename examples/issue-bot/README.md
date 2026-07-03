@@ -27,7 +27,7 @@ GitHub → Settings → Developer settings → [Fine-grained tokens](https://git
 
 ## 3. Point the agent at the right repo (~2 min)
 
-Edit `agent.yaml` in this directory: in `system_prompt`, replace the repository reference with the real one (e.g. `acme/product`). The agent adds `--repo` from what the prompt tells it.
+Edit `agent.yaml` in this directory: in `purpose`, replace the repository reference with the real one (e.g. `acme/product`). The agent adds `--repo` from what the prompt tells it.
 
 ## 4. Configure and deploy (~5 min)
 

@@ -8,7 +8,7 @@ description: A minimal test agent.
 model:
   provider: openai-compatible
   id: gpt-5.4-mini
-system_prompt: You are a test agent.
+purpose: You are a test agent.
 `;
 
 Deno.test("parses a minimal config and applies defaults", () => {
@@ -31,7 +31,7 @@ model:
   pricing:
     input_per_mtok: 0.15
     output_per_mtok: 0.60
-system_prompt: You manage GitHub issues for the team.
+purpose: You manage GitHub issues for the team.
 triggers:
   - type: discord
     channels: ["issues"]
@@ -109,7 +109,7 @@ model:
   provider: anthropic
   id: claude-sonnet-5
   api_key_env: ANTHROPIC_API_KEY
-system_prompt: test
+purpose: test
 tools:
   mcp:
     - name: github
@@ -137,7 +137,18 @@ Deno.test("the shipped issue-bot example is a valid agent definition", async () 
 Deno.test("emits a JSON schema with the top-level fields", () => {
   const schema = agentConfigJsonSchema();
   const props = schema.properties as Record<string, unknown>;
-  for (const key of ["nickname", "model", "system_prompt", "permissions", "limits"]) {
+  for (const key of ["nickname", "model", "purpose", "permissions", "limits"]) {
     assert(key in props, `missing ${key} in JSON schema`);
   }
+});
+
+Deno.test("system_prompt gets a rename hint, not a generic unknown-key error", () => {
+  const err = assertThrows(
+    () =>
+      parseAgentConfig(
+        `nickname: old\ndescription: d\nmodel:\n  provider: anthropic\n  id: m\nsystem_prompt: legacy`,
+      ),
+    ConfigError,
+  );
+  assert(err.message.includes("renamed to `purpose`"));
 });
