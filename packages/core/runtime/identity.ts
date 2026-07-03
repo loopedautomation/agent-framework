@@ -1,6 +1,5 @@
 import type { AgentConfig } from "../config/schema.ts";
 import type { Provider } from "../providers/types.ts";
-import type { ProviderError } from "../providers/types.ts";
 import type { Store } from "../store/store.ts";
 
 export interface AgentIdentity {
