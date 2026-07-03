@@ -1,6 +1,6 @@
 import type { AgentConfig } from "../config/schema.ts";
 import type { Provider } from "../providers/types.ts";
-import { ProviderError } from "../providers/types.ts";
+import type { ProviderError } from "../providers/types.ts";
 import type { Store } from "../store/store.ts";
 
 export interface AgentIdentity {
@@ -11,6 +11,43 @@ export interface AgentIdentity {
 }
 
 const NAME_KEY = "name";
+
+// When the model responds but the name is unusable, the agent still gets a
+// real name — drawn deterministically from a pool, persisted like any other.
+const FALLBACK_NAMES = [
+  "Ada",
+  "Echo",
+  "Helix",
+  "Iris",
+  "Juno",
+  "Möbius",
+  "Nova",
+  "Orbit",
+  "Piper",
+  "Quinn",
+  "Rio",
+  "Sage",
+  "Tess",
+  "Vega",
+  "Wren",
+  "Zephyr",
+];
+
+export function pickFallbackName(nickname: string): string {
+  let hash = 0;
+  for (const ch of nickname) hash = (hash * 31 + ch.codePointAt(0)!) >>> 0;
+  return FALLBACK_NAMES[hash % FALLBACK_NAMES.length];
+}
+
+/** A usable name: 1–3 words, 2–40 chars, starts with a letter, no sentence. */
+function cleanName(raw: string): string | undefined {
+  const name = raw.trim().split("\n")[0].replace(/["'.!,:;]/g, "").trim();
+  const words = name.split(/\s+/);
+  if (name.length < 2 || name.length > 40) return undefined;
+  if (words.length > 3) return undefined; // a sentence, not a name
+  if (!/^\p{L}/u.test(name)) return undefined;
+  return name;
+}
 
 /**
  * The naming ritual: users don't name agents — agents name themselves.
@@ -26,7 +63,7 @@ export async function ensureIdentity(
   const existing = store.getIdentity(NAME_KEY);
   if (existing) return { name: existing, isNew: false };
 
-  let name: string;
+  let name: string | undefined;
   try {
     const completion = await provider.complete({
       model: config.model.small ?? config.model.id,
@@ -41,10 +78,13 @@ export async function ensureIdentity(
       }],
       maxTokens: 20,
     });
-    name = completion.content.trim().split("\n")[0].replace(/["'.]/g, "").slice(0, 40).trim();
-    if (!name) throw new ProviderError("empty name", "unknown");
+    // Provider responded: this IS the birth. An unusable reply (refusal,
+    // sentence, emptiness) falls back to the name pool — still a real name,
+    // still persisted, banner still fires.
+    name = cleanName(completion.content) ?? pickFallbackName(config.nickname);
   } catch {
-    // No ritual without a working provider; go by the nickname for now.
+    // Provider unreachable: no ritual today. Go by the nickname, persist
+    // nothing, retry next boot.
     return { name: config.nickname, isNew: false };
   }
 

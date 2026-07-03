@@ -46,6 +46,28 @@ Deno.test("naming ritual: happens once, persists, uses the small model role", as
   store.close();
 });
 
+Deno.test("naming ritual: unusable replies fall back to the name pool, persisted", async () => {
+  for (const badReply of ["", "I cannot choose a name for myself as an AI", "!!!"]) {
+    const store = new Store(":memory:");
+    const identity = await ensureIdentity(CONFIG, namer(badReply), store);
+    assert(identity.isNew); // still a birth — the banner fires
+    assert(identity.name !== CONFIG.nickname, `got nickname for reply: "${badReply}"`);
+    assert(identity.name.length >= 2);
+    assertEquals(store.getIdentity("name"), identity.name); // persisted for life
+    store.close();
+  }
+});
+
+Deno.test("naming ritual: fallback pool is deterministic per nickname", async () => {
+  const a = new Store(":memory:");
+  const b = new Store(":memory:");
+  const first = await ensureIdentity(CONFIG, namer(""), a);
+  const second = await ensureIdentity(CONFIG, namer(""), b);
+  assertEquals(first.name, second.name);
+  a.close();
+  b.close();
+});
+
 Deno.test("naming ritual: provider failure falls back to nickname, retries next boot", async () => {
   const store = new Store(":memory:");
   const failing: Provider = {
