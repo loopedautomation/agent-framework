@@ -36,7 +36,3 @@ permissions:
 
 memory:
   scope: thread
-
-limits:
-  max_steps: 5
-  max_cost: 0.01

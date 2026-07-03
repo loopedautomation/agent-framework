@@ -26,10 +26,6 @@ model:
 system_prompt: |
   You are a concise assistant. When asked about the current date or time,
   use the current_time tool rather than guessing.
-
-limits:
-  max_steps: 5
-  max_cost: 0.01
 ```
 
 Notes:
@@ -67,7 +63,15 @@ Every run reports its status, step count, tokens, and cost — cheap models are 
 
 ## Budgets
 
-`limits.max_steps` and `limits.max_cost` are dead-man's switches: a run that exceeds them ends with a typed status (`error_max_steps`, `error_max_cost`) instead of running away. `max_cost` requires `model.pricing` — a cap can't be enforced without prices.
+Every run is budgeted by default — you configure the caps only when the defaults don't fit:
+
+```yaml
+limits:
+  max_steps: 20     # default: 20 inner-loop iterations
+  max_cost: 0.05    # no default; requires model.pricing to enforce
+```
+
+These are dead-man's switches: a run that exceeds them ends with a typed status (`error_max_steps`, `error_max_cost`) instead of running away. `max_cost` requires `model.pricing` — a cap can't be enforced without prices.
 
 ## Editor support
 

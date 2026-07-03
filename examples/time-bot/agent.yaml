@@ -1,5 +1,5 @@
-# The M1 exit-demo agent: minimal, no triggers (the CLI stands in), proves
-# the tool-use cycle on a cheap model. Run it:
+# The M1 exit-demo agent: the minimal agent.yaml — identity, model, job.
+# Run it:
 #
 #   OPENAI_API_KEY=... deno task af run examples/time-bot/agent.yaml
 #
@@ -9,14 +9,10 @@ description: Answers questions, and knows what time it is.
 model:
   provider: openai-compatible
   id: gpt-5.4-mini
-  pricing: # example numbers — set your model's real prices
+  pricing: # optional — set your model's real prices to see cost per run
     input_per_mtok: 0.15
     output_per_mtok: 0.60
 
 system_prompt: |
   You are a concise assistant. When asked about the current date or time,
   use the current_time tool rather than guessing.
-
-limits:
-  max_steps: 5
-  max_cost: 0.01

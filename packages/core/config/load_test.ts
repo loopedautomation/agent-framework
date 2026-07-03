@@ -15,7 +15,7 @@ Deno.test("parses a minimal config and applies defaults", () => {
   const config = parseAgentConfig(MINIMAL);
   assertEquals(config.nickname, "test-bot");
   assertEquals(config.model.provider, "openai-compatible");
-  assertEquals(config.limits.max_steps, 10);
+  assertEquals(config.limits.max_steps, 20);
   assertEquals(config.permissions, undefined); // deny-by-default: nothing granted
 });
 

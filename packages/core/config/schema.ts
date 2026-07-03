@@ -90,7 +90,7 @@ export const MemoryConfigSchema = z.strictObject({
 
 export const LimitsSchema = z.strictObject({
   /** Inner-loop iterations before the run ends with error_max_steps. */
-  max_steps: z.number().int().positive().default(10),
+  max_steps: z.number().int().positive().default(20),
   /** USD per run before the run ends with error_max_cost. */
   max_cost: z.number().positive().optional(),
 });
@@ -124,7 +124,7 @@ export const AgentConfigSchema = z.strictObject({
   /** Values may be ${VAR} references, resolved at runtime and scoped per tool. */
   env: z.record(z.string(), z.string()).optional(),
   memory: MemoryConfigSchema.optional(),
-  limits: LimitsSchema.default({ max_steps: 10 }),
+  limits: LimitsSchema.default({ max_steps: 20 }),
 }).refine((c) => c.limits.max_cost === undefined || c.model.pricing !== undefined, {
   message:
     "limits.max_cost requires model.pricing (a cost cap can't be enforced without prices; models.dev integration is planned)",
