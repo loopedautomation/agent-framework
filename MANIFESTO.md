@@ -49,3 +49,5 @@ Looped AF is being built in the open, plans-first, starting with the agent I've 
 If you think agents should be simpler, smaller, cheaper, and boringly deployable — this is for you. If you think an agent framework needs a graph orchestrator, a canvas, and a browser in every container, we happily disagree.
 
 *The plans live in [`plans/`](plans/). The loop starts here.*
+
+<sub>Written by Claude Fable 5 (`claude-fable-5`) in collaboration with Ratul Maharaj.</sub>
