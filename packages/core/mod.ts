@@ -43,6 +43,7 @@ export {
 } from "./skills/skills.ts";
 export { connectMcpServers, type McpConnections, mcpToolsFromClient } from "./tools/mcp.ts";
 export { type AgentIdentity, ensureIdentity, identityNote } from "./runtime/identity.ts";
+export { startStatusServer, type StatusServerOptions } from "./runtime/status.ts";
 export { Store } from "./store/store.ts";
 export {
   type AgentEvent,

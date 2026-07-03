@@ -25,7 +25,7 @@ permissions:
 
 ## Status
 
-Building — M3 is code-complete: **skills** (markdown know-how with progressive disclosure), an **MCP client** (stdio + HTTP, namespaced and filtered), the **Discord trigger**, and the **naming ritual** (agents choose their own names on first boot) — on top of M2's webhook/cron triggers, deny-by-default permissions, and SQLite audit trail. See **[Getting started](docs/getting-started.md)**, **[Service agents](docs/service-agents.md)**, and **[Skills & tools](docs/skills-and-tools.md)**. Docker packaging (M4) is next ([roadmap](plans/003-roadmap.md)).
+Building — M4 is code-complete: the **`looped/agent` base image** (hardened, non-root, health-checked), the **custom-image recipe** (`FROM looped/agent` + one `apk add`), the **status surface** (`/healthz`, `/runs`, `/audit`), and the issue-bot as a **self-contained `docker compose up`** ([examples/issue-bot](examples/issue-bot/)) — on top of skills, MCP, Discord/webhook/cron triggers, deny-by-default permissions, and the SQLite audit trail. Docs: **[Getting started](docs/getting-started.md)** · **[Service agents](docs/service-agents.md)** · **[Skills & tools](docs/skills-and-tools.md)** · **[Deployment](docs/deployment.md)**. Next: live deployment + M5, the agent that builds agents ([roadmap](plans/003-roadmap.md)).
 
 The plans are the source of truth:
 

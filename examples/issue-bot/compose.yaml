@@ -1,0 +1,21 @@
+# The whole deployment story: docker compose up -d
+#
+# .env next to this file (see .env.example):
+#   OPENAI_API_KEY, DISCORD_BOT_TOKEN, GITHUB_TOKEN
+services:
+  issue-bot:
+    build:
+      context: ../..
+      dockerfile: examples/issue-bot/Dockerfile
+    env_file: .env
+    volumes:
+      - issue-bot-data:/data
+    ports:
+      - "127.0.0.1:9090:9090" # status surface: curl localhost:9090/healthz
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  issue-bot-data:

@@ -14,6 +14,7 @@ import {
   permissionsToDenoFlags,
   ProviderError,
   type RunResult,
+  startStatusServer,
   VERSION,
 } from "@looped/af";
 import { triggersFromConfig } from "@looped/triggers";
@@ -78,6 +79,7 @@ async function repl(config: AgentConfig, service: AgentService, name: string) {
 async function serve(config: AgentConfig, service: AgentService, name: string) {
   const triggers = triggersFromConfig(config);
   await service.start(triggers);
+  const status = startStatusServer(service);
   console.log(
     `${name} (${config.nickname}) is running as a service ` +
       `(triggers: ${config.triggers!.map((t) => t.type).join(", ")}; ctrl-c to stop)`,
@@ -87,6 +89,7 @@ async function serve(config: AgentConfig, service: AgentService, name: string) {
     Deno.addSignalListener("SIGTERM", () => resolve());
   });
   console.log("\nshutting down...");
+  await status.shutdown();
   await service.stop();
 }
 
