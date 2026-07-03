@@ -149,7 +149,7 @@ function choose<T extends string>(label: string, options: readonly T[], flagValu
   return options[index];
 }
 
-async function init(nameArg?: string) {
+function init(nameArg?: string) {
   const nickname = nameArg ?? flag("nickname") ??
     prompt("nickname (lowercase, hyphens — your handle for the agent):") ?? "";
   if (!/^[a-z0-9][a-z0-9-]*$/.test(nickname)) {
@@ -186,7 +186,7 @@ async function main() {
   try {
     switch (command) {
       case "init":
-        await init(arg?.startsWith("--") ? undefined : arg);
+        init(arg?.startsWith("--") ? undefined : arg);
         break;
       case "run":
         await run(arg ?? DEFAULT_CONFIG);
