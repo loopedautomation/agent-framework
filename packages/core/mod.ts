@@ -39,6 +39,7 @@ export { defineTool, type NativeTool } from "./tools/types.ts";
 export { currentTimeTool } from "./tools/time.ts";
 export { createRunBashTool, extractExecutables } from "./tools/bash.ts";
 export { createHttpRequestTool } from "./tools/http.ts";
+export { createReadFileTool, createWriteFileTool } from "./tools/files.ts";
 export { runAgent, type RunOptions, type RunResult, type RunStatus } from "./loop/loop.ts";
 export {
   createSkillTool,
