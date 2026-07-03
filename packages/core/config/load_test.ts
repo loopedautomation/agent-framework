@@ -183,3 +183,11 @@ Deno.test("resolveAgentConfig: env var, file, both, neither", async () => {
     "cannot read",
   );
 });
+
+Deno.test("tools.custom is rejected loudly until implemented", () => {
+  const err = assertThrows(
+    () => parseAgentConfig(MINIMAL + `tools:\n  custom: [./my-tool.ts]\n`),
+    ConfigError,
+  );
+  assert(err.message.includes("not implemented"));
+});
