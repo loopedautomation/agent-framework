@@ -12,6 +12,16 @@ export const ModelConfigSchema = z.strictObject({
   /** Name of the env var holding the API key — a reference, never a value. */
   api_key_env: z.string().min(1).optional(),
   fallbacks: z.array(z.string().min(1)).optional(),
+  /**
+   * USD per million tokens. Explicit until models.dev consumption lands;
+   * required when limits.max_cost is set (cost can't be capped unpriced).
+   */
+  pricing: z
+    .strictObject({
+      input_per_mtok: z.number().nonnegative(),
+      output_per_mtok: z.number().nonnegative(),
+    })
+    .optional(),
 });
 
 export const DiscordTriggerSchema = z.strictObject({
@@ -104,6 +114,10 @@ export const AgentConfigSchema = z.strictObject({
   env: z.record(z.string(), z.string()).optional(),
   memory: MemoryConfigSchema.optional(),
   limits: LimitsSchema.default({ max_steps: 10 }),
+}).refine((c) => c.limits.max_cost === undefined || c.model.pricing !== undefined, {
+  message:
+    "limits.max_cost requires model.pricing (a cost cap can't be enforced without prices; models.dev integration is planned)",
+  path: ["limits", "max_cost"],
 });
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;

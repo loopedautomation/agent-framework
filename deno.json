@@ -7,7 +7,8 @@
   "tasks": {
     "test": "deno test --allow-read packages/",
     "check": "deno check packages/",
-    "ok": "deno fmt --check && deno lint && deno task check && deno task test"
+    "ok": "deno fmt --check && deno lint && deno task check && deno task test",
+    "cli": "deno run --allow-read --allow-env --allow-net packages/cli/main.ts"
   },
   "fmt": {
     "lineWidth": 100,

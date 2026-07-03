@@ -28,6 +28,9 @@ model:
   id: gpt-5.4-mini
   small: gpt-5.4-mini
   api_key_env: OPENAI_API_KEY
+  pricing:
+    input_per_mtok: 0.15
+    output_per_mtok: 0.60
 system_prompt: You manage GitHub issues for the team.
 triggers:
   - type: discord
