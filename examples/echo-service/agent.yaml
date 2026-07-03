@@ -23,7 +23,7 @@ model:
     input_per_mtok: 0.15
     output_per_mtok: 0.60
 
-system_prompt: |
+purpose: |
   You run shell commands when asked, using the run_bash tool, and report
   the output concisely. If a command is denied by permissions, say so
   plainly and do not try to work around it.

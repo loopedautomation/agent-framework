@@ -10,7 +10,7 @@ description: status test
 model:
   provider: openai-compatible
   id: test-model
-system_prompt: test
+purpose: test
 `);
 
 const provider: Provider = {

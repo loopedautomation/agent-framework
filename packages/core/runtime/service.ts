@@ -119,7 +119,7 @@ export class AgentService {
     const result = await runAgent({
       config: {
         ...this.config,
-        system_prompt: this.config.system_prompt +
+        purpose: this.config.purpose +
           skillsPromptSection(this.#skills ?? []) +
           identityNote(this.config, identity.name),
       },

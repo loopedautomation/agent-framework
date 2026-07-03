@@ -80,10 +80,10 @@
       "additionalProperties": false,
       "description": "Which model runs this agent, and how to reach it."
     },
-    "system_prompt": {
+    "purpose": {
       "type": "string",
       "minLength": 1,
-      "description": "The job description the model runs with."
+      "description": "The agent's job description — what it does, how it behaves, when to stay quiet. Becomes the model's system prompt."
     },
     "triggers": {
       "description": "Event sources that wake the agent. With triggers, `af run` starts a long-lived service; without, an interactive REPL.",
@@ -130,7 +130,7 @@
               },
               "allow_silence": {
                 "default": false,
-                "description": "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in system_prompt.",
+                "description": "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
                 "type": "boolean"
               }
             },
@@ -368,7 +368,7 @@
     "nickname",
     "description",
     "model",
-    "system_prompt"
+    "purpose"
   ],
   "additionalProperties": false,
   "description": "A Looped AF agent: one job, one YAML file. https://github.com/loopedautomation/agent-framework"

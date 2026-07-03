@@ -125,7 +125,7 @@ model:
   id: gpt-5.4-mini
   small: gpt-5.4-mini                # role for summaries/compaction
 
-system_prompt: |
+purpose: |
   You manage GitHub issues for the team. When someone describes work,
   create a well-titled issue with a clear body and reply with the link.
 
