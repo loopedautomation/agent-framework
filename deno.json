@@ -3,5 +3,19 @@
     "./packages/core",
     "./packages/triggers",
     "./packages/cli"
-  ]
+  ],
+  "tasks": {
+    "test": "deno test --allow-read packages/",
+    "check": "deno check packages/",
+    "ok": "deno fmt --check && deno lint && deno task check && deno task test"
+  },
+  "fmt": {
+    "lineWidth": 100,
+    "exclude": ["**/*.md"]
+  },
+  "lint": {
+    "rules": {
+      "exclude": ["no-slow-types"]
+    }
+  }
 }

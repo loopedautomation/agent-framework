@@ -1,5 +1,10 @@
 {
   "name": "@looped/core",
   "version": "0.0.0",
-  "exports": "./mod.ts"
+  "exports": "./mod.ts",
+  "imports": {
+    "@std/yaml": "jsr:@std/yaml@^1",
+    "@std/assert": "jsr:@std/assert@^1",
+    "zod": "npm:zod@^4"
+  }
 }

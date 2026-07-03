@@ -12,7 +12,7 @@ Also in M0: plans 0–5 committed, monorepo skeleton laid out (Plan 1 repo struc
 
 ## M1 — Core loop, runnable locally
 
-The inner loop works end to end in `packages/core`: config loader (YAML → validated agent definition, published JSON Schema), provider adapter (Anthropic + OpenAI-compatible, model roles, structured output), the flat tool-use loop with budgets/retries/typed errors, one trivial native tool to prove the cycle. Docs site scaffold in `docs/` with the getting-started skeleton.
+The inner loop works end to end in `packages/core`: config loader (YAML → validated agent definition, published JSON Schema), provider adapter (**OpenAI-compatible first**, Anthropic second; model roles, structured output), the flat tool-use loop with budgets/retries/typed errors, one trivial native tool to prove the cycle. Docs as plain, well-organized markdown in `docs/` (site generator deferred to ~M4 when there's an audience).
 
 **Exit demo:** `deno run` an `agent.yaml` from the terminal, type a prompt, watch a gpt-5.4-mini-class model call a tool and answer. Token cost printed per run.
 

@@ -1,0 +1,39 @@
+# The MVP agent (plans/002-mvp.md): Discord message in, GitHub issue link out.
+# The agent chooses its own name on first boot; nickname is your handle for it.
+nickname: issue-bot
+description: Turns team Discord messages into GitHub issues.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+
+system_prompt: |
+  You manage GitHub issues for the team's repository. When someone
+  describes work or a bug, create an issue with a clear, searchable
+  title and a body that captures everything they said. Apply labels
+  when obvious. Reply with only the issue link and a one-line summary.
+  For other issue-management requests (close, label, query), do them
+  and confirm briefly. If a message isn't an issue request, stay silent.
+
+triggers:
+  - type: discord
+    channels: ["issues"]
+
+skills:
+  - ./skills/gh-issues.md
+
+permissions:
+  net: [discord.com, gateway.discord.gg, api.github.com]
+  run: [gh]
+
+env:
+  GITHUB_TOKEN: ${GITHUB_TOKEN} # reference — resolved at runtime, scoped to gh
+
+memory:
+  scope: thread
+
+limits:
+  max_steps: 10
+  max_cost: 0.10
