@@ -29,6 +29,18 @@ export function parseAgentConfig(yamlText: string, source?: string): AgentConfig
       source,
     );
   }
+  // Accepted-but-ignored config is a lie (#12): until custom TS tools are
+  // implemented, declaring them is a loud error, not a silent no-op.
+  const tools = (data as Record<string, unknown> | null)?.["tools"] as
+    | Record<string, unknown>
+    | undefined;
+  if (tools && "custom" in tools) {
+    throw new ConfigError(
+      `${source ?? "config"}: tools.custom is not implemented yet — remove it for now ` +
+        `(custom TypeScript tools are tracked in issue #12)`,
+      source,
+    );
+  }
   const result = AgentConfigSchema.safeParse(data);
   if (!result.success) {
     throw new ConfigError(
