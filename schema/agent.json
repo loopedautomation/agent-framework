@@ -1,0 +1,375 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "nickname": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "The operator's handle for this agent (compose service, logs, CLI, session keys). The agent chooses its own name on first boot."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One line: what job this agent does. Also shown to the agent during the naming ritual."
+    },
+    "model": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": [
+            "openai-compatible",
+            "anthropic"
+          ],
+          "description": "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy."
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model identifier, e.g. gpt-5.4-mini or claude-sonnet-5."
+        },
+        "small": {
+          "description": "Model for cheap internal calls (summaries, compaction, the naming ritual). Defaults to the main model.",
+          "type": "string",
+          "minLength": 1
+        },
+        "base_url": {
+          "description": "Endpoint override for openai-compatible providers, e.g. http://localhost:11434/v1 for Ollama (no API key required with a base_url).",
+          "type": "string",
+          "format": "uri"
+        },
+        "api_key_env": {
+          "description": "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ANTHROPIC_API_KEY per provider.",
+          "type": "string",
+          "minLength": 1
+        },
+        "fallbacks": {
+          "description": "Model ids to fall back to when the primary fails.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "pricing": {
+          "description": "USD per million tokens; enables per-run cost reporting and is required when limits.max_cost is set. Explicit until models.dev integration lands.",
+          "type": "object",
+          "properties": {
+            "input_per_mtok": {
+              "type": "number",
+              "minimum": 0,
+              "description": "USD per million input tokens."
+            },
+            "output_per_mtok": {
+              "type": "number",
+              "minimum": 0,
+              "description": "USD per million output tokens."
+            }
+          },
+          "required": [
+            "input_per_mtok",
+            "output_per_mtok"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "provider",
+        "id"
+      ],
+      "additionalProperties": false,
+      "description": "Which model runs this agent, and how to reach it."
+    },
+    "system_prompt": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The job description the model runs with."
+    },
+    "triggers": {
+      "description": "Event sources that wake the agent. With triggers, `af run` starts a long-lived service; without, an interactive REPL.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "discord"
+              },
+              "channels": {
+                "description": "Channel names or ids to listen in; omit for all channels the bot can see.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "require_mention": {
+                "description": "Only respond when the bot is @-mentioned.",
+                "type": "boolean"
+              },
+              "token_env": {
+                "default": "DISCORD_BOT_TOKEN",
+                "description": "Env var holding the Discord bot token.",
+                "type": "string",
+                "minLength": 1
+              },
+              "from_users": {
+                "description": "Only handle messages from these authors (user ids or usernames); the filter runs before the model is called. Omit for anyone.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "reply_channel": {
+                "description": "Channel id to post replies into instead of the source channel. Out-of-channel replies quote the triggering message and link back.",
+                "type": "string",
+                "minLength": 1
+              },
+              "allow_silence": {
+                "default": false,
+                "description": "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in system_prompt.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false,
+            "description": "Listen to Discord messages via the gateway; replies go in-channel by default."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "webhook"
+              },
+              "path": {
+                "default": "/",
+                "description": "HTTP path to serve.",
+                "type": "string",
+                "pattern": "^\\/.*"
+              },
+              "port": {
+                "default": 8080,
+                "description": "Port to listen on.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "token_env": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Env var holding the bearer token callers must present. Required: an unauthenticated endpoint contradicts deny-by-default."
+              }
+            },
+            "required": [
+              "type",
+              "token_env"
+            ],
+            "additionalProperties": false,
+            "description": "HTTP trigger: POST {path} with authorization: Bearer <token> and JSON body {input, conversation_id?}; responds with the run result."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "cron"
+              },
+              "schedule": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Cron expression, e.g. \"0 9 * * 1\" for Mondays 09:00."
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What to tell the agent each tick."
+              }
+            },
+            "required": [
+              "type",
+              "schedule",
+              "prompt"
+            ],
+            "additionalProperties": false,
+            "description": "Fire the agent on a schedule with a fixed prompt."
+          }
+        ],
+        "description": "An event source that wakes the agent."
+      }
+    },
+    "skills": {
+      "description": "Paths to skill markdown files (relative to this config). Skills carry knowledge, never capability.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "tools": {
+      "description": "Tool sources beyond the natives and skills.",
+      "type": "object",
+      "properties": {
+        "mcp": {
+          "description": "MCP servers to connect at startup.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Server name; its tools appear namespaced as mcp__<name>__<tool>."
+              },
+              "command": {
+                "description": "stdio server: argv to launch it, e.g. [docker, run, -i, ghcr.io/github/github-mcp-server].",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "url": {
+                "description": "HTTP server: the endpoint URL.",
+                "type": "string",
+                "format": "uri"
+              },
+              "env": {
+                "description": "Env vars passed to the server — values may be ${VAR} references. The server sees only these (scoped, no ambient inheritance).",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "include": {
+                "description": "Expose only these tools. Strongly recommended: a fat server must not blow a small model's context.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false,
+            "description": "A Model Context Protocol server providing tools to the agent."
+          }
+        },
+        "custom": {
+          "description": "Paths to custom TypeScript tool modules. Not yet implemented (issue #12).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "net": {
+          "description": "Hosts http_request may reach; *.example.com matches subdomains (not the apex).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "run": {
+          "description": "Executables run_bash may spawn, matched by basename. run_bash exists only if this grants something.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "read": {
+          "description": "Readable path prefixes.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "write": {
+          "description": "Writable path prefixes.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false,
+      "description": "Deny-by-default allowlists. Omitting this block means the agent can touch nothing; denials are surfaced to the model as tool results."
+    },
+    "env": {
+      "description": "Env for tools and MCP servers. Values may be ${VAR} references, resolved at startup (env var, then /run/secrets/<VAR>) and scoped per tool.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "memory": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "default": "none",
+          "description": "thread: conversation history persists per conversation key (Discord channel, webhook conversation_id). none: every run starts fresh.",
+          "type": "string",
+          "enum": [
+            "thread",
+            "none"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "What the agent remembers between events."
+    },
+    "limits": {
+      "default": {
+        "max_steps": 20
+      },
+      "type": "object",
+      "properties": {
+        "max_steps": {
+          "default": 20,
+          "description": "Inner-loop iterations (LLM calls) before the run ends with error_max_steps.",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "max_cost": {
+          "description": "USD per run before the run ends with error_max_cost. Requires model.pricing.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "description": "Per-run budgets — the dead-man's switches for unattended operation."
+    }
+  },
+  "required": [
+    "nickname",
+    "description",
+    "model",
+    "system_prompt"
+  ],
+  "additionalProperties": false,
+  "description": "A Looped AF agent: one job, one YAML file. https://github.com/loopedautomation/agent-framework"
+}

@@ -14,3 +14,7 @@ jobs:
         with:
           deno-version: v2.x
       - run: deno task ok
+      - name: schema/agent.json is current
+        run: |
+          deno task gen-schema
+          git diff --exit-code schema/

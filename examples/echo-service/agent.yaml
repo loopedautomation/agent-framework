@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/loopedautomation/agent-framework/main/schema/agent.json
 # The M2 exit demo: a webhook-triggered agent that may run `echo` — and
 # nothing else. Try it:
 #
