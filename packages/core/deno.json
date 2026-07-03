@@ -1,6 +1,7 @@
 {
-  "name": "@looped/core",
-  "version": "0.0.0",
+  "name": "@looped/af",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
   "exports": "./mod.ts",
   "imports": {
     "@std/yaml": "jsr:@std/yaml@^1",
