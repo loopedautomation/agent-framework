@@ -4,6 +4,7 @@
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "jsr:@std/yaml@1": "1.1.2",
+    "npm:croner@9": "9.1.0",
     "npm:zod@4": "4.4.3"
   },
   "jsr": {
@@ -21,6 +22,9 @@
     }
   },
   "npm": {
+    "croner@9.1.0": {
+      "integrity": "sha512-p9nwwR4qyT5W996vBZhdvBCnMhicY5ytZkR4D1Xj0wuTDEiMnjwR57Q3RXYY/s0EpX6Ay3vgIcfaR+ewGHsi+g=="
+    },
     "zod@4.4.3": {
       "integrity": "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="
     }
@@ -32,6 +36,12 @@
           "jsr:@std/assert@1",
           "jsr:@std/yaml@1",
           "npm:zod@4"
+        ]
+      },
+      "packages/triggers": {
+        "dependencies": [
+          "jsr:@std/assert@1",
+          "npm:croner@9"
         ]
       }
     }

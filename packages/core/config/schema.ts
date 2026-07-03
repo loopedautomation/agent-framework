@@ -32,12 +32,20 @@ export const DiscordTriggerSchema = z.strictObject({
 
 export const WebhookTriggerSchema = z.strictObject({
   type: z.literal("webhook"),
-  path: z.string().startsWith("/").optional(),
+  path: z.string().startsWith("/").default("/"),
+  port: z.number().int().min(1).max(65535).default(8080),
+  /**
+   * Env var holding the bearer token callers must present. Required:
+   * an unauthenticated endpoint contradicts deny-by-default.
+   */
+  token_env: z.string().min(1),
 });
 
 export const CronTriggerSchema = z.strictObject({
   type: z.literal("cron"),
   schedule: z.string().min(1),
+  /** What to tell the agent each tick. */
+  prompt: z.string().min(1),
 });
 
 export const TriggerSchema = z.discriminatedUnion("type", [

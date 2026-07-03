@@ -25,7 +25,7 @@ permissions:
 
 ## Status
 
-Building — M1 (core loop) is code-complete: you can define an agent in YAML and run it interactively today. See **[Getting started](docs/getting-started.md)**. Triggers, permissions, skills, MCP, and Docker packaging are next ([roadmap](plans/003-roadmap.md)).
+Building — M2 (service agents) is code-complete: agents run as long-lived services with **webhook and cron triggers**, a **deny-by-default permission system** (`run_bash`/`http_request` with scoped environments), and **SQLite persistence with a full audit trail**. See **[Getting started](docs/getting-started.md)** and **[Service agents](docs/service-agents.md)**. Discord, skills, MCP, and Docker packaging are next ([roadmap](plans/003-roadmap.md)).
 
 The plans are the source of truth:
 

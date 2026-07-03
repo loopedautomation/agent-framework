@@ -37,6 +37,7 @@ triggers:
     channels: ["issues"]
   - type: cron
     schedule: "0 9 * * 1"
+    prompt: Post a summary of open issues.
 skills:
   - ./skills/gh-issues.md
 tools:

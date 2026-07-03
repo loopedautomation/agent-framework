@@ -1,4 +1,39 @@
-// @looped/triggers — discord, webhook, cron trigger implementations.
-// Webhook and cron land in M2; discord in M3 (plans/003-roadmap.md).
+// @looped/triggers — event sources for Looped agents.
 
-export const VERSION = "0.0.0";
+import type { AgentConfig, Trigger } from "@looped/af";
+import { WebhookTrigger } from "./webhook.ts";
+import { CronTrigger } from "./cron.ts";
+
+export { CronTrigger, type CronTriggerOptions } from "./cron.ts";
+export { WebhookTrigger, type WebhookTriggerOptions } from "./webhook.ts";
+
+/**
+ * Instantiate the triggers a config declares. Discord arrives in M3.
+ * Webhook tokens resolve from token_env here — startup, not first request.
+ */
+export function triggersFromConfig(
+  config: AgentConfig,
+  getEnv: (name: string) => string | undefined = Deno.env.get,
+): Trigger[] {
+  const triggers: Trigger[] = [];
+  for (const t of config.triggers ?? []) {
+    switch (t.type) {
+      case "webhook": {
+        const token = getEnv(t.token_env);
+        if (!token) {
+          throw new Error(
+            `webhook trigger: token env var ${t.token_env} is not set (required for bearer auth)`,
+          );
+        }
+        triggers.push(new WebhookTrigger({ path: t.path, port: t.port, token }));
+        break;
+      }
+      case "cron":
+        triggers.push(new CronTrigger({ schedule: t.schedule, prompt: t.prompt }));
+        break;
+      case "discord":
+        throw new Error("discord trigger lands in M3 (plans/003-roadmap.md)");
+    }
+  }
+  return triggers;
+}

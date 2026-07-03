@@ -9,6 +9,7 @@ export {
   type TriggerConfig,
 } from "./config/schema.ts";
 export { collectEnvRefs, ConfigError, loadAgentConfig, parseAgentConfig } from "./config/load.ts";
+export { resolveEnv } from "./config/env.ts";
 export {
   AnthropicProvider,
   type Completion,
@@ -23,8 +24,22 @@ export {
   type Usage,
   withRetry,
 } from "./providers/mod.ts";
+export {
+  type PermissionDecision,
+  PermissionEngine,
+  permissionsToDenoFlags,
+} from "./permissions/engine.ts";
 export { defineTool, type NativeTool } from "./tools/types.ts";
 export { currentTimeTool } from "./tools/time.ts";
+export { createRunBashTool, extractExecutables } from "./tools/bash.ts";
+export { createHttpRequestTool } from "./tools/http.ts";
 export { runAgent, type RunOptions, type RunResult, type RunStatus } from "./loop/loop.ts";
+export { Store } from "./store/store.ts";
+export {
+  type AgentEvent,
+  AgentService,
+  type AgentServiceOptions,
+  type Trigger,
+} from "./runtime/service.ts";
 
 export const VERSION = "0.1.0";
