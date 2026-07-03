@@ -163,8 +163,8 @@ FROM looped/agent
 RUN apk add --no-cache github-cli
 ```
 
-- **Server-first**: every agent exposes an HTTP surface — health, sessions, runs, SSE event stream — with an OpenAPI spec. The CLI, `looped dev`, the future hub, and the hosted platform are all thin clients of the same API. Loopback-bound by default, auth token required even locally.
-- CLI: `looped init` (scaffold), `looped dev` (hot-reload local run), `looped run agent.yaml` (the container entrypoint).
+- **Server-first**: every agent exposes an HTTP surface — health, sessions, runs, SSE event stream — with an OpenAPI spec. The CLI, `af dev`, the future hub, and the hosted platform are all thin clients of the same API. Loopback-bound by default, auth token required even locally.
+- CLI: `af init` (scaffold), `af dev` (hot-reload local run), `af run agent.yaml` (the container entrypoint).
 
 ```
 docker run -v ./agent.yaml:/agent/agent.yaml --env-file .env looped/agent
@@ -185,7 +185,7 @@ plans/          — this plan series
 packages/
   core/         — agent loop, config loader, providers, permissions, memory
   triggers/     — discord, webhook, cron (separately importable)
-  cli/          — looped init/dev/run
+  cli/          — af init/dev/run
 docs/           — the documentation site (versioned with the code it documents)
 images/         — base image Dockerfile(s)
 examples/       — complete agents (issue-bot first), each a copy-paste starting point
@@ -201,5 +201,5 @@ Docs rule: a feature PR that doesn't touch `docs/` isn't done. Examples are exec
 - Egress enforcement mechanism: per-container network policy vs a shared egress proxy sidecar?
 - Streaming results through triggers (progressive Discord edits) or final-result-only for v1?
 - Run traces: bespoke JSONL in SQLite vs OpenTelemetry from day one?
-- Eval harness (typed task I/O + `looped test`) — post-MVP, but the cheap-model story eventually needs it.
+- Eval harness (typed task I/O + `af test`) — post-MVP, but the cheap-model story eventually needs it.
 - Self-naming edge cases: should agency/client deployments get a policy option to present the nickname externally instead of the self-chosen name (brand control)? And is volume-reset-means-new-name the right call, or should the name be exportable/restorable with memory?

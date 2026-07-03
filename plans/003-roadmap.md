@@ -44,7 +44,7 @@ This is simultaneously: the second real agent (proving the framework generalizes
 
 ## M6 — Generalize and polish
 
-CLI polish (`looped init/dev/run`), structured run traces, a third agent from the community or a real internal need, docs matured to the "newcomer in 30 minutes" bar, first-party skills library seeded (`skills/`).
+CLI polish (`af init/dev/run`), structured run traces, a third agent from the community or a real internal need, docs matured to the "newcomer in 30 minutes" bar, first-party skills library seeded (`skills/`).
 
 **Exit demo:** an outsider follows the docs from zero to a running agent of their own design in under ~30 minutes.
 
@@ -57,7 +57,7 @@ CLI polish (`looped init/dev/run`), structured run traces, a third agent from th
 - Programmatic `defineAgent()` config
 - External secret providers (Vault/SOPS/1Password)
 - More triggers: Slack, email, queues
-- Eval harness (`looped test`) for cheap-model verification
+- Eval harness (`af test`) for cheap-model verification
 
 ## Open questions
 

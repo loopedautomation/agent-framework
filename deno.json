@@ -8,7 +8,7 @@
     "test": "deno test --allow-read --allow-write --allow-env --allow-run=bash --allow-net=127.0.0.1,0.0.0.0 packages/",
     "check": "deno check packages/",
     "ok": "deno fmt --check && deno lint && deno task check && deno task test",
-    "cli": "deno run --allow-read --allow-env --allow-net packages/cli/main.ts"
+    "af": "deno run --allow-read --allow-write --allow-env --allow-net --allow-run=bash packages/cli/main.ts"
   },
   "fmt": {
     "lineWidth": 100,

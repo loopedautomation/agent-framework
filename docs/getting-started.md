@@ -42,7 +42,7 @@ Notes:
 ## 2. Validate it
 
 ```sh
-deno task cli validate agent.yaml
+deno task af validate agent.yaml
 ```
 
 Prints the parsed identity, trigger summary, and every env var the config references — with a warning for any that aren't set.
@@ -51,7 +51,7 @@ Prints the parsed identity, trigger summary, and every env var the config refere
 
 ```sh
 export OPENAI_API_KEY=sk-...
-deno task cli run agent.yaml
+deno task af run agent.yaml
 ```
 
 ```
@@ -74,7 +74,7 @@ Every run reports its status, step count, tokens, and cost — cheap models are 
 Generate the JSON Schema for `agent.yaml` autocompletion:
 
 ```sh
-deno task cli schema > agent-schema.json
+deno task af schema > agent-schema.json
 ```
 
 ## What's next

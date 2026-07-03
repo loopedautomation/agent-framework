@@ -141,7 +141,7 @@ export class Store {
       .run(record.runId ?? null, record.kind, JSON.stringify(record.detail));
   }
 
-  /** For `looped runs` style introspection and tests. */
+  /** For `af runs` style introspection and tests. */
   recentRuns(limit = 20): Record<string, unknown>[] {
     return this.#db
       .prepare("SELECT * FROM runs ORDER BY id DESC LIMIT ?")

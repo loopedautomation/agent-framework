@@ -3,7 +3,7 @@
 #
 #   export OPENAI_API_KEY=...
 #   export WEBHOOK_TOKEN=s3cret
-#   deno task cli run examples/echo-service/agent.yaml
+#   deno task af run examples/echo-service/agent.yaml
 #
 #   curl -s localhost:8080 -H "authorization: Bearer s3cret" \
 #     -H "content-type: application/json" \

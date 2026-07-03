@@ -48,7 +48,7 @@ The hub is **a control plane, never a runtime dependency.** Agents must be fully
 
 If built, the hub is a UI over APIs the agents already expose (Plan 1's server surface): see the fleet, start/stop agents, tail runs and sessions, edit configs, view costs, manage secrets. Same artifact three ways:
 
-- **Local dev**: `looped dev` already gives a single-agent view; the hub is the multi-agent version.
+- **Local dev**: `af dev` already gives a single-agent view; the hub is the multi-agent version.
 - **Desktop app**: plausibly a Deno-native webview app later — nice for the Mac-mini operator persona, but a browser pointed at a local port delivers 90% of it sooner.
 - **Hosted**: the platform dashboard *is* the hub, hosted.
 

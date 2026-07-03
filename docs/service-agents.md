@@ -1,6 +1,6 @@
 # Service agents: triggers, permissions, and the audit trail
 
-Status: covers M2. An agent with `triggers:` in its config runs as a long-lived service — the outer loop. Without them, `looped run` gives you the interactive REPL.
+Status: covers M2. An agent with `triggers:` in its config runs as a long-lived service — the outer loop. Without them, `af run` gives you the interactive REPL.
 
 ## Webhook trigger
 
@@ -52,7 +52,7 @@ permissions:
 - **Denials are tool results**, not crashes — the model sees `permission denied: run access to "curl" is not in the agent's permissions.run allowlist` and adapts.
 - **Static analysis over hope**: `run_bash` extracts every executable from pipes/chains and checks each; command substitution (`$(...)`, backticks) is rejected outright because it can't be checked.
 - **Scoped environments**: subprocesses receive only the env vars the config's `env:` block grants (plus PATH/HOME) — never the agent process's ambient environment.
-- **Layer 1 compilation**: `looped flags agent.yaml` prints the Deno sandbox flags the config compiles to, e.g. `--allow-net=api.github.com --allow-run=gh`. The container is layer 2.
+- **Layer 1 compilation**: `af flags agent.yaml` prints the Deno sandbox flags the config compiles to, e.g. `--allow-net=api.github.com --allow-run=gh`. The container is layer 2.
 
 ## Secrets
 

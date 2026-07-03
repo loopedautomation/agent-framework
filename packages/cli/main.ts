@@ -1,8 +1,8 @@
-// looped — thin CLI over @looped/af.
-//   looped run <agent.yaml>       run an agent: service mode if it has triggers, REPL otherwise
-//   looped validate <agent.yaml>  validate a config and report env references
-//   looped flags <agent.yaml>     print the Deno permission flags the config compiles to
-//   looped schema                 print the agent.yaml JSON Schema
+// af — the Looped AF CLI, a thin client over @looped/af.
+//   af run <agent.yaml>       run an agent: service mode if it has triggers, REPL otherwise
+//   af validate <agent.yaml>  validate a config and report env references
+//   af flags <agent.yaml>     print the Deno permission flags the config compiles to
+//   af schema                 print the agent.yaml JSON Schema
 
 import {
   type AgentConfig,
@@ -18,13 +18,13 @@ import {
 } from "@looped/af";
 import { triggersFromConfig } from "@looped/triggers";
 
-const USAGE = `looped ${VERSION}
+const USAGE = `af ${VERSION}
 
 Usage:
-  looped run <agent.yaml>       Run an agent (service mode with triggers, REPL without)
-  looped validate <agent.yaml>  Validate an agent definition
-  looped flags <agent.yaml>     Print compiled Deno permission flags
-  looped schema                 Print the agent.yaml JSON Schema
+  af run <agent.yaml>       Run an agent (service mode with triggers, REPL without)
+  af validate <agent.yaml>  Validate an agent definition
+  af flags <agent.yaml>     Print compiled Deno permission flags
+  af schema                 Print the agent.yaml JSON Schema
 `;
 
 function fail(message: string): never {
@@ -99,15 +99,15 @@ async function main() {
   try {
     switch (command) {
       case "run":
-        if (!arg) fail("usage: looped run <agent.yaml>");
+        if (!arg) fail("usage: af run <agent.yaml>");
         await run(arg);
         break;
       case "validate":
-        if (!arg) fail("usage: looped validate <agent.yaml>");
+        if (!arg) fail("usage: af validate <agent.yaml>");
         await validate(arg);
         break;
       case "flags": {
-        if (!arg) fail("usage: looped flags <agent.yaml>");
+        if (!arg) fail("usage: af flags <agent.yaml>");
         const config = await loadAgentConfig(arg);
         console.log(permissionsToDenoFlags(config.permissions).join(" "));
         break;
