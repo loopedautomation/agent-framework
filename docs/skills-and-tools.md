@@ -67,7 +67,7 @@ Setup (the one genuinely irreducible ritual — budget 15 minutes):
 1. [Discord Developer Portal](https://discord.com/developers/applications) → New Application → Bot.
 2. Enable the **Message Content Intent** under Privileged Gateway Intents (without it, messages arrive empty — this is the #1 failure mode).
 3. Copy the bot token → `export DISCORD_BOT_TOKEN=...`
-4. OAuth2 → URL Generator: scope `bot`, permissions *View Channels*, *Send Messages*, *Read Message History* → open the URL, invite the bot to your server.
+4. `af discord-invite agent.yaml` prints the ready-made invite URL (correct scopes and permissions, no bitfield math) — open it and invite the bot to your server.
 5. `deno task af run agent.yaml`
 
 The agent replies in-channel to the triggering message; conversations are keyed per channel/thread (`memory.scope: thread` continues them). It ignores bots, itself, and empty messages; long replies split at Discord's 2000-char limit.

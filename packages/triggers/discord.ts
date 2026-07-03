@@ -13,6 +13,32 @@ const INTENTS = (1 << 0) | (1 << 9) | (1 << 15);
 // exactly this sentinel — the trigger then posts nothing instead of noise.
 export const NO_REPLY = "__NO_REPLY__";
 
+// Everything a Looped Discord agent needs, nothing more:
+// VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY
+export const INVITE_PERMISSIONS = (1 << 10) | (1 << 11) | (1 << 16);
+
+/** The OAuth invite URL for a bot application — so nobody computes permission bitfields by hand. */
+export function inviteUrl(applicationId: string): string {
+  return `https://discord.com/oauth2/authorize?client_id=${applicationId}&scope=bot&permissions=${INVITE_PERMISSIONS}`;
+}
+
+/** Fetch the bot's application id (the client_id the invite URL needs). */
+export async function fetchApplicationId(
+  token: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<string> {
+  const res = await fetchFn(`${API}/applications/@me`, {
+    headers: { authorization: `Bot ${token}` },
+  });
+  if (!res.ok) {
+    await res.body?.cancel();
+    throw new Error(
+      `discord: cannot fetch application info (${res.status}) — check the bot token`,
+    );
+  }
+  return (await res.json()).id;
+}
+
 export interface DiscordMessage {
   id: string;
   channel_id: string;

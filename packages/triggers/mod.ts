@@ -7,7 +7,14 @@ import { DiscordTrigger } from "./discord.ts";
 
 export { CronTrigger, type CronTriggerOptions } from "./cron.ts";
 export { WebhookTrigger, type WebhookTriggerOptions } from "./webhook.ts";
-export { DiscordTrigger, type DiscordTriggerOptions } from "./discord.ts";
+export {
+  DiscordTrigger,
+  type DiscordTriggerOptions,
+  fetchApplicationId,
+  INVITE_PERMISSIONS,
+  inviteUrl,
+  NO_REPLY,
+} from "./discord.ts";
 
 /**
  * Instantiate the triggers a config declares. Discord arrives in M3.

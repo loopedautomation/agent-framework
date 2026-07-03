@@ -11,7 +11,9 @@ services:
     volumes:
       - issue-bot-data:/data
     ports:
-      - "127.0.0.1:9090:9090" # status surface: curl localhost:9090/healthz
+      # Status surface: curl localhost:9090/healthz
+      # If host port 9090 is taken, change only the left side (e.g. "127.0.0.1:9091:9090").
+      - "127.0.0.1:9090:9090"
     restart: unless-stopped
     read_only: true
     tmpfs:

@@ -14,7 +14,7 @@ Goal: a Discord bot that turns messages in `#issues` into GitHub issues and repl
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) → **New Application** → name it (e.g. `issue-bot`).
 2. **Bot** tab → under *Privileged Gateway Intents*, enable **Message Content Intent**. ⚠️ This is the step everyone misses — without it the bot receives empty messages and silently does nothing.
 3. **Bot** tab → *Reset Token* → copy the token. This is `DISCORD_BOT_TOKEN`.
-4. **OAuth2 → URL Generator**: check scope `bot`; check permissions **View Channels**, **Send Messages**, **Read Message History**. Open the generated URL and invite the bot to the team server.
+4. Invite the bot: if you have the repo + Deno, `DISCORD_BOT_TOKEN=... deno task af discord-invite examples/issue-bot/agent.yaml` prints the ready-made invite URL. Otherwise use **OAuth2 → URL Generator**: scope `bot`; permissions **View Channels**, **Send Messages**, **Read Message History**. Open the URL and invite the bot to the team server.
 5. Make sure a `#issues` channel exists and the bot can see it.
 
 ## 2. Create the GitHub token (~5 min)
