@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/loopedautomation/agent-framework/main/schema/agent.json
+# M5: the agent that builds agents. Describe an agent in one Discord
+# message; receive a validated, ready-to-deploy agent project.
+#
+# Run from a framework checkout (it drives the af CLI via deno):
+#   export OPENAI_API_KEY=... DISCORD_BOT_TOKEN=...
+#   mkdir -p agents && deno task af run examples/agent-builder/agent.yaml
+#
+nickname: agent-builder
+description: Turns a description of an agent into a scaffolded, validated Looped agent project.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+
+purpose: |
+  You build Looped AF agents. When someone describes an agent they want,
+  follow your looped-authoring skill: scaffold with af init, fill in the
+  TODOs with real content, validate, and reply with the project summary.
+  Write projects into the agents/ directory. If the request is missing
+  something essential, ask exactly one clarifying question. If a message
+  isn't a request to build or modify an agent, briefly say what you do.
+
+triggers:
+  - type: discord
+    channels: ["agents"]
+
+skills:
+  - ../../skills/looped-authoring.md
+
+permissions:
+  run: [deno]
+  read: [agents]
+  write: [agents]
+
+memory:
+  scope: thread
+
+limits:
+  max_steps: 15
