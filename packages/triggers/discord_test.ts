@@ -1,5 +1,12 @@
-import { assert, assertEquals } from "@std/assert";
-import { type DiscordMessage, shouldHandle, splitMessage } from "./discord.ts";
+import { assert, assertEquals, assertRejects } from "@std/assert";
+import {
+  type DiscordMessage,
+  fetchApplicationId,
+  INVITE_PERMISSIONS,
+  inviteUrl,
+  shouldHandle,
+  splitMessage,
+} from "./discord.ts";
 
 const BOT_ID = "bot-1";
 
@@ -53,4 +60,24 @@ Deno.test("splitMessage: respects the 2000-char cap on line boundaries", () => {
   assert(parts.length > 1);
   assert(parts.every((p) => p.length <= 2000));
   assertEquals(parts.join("\n"), long); // nothing lost
+});
+
+Deno.test("inviteUrl: correct client_id, scope, and permissions integer", () => {
+  assertEquals(INVITE_PERMISSIONS, 68608); // VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY
+  assertEquals(
+    inviteUrl("1234567890"),
+    "https://discord.com/oauth2/authorize?client_id=1234567890&scope=bot&permissions=68608",
+  );
+});
+
+Deno.test("fetchApplicationId: returns id, throws readable error on bad token", async () => {
+  const ok =
+    ((_url: RequestInfo | URL, _init?: RequestInit) =>
+      Promise.resolve(new Response(JSON.stringify({ id: "app-42" })))) as typeof fetch;
+  assertEquals(await fetchApplicationId("token", ok), "app-42");
+
+  const unauthorized =
+    ((_url: RequestInfo | URL, _init?: RequestInit) =>
+      Promise.resolve(new Response("{}", { status: 401 }))) as typeof fetch;
+  await assertRejects(() => fetchApplicationId("bad", unauthorized), Error, "check the bot token");
 });

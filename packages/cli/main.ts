@@ -17,7 +17,7 @@ import {
   startStatusServer,
   VERSION,
 } from "@looped/af";
-import { triggersFromConfig } from "@looped/triggers";
+import { fetchApplicationId, inviteUrl, triggersFromConfig } from "@looped/triggers";
 import { printBirthBanner } from "./banner.ts";
 
 const USAGE = `af ${VERSION}
@@ -27,7 +27,29 @@ Usage:
   af validate <agent.yaml>  Validate an agent definition
   af flags <agent.yaml>     Print compiled Deno permission flags
   af schema                 Print the agent.yaml JSON Schema
+  af discord-invite <agent.yaml>
+                            Print the bot's OAuth invite URL (no bitfield math)
 `;
+
+async function discordInvite(path: string) {
+  const config = await loadAgentConfig(path);
+  const trigger = config.triggers?.find((t) => t.type === "discord");
+  if (!trigger || trigger.type !== "discord") {
+    fail(`${path} has no discord trigger`);
+  }
+  const token = Deno.env.get(trigger.token_env);
+  if (!token) {
+    fail(
+      `${trigger.token_env} is not set — the invite URL needs the bot token to look up the app id`,
+    );
+  }
+  const appId = await fetchApplicationId(token);
+  console.log(inviteUrl(appId));
+  console.log(
+    "%copen this URL to invite the bot (grants: View Channels, Send Messages, Read Message History)",
+    "color: gray",
+  );
+}
 
 function fail(message: string): never {
   console.error(`error: ${message}`);
@@ -123,6 +145,10 @@ async function main() {
       }
       case "schema":
         console.log(JSON.stringify(agentConfigJsonSchema(), null, 2));
+        break;
+      case "discord-invite":
+        if (!arg) fail("usage: af discord-invite <agent.yaml>");
+        await discordInvite(arg);
         break;
       default:
         console.log(USAGE);
