@@ -4,7 +4,7 @@
 
 **Start with the [Manifesto](MANIFESTO.md).** Three minutes; it's the whole philosophy.
 
-The idea: describing an agent should be a YAML file, and deploying it should be a `docker run`. Agents are long-running services that sit in a loop — wait for an event (a Discord message, a webhook, a cron tick), do their one job, deliver the result, go idle.
+The idea: **an agent is a file** — one file that says the job, the model, the tools, and the boundaries — and deploying it is a `docker run`. Agents are long-running services that sit in a loop — wait for an event (a Discord message, a webhook, a cron tick), do their one job, deliver the result, go idle.
 
 ```yaml
 nickname: issue-bot   # agents name themselves; you just give them a handle

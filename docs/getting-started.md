@@ -9,7 +9,7 @@ Status: pre-release — this walkthrough tracks `main` and covers the core: defi
 
 ## 1. Define an agent
 
-One agent, one job, one YAML file:
+One agent, one job, one file:
 
 ```yaml
 # agent.yaml

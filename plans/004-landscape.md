@@ -11,7 +11,7 @@ Everything distinctive about Looped **derives from** the fit-for-purpose stance 
 - **Minimalism** — a one-job agent needs three tools, not sixty; general frameworks *structurally can't* ship lean because every user needs a different sixty.
 - **Cheap-model economics** — narrow scope is what makes mini models reliable; frameworks built for open-ended agents are priced (in tokens and trust) for frontier models.
 - **Permissions without prompts** — you can write a tight, auditable allowlist for one process; nobody can for "anything the user might ask."
-- **Config over code** — one job fits in one YAML file; general-purpose behavior doesn't.
+- **Config over code** — one job fits in one file; general-purpose behavior doesn’t.
 - **The domain: business processes** — not coding (Claude Code/Flue's turf), not personal assistance (OpenClaw/Hermes's turf), not chat products. The repetitive, well-scoped work teams do by hand — the n8n job market, served with an agent instead of a canvas.
 
 The market map, read this way:
@@ -24,15 +24,15 @@ The market map, read this way:
 
 Supporting evidence, not the moat: the feature intersection (config-driven + Docker-native + trigger-in-config) also happens to be unoccupied today. Useful for launch messaging; never the load-bearing argument.
 
-**Positioning statement:** *Looped AF is the framework for fit-for-purpose agents — hire an agent for one job. Describe the job in a YAML file, give it exactly the tools and permissions the job needs, and run it as a container on your own infrastructure. It automates business processes the way you'd staff them: one specialist at a time.*
+**Positioning statement:** *Looped AF is the framework for fit-for-purpose agents — hire an agent for one job. Describe the job in a single file, give it exactly the tools and permissions the job needs, and run it as a container on your own infrastructure. It automates business processes the way you'd staff them: one specialist at a time.*
 
-> **One job. One YAML file. `docker compose up` and it's hired.**
+> **One job. One file. `docker compose up` and it's hired.**
 
 ## Comparison
 
 | | Definition | Execution model | Triggers in config | Provider-agnostic | Permissions | Deployment | Target |
 |---|---|---|---|---|---|---|---|
-| **Looped AF** | One YAML file | Long-running container service | **Yes — discord/webhook/cron** | Yes (thin adapter) | Declarative deny-by-default, 3-layer enforcement | `docker run`, anywhere | Developers → businesses |
+| **Looped AF** | One file (YAML today) | Long-running container service | **Yes — discord/webhook/cron** | Yes (thin adapter) | Declarative deny-by-default, 3-layer enforcement | `docker run`, anywhere | Developers → businesses |
 | Vercel eve | TS + markdown directory | Durable workflows on Vercel | Yes (channels + schedules) | Yes (AI Gateway) | HITL approvals | Vercel primitives | Devs on Vercel |
 | Docker Agent | YAML, OCI artifacts | Request/response CLI/API | **No** | Yes | Toolset scoping | Docker Desktop | Developers |
 | Flue | TS code + md skills | Harness library, self-host | Partial (channels, webhooks) | Yes | Sandbox-first | Node/CF/Docker/etc. | TS devs |

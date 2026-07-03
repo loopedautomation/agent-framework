@@ -4,7 +4,7 @@ Milestones from zero to a deployed MVP and beyond. Each milestone ends with some
 
 ## M0 — Manifesto *(first milestone)*
 
-Publish the manifesto: the public, opinionated distillation of Plan 0 — why agents should be YAML files in containers, why single-purpose beats general-purpose, why cheap models + minimalism, why permissions without prompts. Lives as `MANIFESTO.md` in the repo root and frames the README; short enough to read in three minutes, sharp enough to be disagreed with.
+Publish the manifesto: the public, opinionated distillation of Plan 0 — why an agent should be a file in a container, why single-purpose beats general-purpose, why cheap models + minimalism, why permissions without prompts. Lives as `MANIFESTO.md` in the repo root and frames the README; short enough to read in three minutes, sharp enough to be disagreed with.
 
 Also in M0: plans 0–5 committed, monorepo skeleton laid out (Plan 1 repo structure), license finalized (leaning Apache-2.0).
 
@@ -32,7 +32,7 @@ Skills loader (markdown + progressive disclosure). MCP client (stdio + HTTP, nam
 
 The hardened `looped/agent` base image + custom-image story, secrets resolution (env + file), memory volume, agent HTTP/SSE surface. The issue-bot from Plan 2 (skill path) running 24/7 on the Mac mini serving the real team.
 
-**Exit demo:** teammate posts in `#issues`, gets an issue link back seconds later. One YAML file, one custom image layer, one `docker run`. **The v1 success criterion from Plan 0.**
+**Exit demo:** teammate posts in `#issues`, gets an issue link back seconds later. One file, one custom image layer, one `docker run`. **The v1 success criterion from Plan 0.**
 
 ## M5 — The agent that builds agents
 

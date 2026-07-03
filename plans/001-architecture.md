@@ -6,7 +6,7 @@ Runtime: **Deno + TypeScript**. Deno's sandbox permissions give runtime-enforced
 
 ### Agent
 
-The unit of everything: one identity, one job. Defined entirely in one YAML file:
+The unit of everything: one identity, one job. Defined entirely in one file (YAML today; the format is an implementation detail — the file is the point):
 
 - **identity** — nickname + description. **Users don't name agents; agents name themselves.** The config's `nickname` is the stable operator handle (compose service, logs, CLI, session keys). On first boot the agent performs a one-time naming ritual — one LLM call given its job description — and the chosen name persists in SQLite for life, surviving restarts. The agent presents itself by its own name (e.g. signing Discord replies); the operator addresses it by nickname. A fresh volume means a new memory and a new self — the agent renames itself.
 - **model** — provider + model id (+ fallbacks, roles)

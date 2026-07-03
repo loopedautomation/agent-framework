@@ -52,7 +52,7 @@ The product already promises customers that every action is "logged, reversible,
 
 The MVP agent (Plan 2) — Discord message in, GitHub issue link out — is:
 
-- defined in **one YAML file**,
+- defined in **one file**,
 - deployed with **one `docker run`**,
 - buildable by a newcomer to the framework in **under ~30 minutes**.
 
