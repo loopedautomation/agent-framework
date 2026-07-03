@@ -48,7 +48,7 @@ permissions:
   write: [/workspace/out]                          # writable path prefixes
 ```
 
-- **Tools follow permissions**: `run_bash` only exists for the agent if `run:` grants something; `http_request` only if `net:` does. No dead tool schemas burning context.
+- **Tools follow permissions**: `run_bash` only exists for the agent if `run:` grants something; `http_request` only if `net:` does; `read_file`/`write_file` only if `read:`/`write:` do. No dead tool schemas burning context. File paths are normalized before the prefix check, so `..` traversal can't escape the allowlist.
 - **Denials are tool results**, not crashes — the model sees `permission denied: run access to "curl" is not in the agent's permissions.run allowlist` and adapts.
 - **Static analysis over hope**: `run_bash` extracts every executable from pipes/chains and checks each; command substitution (`$(...)`, backticks) is rejected outright because it can't be checked.
 - **Scoped environments**: subprocesses receive only the env vars the config's `env:` block grants (plus PATH/HOME) — never the agent process's ambient environment.

@@ -7,6 +7,7 @@ import type { NativeTool } from "../tools/types.ts";
 import { currentTimeTool } from "../tools/time.ts";
 import { createRunBashTool } from "../tools/bash.ts";
 import { createHttpRequestTool } from "../tools/http.ts";
+import { createReadFileTool, createWriteFileTool } from "../tools/files.ts";
 import { runAgent, type RunResult } from "../loop/loop.ts";
 import { Store } from "../store/store.ts";
 import { type AgentIdentity, ensureIdentity, identityNote } from "./identity.ts";
@@ -85,6 +86,8 @@ export class AgentService {
     if (this.config.permissions?.net?.length) {
       tools.push(createHttpRequestTool({ permissions: engine }));
     }
+    if (this.config.permissions?.read?.length) tools.push(createReadFileTool(engine));
+    if (this.config.permissions?.write?.length) tools.push(createWriteFileTool(engine));
     return tools;
   }
 
