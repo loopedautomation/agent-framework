@@ -57,3 +57,9 @@ Deno.test("compiles to Deno flags", () => {
   ]);
   assertEquals(permissionsToDenoFlags(undefined), []);
 });
+
+Deno.test("relative path prefixes resolve against cwd", () => {
+  const engine = new PermissionEngine({ write: ["agents"] });
+  assert(engine.write(`${Deno.cwd()}/agents/new-bot/agent.yaml`).allowed);
+  assertEquals(engine.write(`${Deno.cwd()}/elsewhere/x`).allowed, false);
+});

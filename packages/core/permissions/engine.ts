@@ -1,3 +1,4 @@
+import { resolve } from "@std/path";
 import type { Permissions } from "../config/schema.ts";
 
 export type PermissionKind = "net" | "run" | "read" | "write";
@@ -67,12 +68,14 @@ export class PermissionEngine {
   }
 
   read(path: string): PermissionDecision {
-    const allowed = (this.#permissions.read ?? []).some((p) => pathMatches(p, path));
+    // Prefixes may be relative (resolved against cwd) — the checked path
+    // arrives already resolved, so both sides normalize before matching.
+    const allowed = (this.#permissions.read ?? []).some((p) => pathMatches(resolve(p), path));
     return this.#decide("read", path, allowed, "permissions.read");
   }
 
   write(path: string): PermissionDecision {
-    const allowed = (this.#permissions.write ?? []).some((p) => pathMatches(p, path));
+    const allowed = (this.#permissions.write ?? []).some((p) => pathMatches(resolve(p), path));
     return this.#decide("write", path, allowed, "permissions.write");
   }
 }

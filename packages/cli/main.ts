@@ -165,19 +165,20 @@ function init(nameArg?: string) {
   const options: InitOptions = { nickname, trigger, provider, model: flag("model"), clis, deploy };
   const files = generateProject(options);
 
+  const target = `${flag("dir") ?? "."}/${nickname}`;
   try {
-    if ([...Deno.readDirSync(nickname)].length) fail(`./${nickname} exists and is not empty`);
+    if ([...Deno.readDirSync(target)].length) fail(`${target} exists and is not empty`);
   } catch (err) {
     if (!(err instanceof Deno.errors.NotFound)) throw err;
   }
-  Deno.mkdirSync(nickname, { recursive: true });
+  Deno.mkdirSync(target, { recursive: true });
   for (const [name, content] of Object.entries(files)) {
-    Deno.writeTextFileSync(`${nickname}/${name}`, content);
+    Deno.writeTextFileSync(`${target}/${name}`, content);
   }
-  console.log(`\n✓ ${nickname}/ scaffolded:`);
+  console.log(`\n✓ ${target}/ scaffolded:`);
   for (const name of Object.keys(files)) console.log(`    ${name}`);
   console.log(
-    `\nnext: fill in the TODOs in ${nickname}/agent.yaml, then follow ${nickname}/README.md`,
+    `\nnext: fill in the TODOs in ${target}/agent.yaml, then follow ${target}/README.md`,
   );
 }
 

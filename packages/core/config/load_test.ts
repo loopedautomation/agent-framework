@@ -191,3 +191,10 @@ Deno.test("tools.custom is rejected loudly until implemented", () => {
   );
   assert(err.message.includes("not implemented"));
 });
+
+Deno.test("the shipped agent-builder example is a valid agent definition", async () => {
+  const path = new URL("../../../examples/agent-builder/agent.yaml", import.meta.url);
+  const config = parseAgentConfig(await Deno.readTextFile(path), "examples/agent-builder");
+  assertEquals(config.nickname, "agent-builder");
+  assertEquals(config.permissions?.write, ["agents"]);
+});

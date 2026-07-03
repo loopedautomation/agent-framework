@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Looped agent runtime data
 .looped/
+
+# agent-builder workspace
+agents/
