@@ -57,6 +57,9 @@ triggers:
     channels: ["issues"]        # names or ids; omit for all channels
     # require_mention: true     # only respond when @-mentioned
     # token_env: DISCORD_BOT_TOKEN (default)
+    # from_users: ["amin"]      # only handle these authors (user ids or usernames)
+    # reply_channel: "1522..."  # post replies here instead of the source channel
+    # allow_silence: true       # a reply of exactly __NO_REPLY__ posts nothing
 ```
 
 Setup (the one genuinely irreducible ritual — budget 15 minutes):
@@ -68,6 +71,14 @@ Setup (the one genuinely irreducible ritual — budget 15 minutes):
 5. `deno task af run agent.yaml`
 
 The agent replies in-channel to the triggering message; conversations are keyed per channel/thread (`memory.scope: thread` continues them). It ignores bots, itself, and empty messages; long replies split at Discord's 2000-char limit.
+
+### Observer agents
+
+The three optional keys together turn the trigger from a chatbot into an observer — an agent that watches channels, reacts to specific people, and reports elsewhere (a review bot, a moderation assistant, a coach):
+
+- `from_users` — handle only these authors. The filter runs *before* the model is called: everyone else's messages are dropped in the trigger and never reach the provider.
+- `reply_channel` — deliver replies to a dedicated channel instead of the source. Out-of-channel replies quote the triggering message and link back to it.
+- `allow_silence` — let the agent say nothing. Instruct it in `system_prompt` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message.
 
 ## First boot: the naming ritual
 

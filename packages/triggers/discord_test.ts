@@ -35,6 +35,17 @@ Deno.test("shouldHandle: require_mention", () => {
   assert(shouldHandle(msg({ mentions: [{ id: BOT_ID }] }), BOT_ID, "issues", opts));
 });
 
+Deno.test("shouldHandle: from_users matches by id or username, drops everyone else", () => {
+  const opts = { fromUsers: ["user-1", "amin"] };
+  assert(shouldHandle(msg({}), BOT_ID, "issues", opts)); // by id
+  assert(shouldHandle(msg({ author: { id: "u-9", username: "amin" } }), BOT_ID, "issues", opts));
+  assert(
+    !shouldHandle(msg({ author: { id: "u-9", username: "someone" } }), BOT_ID, "issues", opts),
+  );
+  // empty list behaves like no filter
+  assert(shouldHandle(msg({ author: { id: "u-9" } }), BOT_ID, "issues", { fromUsers: [] }));
+});
+
 Deno.test("splitMessage: respects the 2000-char cap on line boundaries", () => {
   assertEquals(splitMessage("short"), ["short"]);
   const long = Array.from({ length: 300 }, (_, i) => `line ${i}`).join("\n");

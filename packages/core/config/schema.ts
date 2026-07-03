@@ -31,6 +31,12 @@ export const DiscordTriggerSchema = z.strictObject({
   require_mention: z.boolean().optional(),
   /** Env var holding the bot token. */
   token_env: z.string().min(1).default("DISCORD_BOT_TOKEN"),
+  /** Only handle messages from these authors (user ids or usernames); omit for anyone. */
+  from_users: z.array(z.string().min(1)).optional(),
+  /** Channel id to post replies into instead of the source channel. */
+  reply_channel: z.string().min(1).optional(),
+  /** Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
+  allow_silence: z.boolean().default(false),
 });
 
 export const WebhookTriggerSchema = z.strictObject({
