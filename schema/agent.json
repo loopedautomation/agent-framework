@@ -371,5 +371,5 @@
     "system_prompt"
   ],
   "additionalProperties": false,
-  "description": "A Looped AF agent: one job, one YAML file. https://github.com/loopedautomation/agent-framework"
+  "description": "A Looped AF agent: one job, one file. https://github.com/loopedautomation/agent-framework"
 }

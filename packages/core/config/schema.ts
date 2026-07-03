@@ -169,7 +169,7 @@ export const AgentConfigSchema = z.strictObject({
     "limits.max_cost requires model.pricing (a cost cap can't be enforced without prices; models.dev integration is planned)",
   path: ["limits", "max_cost"],
 }).describe(
-  "A Looped AF agent: one job, one YAML file. https://github.com/loopedautomation/agent-framework",
+  "A Looped AF agent: one job, one file. https://github.com/loopedautomation/agent-framework",
 );
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;

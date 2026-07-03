@@ -18,7 +18,7 @@ export function printBirthBanner(nickname: string, name: string) {
     console.log(`%c${lines[i]}`, `color: ${LOOP_GRADIENT[i % LOOP_GRADIENT.length]}`);
   }
   console.log(
-    `\n   %cone job · one YAML file · it's hired%c                      looped.sh\n`,
+    `\n   %cone job · one file · it’s hired%c                      looped.sh\n`,
     "color: gray; font-style: italic",
     "color: gray",
   );

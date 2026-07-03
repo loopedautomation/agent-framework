@@ -10,9 +10,9 @@ So this is Looped AF — the Looped Agent Framework — and these are its convic
 
 Not a personal assistant. Not a do-anything companion. A fit-for-purpose agent, hired for one business process — the way you'd staff it: one specialist at a time. An agent with one job is easier to prompt, easier to permission, easier to test, and possible to trust. Everything else in this manifesto follows from this. If you need a second job done, run a second agent. Containers are cheap.
 
-## An agent is a YAML file
+## An agent is a file
 
-One job fits in one file: the job description, the model, the tools, the triggers, the permissions. `docker compose up`, and it's hired. No SDK to learn, no app to scaffold, no canvas to drag boxes across. Code is the escape hatch, never the entry point.
+One job fits in one file: the purpose, the model, the tools, the triggers, the permissions. A file you can read in a minute, diff in a review, and check into git next to the process it automates. `docker compose up`, and it's hired. No SDK to learn, no app to scaffold, no canvas to drag boxes across. Code is the escape hatch, never the entry point.
 
 ## Agents are services, not scripts
 
