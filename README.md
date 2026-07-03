@@ -25,7 +25,9 @@ permissions:
 
 ## Status
 
-Planning. Start with the plans — they're the source of truth:
+Building — M1 (core loop) is code-complete: you can define an agent in YAML and run it interactively today. See **[Getting started](docs/getting-started.md)**. Triggers, permissions, skills, MCP, and Docker packaging are next ([roadmap](plans/003-roadmap.md)).
+
+The plans are the source of truth:
 
 - [Plan 0 — Vision](plans/000-vision.md): why this exists, principles, non-goals
 - [Plan 1 — Architecture](plans/001-architecture.md): core concepts and design
