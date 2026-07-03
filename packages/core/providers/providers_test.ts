@@ -6,9 +6,9 @@ import { parseAgentConfig } from "../config/load.ts";
 
 function fakeFetch(status: number, body: unknown): typeof fetch & { calls: Request[] } {
   const calls: Request[] = [];
-  const fn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const fn = ((input: RequestInfo | URL, init?: RequestInit) => {
     calls.push(new Request(input, init));
-    return new Response(JSON.stringify(body), { status });
+    return Promise.resolve(new Response(JSON.stringify(body), { status }));
   }) as typeof fetch & { calls: Request[] };
   fn.calls = calls;
   return fn;
