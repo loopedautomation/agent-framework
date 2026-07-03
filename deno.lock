@@ -544,6 +544,11 @@
   },
   "workspace": {
     "members": {
+      "packages/cli": {
+        "dependencies": [
+          "jsr:@std/assert@1"
+        ]
+      },
       "packages/core": {
         "dependencies": [
           "jsr:@std/assert@1",
