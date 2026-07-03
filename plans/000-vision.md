@@ -42,11 +42,11 @@ The "loop" in Looped: agents are long-running services. They sit in a loop waiti
 
 ## Business context
 
-The framework is step one of a larger arc:
+Looped AF is built by **Looped** ([looped.sh](https://looped.sh)) — an existing back-office automation platform for service professionals (time tracking, invoicing, an AI chat interface, cron-scheduled routines). The framework is not a side project; it's the company's agent infrastructure, and the arc runs:
 
-**framework → portfolio of deployed agents → service business building and operating agents for other companies.**
+**framework → dogfooded inside Looped's own product (Looped Chat replaced by a Looped AF agent; Routines as cron-triggered agents) → portfolio of deployed agents → service business building and operating agents for other companies.**
 
-This shapes priorities early: agents will run *on behalf of clients*, so observability, audit trails, and a credible permission story aren't polish — they're what makes the service sellable. Every design decision should survive the question: "would I deploy this into a client's business?"
+The product already promises customers that every action is "logged, reversible, and approval-gated where it matters" — the framework's audit trail and permission system are that promise, generalized. This shapes priorities early: agents run *on behalf of paying users and clients*, so observability, audit trails, and a credible permission story aren't polish — they're what makes the whole thing sellable. Every design decision should survive the question: "would I deploy this into a client's business?"
 
 ## Success criteria for v1
 

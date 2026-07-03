@@ -50,7 +50,8 @@ CLI polish (`looped init/dev/run`), structured run traces, a third agent from th
 
 ## Later (unscheduled, needs its own plan when ready)
 
-- Multi-agent composition (`agent_call`) and A2A trigger — Plan 6 candidate
+- **Looped Chat on Looped AF** — replace the chat agent in app.looped.sh with a Looped AF agent (`chat` trigger, per-user sessions, internal-API tools). The framework's first production dogfood in a paying-user SaaS; Plan 6 candidate (see Plan 5).
+- Multi-agent composition (`agent_call`) and A2A trigger
 - Agent hub / control plane UI (Plan 5 — post-fleet)
 - Hosted platform (Plan 5 — after the agency validates the ops)
 - Programmatic `defineAgent()` config

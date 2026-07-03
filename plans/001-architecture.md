@@ -55,7 +55,9 @@ interface Trigger {
 }
 ```
 
-Later: **a2a** (Agent2Agent protocol endpoint + generated agent card) as just another trigger type, making Looped agents callable by the broader ecosystem.
+Later:
+- **chat** — an embedded product-chat trigger: a frontend (e.g. app.looped.sh's Looped Chat) consumes the agent's HTTP/SSE surface directly, with per-app-user sessions and authenticated access. Needed for dogfooding the framework inside Looped's product (Plan 5).
+- **a2a** — Agent2Agent protocol endpoint + generated agent card, making Looped agents callable by the broader ecosystem.
 
 ### Tools — four sources, one interface
 

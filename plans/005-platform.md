@@ -1,8 +1,15 @@
 # Plan 5 — Platform & Business
 
-The framework (Plans 0–3) is step one of a three-step arc:
+Context: Looped AF is built by **Looped** ([looped.sh](https://looped.sh)), an existing back-office automation SaaS (Track, Invoices, Chat, Routines). The framework's **first commercial consumer is Looped itself**:
 
-**OSS framework → hosted platform → service business.**
+- **Looped Chat → a Looped AF agent.** The product's chat interface becomes an agent behind a `chat` trigger (the app frontend consuming the agent's HTTP/SSE surface), with custom tools/skills against Looped's internal API. This pulls per-app-user sessions and surface auth forward from "platform tier" to a real near-term requirement — it needs its own plan when scheduled.
+- **Routines → cron-triggered agents.** The product's scheduled automations are already the framework's shape; migrating them is dogfooding, not rework.
+
+Production dogfooding in a paying-user SaaS is stronger validation than any demo agent, and it precedes agency work in the arc below.
+
+The framework (Plans 0–3) is step one of the larger arc:
+
+**OSS framework → dogfood in Looped's product → hosted platform → service business.**
 
 Each step funds and feeds the next: the framework builds credibility and an agent portfolio; the platform turns deployment into recurring revenue; the service business sells *outcomes* to companies that will never touch YAML. This plan sketches steps two and three plus the "agent hub" question. Nothing here blocks framework v1 — but framework decisions made now (permissions, audit, server surface, licensing) are what make these steps possible later.
 
