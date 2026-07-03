@@ -3,7 +3,7 @@
 #
 # Build from the repo root (compose.yaml does this for you):
 #   docker build -f examples/issue-bot/Dockerfile -t issue-bot .
-FROM looped/agent
+FROM ghcr.io/loopedautomation/agent:latest
 
 USER root
 RUN apk add --no-cache github-cli

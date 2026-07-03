@@ -4,28 +4,24 @@ Status: covers M4. One agent per container; a fleet is a compose file.
 
 ## Quick run
 
-Build the base image (until it's published to a registry):
-
-```sh
-docker build -f images/agent/Dockerfile -t looped/agent .
-```
-
-Run any agent by mounting its YAML:
+The base image is published to GitHub Packages as **`ghcr.io/loopedautomation/agent`** (multi-arch: amd64 + arm64, rebuilt by CI on every framework change). Run any agent by mounting its YAML:
 
 ```sh
 docker run -d \
   -v ./agent.yaml:/agent/agent.yaml:ro \
   --env-file .env \
   -v agent-data:/data \
-  looped/agent
+  ghcr.io/loopedautomation/agent:latest
 ```
+
+(Building locally instead: `docker build -f images/agent/Dockerfile -t ghcr.io/loopedautomation/agent:latest .` from the repo root.)
 
 ## The custom-image story
 
 The Dockerfile is the environment; the YAML is the agent. Need a CLI? Add a layer:
 
 ```dockerfile
-FROM looped/agent
+FROM ghcr.io/loopedautomation/agent:latest
 USER root
 RUN apk add --no-cache github-cli
 USER looped
