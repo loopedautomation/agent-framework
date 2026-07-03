@@ -1,6 +1,6 @@
 # Getting started
 
-Status: pre-release — this walkthrough tracks `main` and currently covers the M1 core: defining an agent in YAML and running it interactively from the CLI. Triggers, permissions enforcement, skills, MCP, and Docker packaging land in the next milestones ([roadmap](../plans/003-roadmap.md)).
+Status: pre-release — this walkthrough tracks `main` and covers the core: defining an agent in YAML and running it interactively from the CLI. The rest has shipped and has its own pages: triggers and permissions in [Service agents](service-agents.md), skills and MCP in [Skills & tools](skills-and-tools.md), Docker packaging in [Deployment](deployment.md) ([roadmap](../plans/003-roadmap.md)).
 
 ## Prerequisites
 
@@ -83,4 +83,9 @@ deno task af schema > agent-schema.json
 
 ## What's next
 
-The [plans](../plans/) are the source of truth. The [issue-bot example](../examples/issue-bot/agent.yaml) shows where this is headed: the same file shape, plus triggers, skills, and permissions, deployed with `docker run`.
+- Give the agent triggers (Discord, webhook, cron) and run it as a long-lived service: [Service agents](service-agents.md)
+- Teach it skills and wire up MCP servers: [Skills & tools](skills-and-tools.md)
+- Package it and ship it: [Deployment](deployment.md)
+- Or start from a complete, runnable agent: the [issue-bot example](../examples/issue-bot/) — the same file shape, plus triggers, skills, and permissions, deployed with `docker compose up`
+
+The [plans](../plans/) are the source of truth.

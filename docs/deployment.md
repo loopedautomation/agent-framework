@@ -4,7 +4,7 @@ Status: covers M4. One agent per container; a fleet is a compose file.
 
 ## Quick run
 
-The base image is published to GitHub Packages as **`ghcr.io/loopedautomation/agent`** (multi-arch: amd64 + arm64, rebuilt by CI on every framework change). Run any agent by mounting its YAML:
+The base image is published to GitHub Packages as **`ghcr.io/loopedautomation/agent`** (multi-arch: amd64 + arm64, rebuilt by CI on every framework change; the package isn't public yet — anonymous pulls fail with `unauthorized`, so build locally per the note below until it is). Run any agent by mounting its YAML:
 
 ```sh
 docker run -d \

@@ -38,7 +38,7 @@ cp .env.example .env     # fill in the three values; never commit .env
 docker compose up -d --build
 ```
 
-(The base image is pulled automatically from `ghcr.io/loopedautomation/agent`. If the pull fails, build it locally from the repo root: `docker build -f images/agent/Dockerfile -t ghcr.io/loopedautomation/agent:latest .`)
+(The base image lives at `ghcr.io/loopedautomation/agent`, but the package isn't public yet — pulls currently fail with `unauthorized`. Until it is, build it locally from the repo root first: `docker build -f images/agent/Dockerfile -t ghcr.io/loopedautomation/agent:latest .`)
 
 ## 5. Verify
 
