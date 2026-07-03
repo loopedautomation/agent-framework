@@ -39,6 +39,34 @@ export function parseAgentConfig(yamlText: string, source?: string): AgentConfig
   return result.data;
 }
 
+/**
+ * Resolve an agent definition from its two possible sources: a config file,
+ * or the LOOPED_AGENT_CONFIG env var holding the YAML itself (the file-less
+ * deploy for platforms where env vars are easy and file mounts aren't).
+ * Both present is a conflict and fails loudly — never guess which config runs.
+ */
+export async function resolveAgentConfig(
+  path: string,
+  getEnv: (name: string) => string | undefined = Deno.env.get,
+): Promise<AgentConfig> {
+  const inline = getEnv("LOOPED_AGENT_CONFIG");
+  if (!inline?.trim()) return await loadAgentConfig(path);
+
+  let fileExists = false;
+  try {
+    fileExists = (await Deno.stat(path)).isFile;
+  } catch {
+    // no file — the env var is the config
+  }
+  if (fileExists) {
+    throw new ConfigError(
+      `both LOOPED_AGENT_CONFIG and ${path} are present — remove one so it's unambiguous which config runs`,
+      path,
+    );
+  }
+  return parseAgentConfig(inline, "LOOPED_AGENT_CONFIG");
+}
+
 /** Load an agent definition from a YAML file. */
 export async function loadAgentConfig(path: string): Promise<AgentConfig> {
   let text: string;

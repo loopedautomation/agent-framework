@@ -1,6 +1,6 @@
-import { assert, assertEquals, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { agentConfigJsonSchema } from "./schema.ts";
-import { collectEnvRefs, ConfigError, parseAgentConfig } from "./load.ts";
+import { collectEnvRefs, ConfigError, parseAgentConfig, resolveAgentConfig } from "./load.ts";
 
 const MINIMAL = `
 nickname: test-bot
@@ -151,4 +151,35 @@ Deno.test("system_prompt gets a rename hint, not a generic unknown-key error", (
     ConfigError,
   );
   assert(err.message.includes("renamed to `purpose`"));
+});
+
+Deno.test("resolveAgentConfig: env var, file, both, neither", async () => {
+  const dir = await Deno.makeTempDir();
+  const filePath = `${dir}/agent.yaml`;
+
+  // env var only → parsed from env
+  const fromEnv = await resolveAgentConfig(
+    filePath,
+    (n) => n === "LOOPED_AGENT_CONFIG" ? MINIMAL : undefined,
+  );
+  assertEquals(fromEnv.nickname, "test-bot");
+
+  // file only → parsed from file
+  await Deno.writeTextFile(filePath, MINIMAL.replace("test-bot", "file-bot"));
+  const fromFile = await resolveAgentConfig(filePath, () => undefined);
+  assertEquals(fromFile.nickname, "file-bot");
+
+  // both → loud conflict, never a guess
+  await assertRejects(
+    () => resolveAgentConfig(filePath, (n) => (n === "LOOPED_AGENT_CONFIG" ? MINIMAL : undefined)),
+    ConfigError,
+    "remove one",
+  );
+
+  // neither → readable missing-file error
+  await assertRejects(
+    () => resolveAgentConfig(`${dir}/missing.yaml`, () => undefined),
+    ConfigError,
+    "cannot read",
+  );
 });

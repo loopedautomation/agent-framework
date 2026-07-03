@@ -8,7 +8,13 @@ export {
   type Permissions,
   type TriggerConfig,
 } from "./config/schema.ts";
-export { collectEnvRefs, ConfigError, loadAgentConfig, parseAgentConfig } from "./config/load.ts";
+export {
+  collectEnvRefs,
+  ConfigError,
+  loadAgentConfig,
+  parseAgentConfig,
+  resolveAgentConfig,
+} from "./config/load.ts";
 export { resolveEnv } from "./config/env.ts";
 export {
   AnthropicProvider,
