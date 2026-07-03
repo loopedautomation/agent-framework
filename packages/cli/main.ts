@@ -19,6 +19,7 @@ import {
 } from "@looped/af";
 import { fetchApplicationId, inviteUrl, triggersFromConfig } from "@looped/triggers";
 import { printBirthBanner } from "./banner.ts";
+import { DEPLOYS, generateProject, type InitOptions, PROVIDERS, TRIGGERS } from "./init.ts";
 
 // Paths default to ./agent.yaml; LOOPED_AGENT_CONFIG (the YAML itself in an
 // env var) replaces the file entirely for file-less platform deploys.
@@ -27,6 +28,7 @@ const DEFAULT_CONFIG = "agent.yaml";
 const USAGE = `af ${VERSION}
 
 Usage:
+  af init [name]            Scaffold a new agent project (agent, secrets, deployment)
   af run [agent.yaml]       Run an agent (service mode with triggers, REPL without)
   af validate [agent.yaml]  Validate an agent definition
   af flags [agent.yaml]     Print compiled Deno permission flags
@@ -129,10 +131,63 @@ async function run(path: string) {
   else await repl(config, service, identity.name);
 }
 
+function flag(name: string): string | undefined {
+  const i = Deno.args.indexOf(`--${name}`);
+  return i >= 0 ? Deno.args[i + 1] : undefined;
+}
+
+function choose<T extends string>(label: string, options: readonly T[], flagValue?: string): T {
+  if (flagValue) {
+    if ((options as readonly string[]).includes(flagValue)) return flagValue as T;
+    fail(`--${label} must be one of: ${options.join(", ")}`);
+  }
+  console.log(`${label}:`);
+  options.forEach((option, i) => console.log(`  ${i + 1}. ${option}`));
+  const picked = prompt(`choose [1-${options.length}]:`) ?? "";
+  const index = Number(picked) - 1;
+  if (!options[index]) fail(`pick a number between 1 and ${options.length}`);
+  return options[index];
+}
+
+function init(nameArg?: string) {
+  const nickname = nameArg ?? flag("nickname") ??
+    prompt("nickname (lowercase, hyphens — your handle for the agent):") ?? "";
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(nickname)) {
+    fail("nickname must be lowercase alphanumeric with hyphens");
+  }
+  const trigger = choose("trigger", TRIGGERS, flag("trigger"));
+  const provider = choose("provider", PROVIDERS, flag("provider"));
+  const deploy = choose("deploy", DEPLOYS, flag("deploy"));
+  const clis =
+    (flag("clis") ?? prompt("CLIs the agent needs (comma-separated, empty for none):") ?? "")
+      .split(",").map((s) => s.trim()).filter(Boolean);
+
+  const options: InitOptions = { nickname, trigger, provider, model: flag("model"), clis, deploy };
+  const files = generateProject(options);
+
+  try {
+    if ([...Deno.readDirSync(nickname)].length) fail(`./${nickname} exists and is not empty`);
+  } catch (err) {
+    if (!(err instanceof Deno.errors.NotFound)) throw err;
+  }
+  Deno.mkdirSync(nickname, { recursive: true });
+  for (const [name, content] of Object.entries(files)) {
+    Deno.writeTextFileSync(`${nickname}/${name}`, content);
+  }
+  console.log(`\n✓ ${nickname}/ scaffolded:`);
+  for (const name of Object.keys(files)) console.log(`    ${name}`);
+  console.log(
+    `\nnext: fill in the TODOs in ${nickname}/agent.yaml, then follow ${nickname}/README.md`,
+  );
+}
+
 async function main() {
   const [command, arg] = Deno.args;
   try {
     switch (command) {
+      case "init":
+        init(arg?.startsWith("--") ? undefined : arg);
+        break;
       case "run":
         await run(arg ?? DEFAULT_CONFIG);
         break;
