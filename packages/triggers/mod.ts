@@ -45,6 +45,9 @@ export function triggersFromConfig(
             token,
             channels: t.channels,
             requireMention: t.require_mention,
+            fromUsers: t.from_users,
+            replyChannel: t.reply_channel,
+            allowSilence: t.allow_silence,
           }),
         );
         break;

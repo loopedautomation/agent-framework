@@ -9,9 +9,14 @@ const API = "https://discord.com/api/v10";
 // GUILDS | GUILD_MESSAGES | MESSAGE_CONTENT
 const INTENTS = (1 << 0) | (1 << 9) | (1 << 15);
 
+// With allow_silence, the agent signals "nothing to say" by replying with
+// exactly this sentinel — the trigger then posts nothing instead of noise.
+export const NO_REPLY = "__NO_REPLY__";
+
 export interface DiscordMessage {
   id: string;
   channel_id: string;
+  guild_id?: string;
   content: string;
   author: { id: string; bot?: boolean; username?: string };
   mentions?: { id: string }[];
@@ -21,6 +26,8 @@ export interface DiscordFilterOptions {
   /** Channel names or ids to listen in; empty/undefined = all channels. */
   channels?: string[];
   requireMention?: boolean;
+  /** Only handle messages from these authors (user ids or usernames); empty/undefined = anyone. */
+  fromUsers?: string[];
 }
 
 /** Pure filter: should this message wake the agent? (unit-tested) */
@@ -31,6 +38,12 @@ export function shouldHandle(
   opts: DiscordFilterOptions,
 ): boolean {
   if (msg.author.bot || msg.author.id === botUserId) return false;
+  // The author gate runs before the model is ever called — messages from
+  // unlisted authors are dropped here and never reach the provider.
+  if (
+    opts.fromUsers?.length &&
+    !opts.fromUsers.some((u) => u === msg.author.id || u === msg.author.username)
+  ) return false;
   if (!msg.content.trim()) return false;
   if (opts.channels?.length) {
     const match = opts.channels.includes(msg.channel_id) ||
@@ -58,6 +71,10 @@ export function splitMessage(text: string, limit = 2000): string[] {
 
 export interface DiscordTriggerOptions extends DiscordFilterOptions {
   token: string;
+  /** Post replies into this channel id instead of the source channel. */
+  replyChannel?: string;
+  /** Suppress the reply when the agent answers with the NO_REPLY sentinel (or nothing). */
+  allowSilence?: boolean;
 }
 
 export class DiscordTrigger implements Trigger {
@@ -96,13 +113,37 @@ export class DiscordTrigger implements Trigger {
   }
 
   async #reply(msg: DiscordMessage, result: RunResult) {
-    for (const part of splitMessage(result.reply || `(${result.status})`)) {
-      const res = await this.#api(`/channels/${msg.channel_id}/messages`, {
+    const reply = (result.reply ?? "").trim();
+
+    // The agent had nothing to say — with allow_silence, say nothing.
+    if (this.#opts.allowSilence && (reply === NO_REPLY || reply === "")) return;
+
+    // Where to post: a dedicated reply channel, else the source channel.
+    const target = this.#opts.replyChannel ?? msg.channel_id;
+    const inSourceChannel = target === msg.channel_id;
+
+    let body = reply || `(${result.status})`;
+    if (!inSourceChannel) {
+      // Out-of-channel replies carry their own context: quote the triggering
+      // message and link back (message_reference only works in-channel).
+      const link = msg.guild_id
+        ? ` ([jump](https://discord.com/channels/${msg.guild_id}/${msg.channel_id}/${msg.id}))`
+        : "";
+      const quoted = msg.content.replace(/\n/g, "\n> ");
+      body = `On this message${link}:\n> ${quoted}\n\n${body}`;
+    }
+
+    for (const part of splitMessage(body)) {
+      const res = await this.#api(`/channels/${target}/messages`, {
         method: "POST",
-        body: JSON.stringify({
-          content: part,
-          message_reference: { message_id: msg.id, fail_if_not_exists: false },
-        }),
+        body: JSON.stringify(
+          inSourceChannel
+            ? {
+              content: part,
+              message_reference: { message_id: msg.id, fail_if_not_exists: false },
+            }
+            : { content: part },
+        ),
       });
       if (!res.ok) {
         console.error(`discord: reply failed (${res.status}): ${await res.text()}`);
