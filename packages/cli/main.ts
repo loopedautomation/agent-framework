@@ -10,9 +10,9 @@ import {
   AgentService,
   collectEnvRefs,
   ConfigError,
-  loadAgentConfig,
   permissionsToDenoFlags,
   ProviderError,
+  resolveAgentConfig,
   type RunResult,
   startStatusServer,
   VERSION,
@@ -20,19 +20,23 @@ import {
 import { fetchApplicationId, inviteUrl, triggersFromConfig } from "@looped/triggers";
 import { printBirthBanner } from "./banner.ts";
 
+// Paths default to ./agent.yaml; LOOPED_AGENT_CONFIG (the YAML itself in an
+// env var) replaces the file entirely for file-less platform deploys.
+const DEFAULT_CONFIG = "agent.yaml";
+
 const USAGE = `af ${VERSION}
 
 Usage:
-  af run <agent.yaml>       Run an agent (service mode with triggers, REPL without)
-  af validate <agent.yaml>  Validate an agent definition
-  af flags <agent.yaml>     Print compiled Deno permission flags
+  af run [agent.yaml]       Run an agent (service mode with triggers, REPL without)
+  af validate [agent.yaml]  Validate an agent definition
+  af flags [agent.yaml]     Print compiled Deno permission flags
   af schema                 Print the agent.yaml JSON Schema
-  af discord-invite <agent.yaml>
+  af discord-invite [agent.yaml]
                             Print the bot's OAuth invite URL (no bitfield math)
 `;
 
 async function discordInvite(path: string) {
-  const config = await loadAgentConfig(path);
+  const config = await resolveAgentConfig(path);
   const trigger = config.triggers?.find((t) => t.type === "discord");
   if (!trigger || trigger.type !== "discord") {
     fail(`${path} has no discord trigger`);
@@ -63,7 +67,7 @@ function statusLine(result: RunResult): string {
 }
 
 async function validate(path: string) {
-  const config = await loadAgentConfig(path);
+  const config = await resolveAgentConfig(path);
   console.log(`✓ ${path} is a valid agent definition`);
   console.log(`  nickname: ${config.nickname}`);
   console.log(`  model:    ${config.model.provider} / ${config.model.id}`);
@@ -116,7 +120,7 @@ async function serve(config: AgentConfig, service: AgentService, name: string) {
 }
 
 async function run(path: string) {
-  const config = await loadAgentConfig(path);
+  const config = await resolveAgentConfig(path);
   const baseDir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ".";
   const service = new AgentService({ config, baseDir });
   const identity = await service.init();
@@ -130,16 +134,13 @@ async function main() {
   try {
     switch (command) {
       case "run":
-        if (!arg) fail("usage: af run <agent.yaml>");
-        await run(arg);
+        await run(arg ?? DEFAULT_CONFIG);
         break;
       case "validate":
-        if (!arg) fail("usage: af validate <agent.yaml>");
-        await validate(arg);
+        await validate(arg ?? DEFAULT_CONFIG);
         break;
       case "flags": {
-        if (!arg) fail("usage: af flags <agent.yaml>");
-        const config = await loadAgentConfig(arg);
+        const config = await resolveAgentConfig(arg ?? DEFAULT_CONFIG);
         console.log(permissionsToDenoFlags(config.permissions).join(" "));
         break;
       }
@@ -147,7 +148,7 @@ async function main() {
         console.log(JSON.stringify(agentConfigJsonSchema(), null, 2));
         break;
       case "discord-invite":
-        if (!arg) fail("usage: af discord-invite <agent.yaml>");
+        if (!arg) fail("usage: af discord-invite [agent.yaml]");
         await discordInvite(arg);
         break;
       default:

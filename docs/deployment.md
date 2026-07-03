@@ -16,6 +16,10 @@ docker run -d \
 
 (Building locally instead: `docker build -f images/agent/Dockerfile -t ghcr.io/loopedautomation/agent:latest .` from the repo root.)
 
+## File-less deploys: config via env var
+
+Platforms where env vars are easy but file mounts aren't (Coolify, Railway, Fly, any "image + env vars" form): put the YAML itself in `LOOPED_AGENT_CONFIG` and deploy the stock image with no files at all. The agent reads its definition from the env var; setting both the env var and a mounted `/agent/agent.yaml` is a startup error (never a guess). Skills need real files, so this route suits skill-less agents — bake a custom image otherwise.
+
 ## The custom-image story
 
 The Dockerfile is the environment; the YAML is the agent. Need a CLI? Add a layer:
