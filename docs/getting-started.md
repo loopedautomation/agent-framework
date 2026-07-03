@@ -75,11 +75,13 @@ These are dead-man's switches: a run that exceeds them ends with a typed status 
 
 ## Editor support
 
-Generate the JSON Schema for `agent.yaml` autocompletion:
+Add this as the first line of any agent.yaml and your editor (VS Code, JetBrains, Neovim — anything running yaml-language-server) validates as you type: autocomplete on every key, hover docs from the field descriptions, red squiggles on typos:
 
-```sh
-deno task af schema > agent-schema.json
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/loopedautomation/agent-framework/main/schema/agent.json
 ```
+
+The schema is generated from the same source of truth the runtime enforces ([schema/agent.json](../schema/agent.json), kept current by CI), so nothing can exist in the gap between "accepted" and "documented". `af schema` prints it locally.
 
 ## What's next
 

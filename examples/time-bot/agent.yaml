@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/loopedautomation/agent-framework/main/schema/agent.json
 # The M1 exit-demo agent: the minimal agent.yaml — identity, model, job.
 # Run it:
 #
