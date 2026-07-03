@@ -170,6 +170,12 @@ RUN apk add --no-cache github-cli
 docker run -v ./agent.yaml:/agent/agent.yaml --env-file .env looped/agent
 ```
 
+**Distribution** — three channels, no npm:
+
+1. **Docker image** (`looped/agent`) — the primary channel; the framework ships inside it. Users deploy YAML, not packages.
+2. **CLI** — `deno compile`d binary via install script.
+3. **JSR `@looped/af`** — the library, for custom-tool authors, `defineAgent()` later, and embedders. JSR's npm-compat layer covers Node consumers (`npx jsr add @looped/af`); we do not maintain an npm presence.
+
 ## Repo structure
 
 This repo is a **monorepo** (Deno workspaces), with documentation as a first-class package from day one:
