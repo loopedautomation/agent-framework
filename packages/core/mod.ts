@@ -34,6 +34,15 @@ export { currentTimeTool } from "./tools/time.ts";
 export { createRunBashTool, extractExecutables } from "./tools/bash.ts";
 export { createHttpRequestTool } from "./tools/http.ts";
 export { runAgent, type RunOptions, type RunResult, type RunStatus } from "./loop/loop.ts";
+export {
+  createSkillTool,
+  loadSkills,
+  parseSkill,
+  type Skill,
+  skillsPromptSection,
+} from "./skills/skills.ts";
+export { connectMcpServers, type McpConnections, mcpToolsFromClient } from "./tools/mcp.ts";
+export { type AgentIdentity, ensureIdentity, identityNote } from "./runtime/identity.ts";
 export { Store } from "./store/store.ts";
 export {
   type AgentEvent,

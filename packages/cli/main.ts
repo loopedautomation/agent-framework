@@ -17,6 +17,7 @@ import {
   VERSION,
 } from "@looped/af";
 import { triggersFromConfig } from "@looped/triggers";
+import { printBirthBanner } from "./banner.ts";
 
 const USAGE = `af ${VERSION}
 
@@ -54,8 +55,10 @@ async function validate(path: string) {
   }
 }
 
-async function repl(config: AgentConfig, service: AgentService) {
-  console.log(`${config.nickname} is listening (model: ${config.model.id}; ctrl-d to exit)`);
+async function repl(config: AgentConfig, service: AgentService, name: string) {
+  console.log(
+    `${name} (${config.nickname}) is listening (model: ${config.model.id}; ctrl-d to exit)`,
+  );
   const conversationKey = config.memory?.scope === "thread" ? "cli" : undefined;
   while (true) {
     const input = prompt("you>");
@@ -67,16 +70,16 @@ async function repl(config: AgentConfig, service: AgentService) {
       input,
       conversationKey,
     });
-    console.log(`\n${config.nickname}> ${result.reply}\n`);
+    console.log(`\n${name}> ${result.reply}\n`);
     console.log(`%c${statusLine(result)}`, "color: gray");
   }
 }
 
-async function serve(config: AgentConfig, service: AgentService) {
+async function serve(config: AgentConfig, service: AgentService, name: string) {
   const triggers = triggersFromConfig(config);
   await service.start(triggers);
   console.log(
-    `${config.nickname} is running as a service ` +
+    `${name} (${config.nickname}) is running as a service ` +
       `(triggers: ${config.triggers!.map((t) => t.type).join(", ")}; ctrl-c to stop)`,
   );
   await new Promise<void>((resolve) => {
@@ -89,9 +92,12 @@ async function serve(config: AgentConfig, service: AgentService) {
 
 async function run(path: string) {
   const config = await loadAgentConfig(path);
-  const service = new AgentService({ config });
-  if (config.triggers?.length) await serve(config, service);
-  else await repl(config, service);
+  const baseDir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ".";
+  const service = new AgentService({ config, baseDir });
+  const identity = await service.init();
+  if (identity.isNew) printBirthBanner(config.nickname, identity.name);
+  if (config.triggers?.length) await serve(config, service, identity.name);
+  else await repl(config, service, identity.name);
 }
 
 async function main() {

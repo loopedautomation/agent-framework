@@ -9,6 +9,9 @@ import { createRunBashTool } from "../tools/bash.ts";
 import { createHttpRequestTool } from "../tools/http.ts";
 import { runAgent, type RunResult } from "../loop/loop.ts";
 import { Store } from "../store/store.ts";
+import { type AgentIdentity, ensureIdentity, identityNote } from "./identity.ts";
+import { createSkillTool, loadSkills, type Skill, skillsPromptSection } from "../skills/skills.ts";
+import { connectMcpServers, type McpConnections } from "../tools/mcp.ts";
 
 /** An event from the outside world, normalized by a trigger. */
 export interface AgentEvent {
@@ -33,7 +36,9 @@ export interface AgentServiceOptions {
   provider?: Provider;
   /** Where the SQLite file lives. Defaults to ./.looped */
   dataDir?: string;
-  /** Extra tools beyond the natives (skills/MCP arrive in M3). */
+  /** Base for resolving relative paths in the config (skills). Defaults to cwd. */
+  baseDir?: string;
+  /** Extra tools beyond the natives. */
   extraTools?: NativeTool[];
 }
 
@@ -49,6 +54,10 @@ export class AgentService {
   #env: Record<string, string>;
   #extraTools: NativeTool[];
   #triggers: Trigger[] = [];
+  #identity?: AgentIdentity;
+  #baseDir: string;
+  #skills?: Skill[];
+  #mcp?: McpConnections;
 
   constructor(opts: AgentServiceOptions) {
     this.config = opts.config;
@@ -57,6 +66,7 @@ export class AgentService {
     // not mid-run in front of the model.
     this.#env = resolveEnv(opts.config.env);
     this.#extraTools = opts.extraTools ?? [];
+    this.#baseDir = opts.baseDir ?? Deno.cwd();
     const dataDir = opts.dataDir ?? Deno.env.get("LOOPED_DATA_DIR") ?? ".looped";
     Deno.mkdirSync(dataDir, { recursive: true });
     this.store = new Store(`${dataDir}/${opts.config.nickname}.db`);
@@ -67,7 +77,8 @@ export class AgentService {
    * doesn't exist for it — no dead schemas burning a small model's context).
    */
   #buildTools(engine: PermissionEngine): NativeTool[] {
-    const tools: NativeTool[] = [currentTimeTool, ...this.#extraTools];
+    const tools: NativeTool[] = [currentTimeTool, ...this.#extraTools, ...this.#mcp?.tools ?? []];
+    if (this.#skills?.length) tools.push(createSkillTool(this.#skills));
     if (this.config.permissions?.run?.length) {
       tools.push(createRunBashTool({ permissions: engine, env: this.#env }));
     }
@@ -77,8 +88,24 @@ export class AgentService {
     return tools;
   }
 
+  /**
+   * The naming ritual (idempotent): on first boot the agent chooses its own
+   * name, persisted for life. Returns the identity; `isNew` marks the birth.
+   */
+  async init(): Promise<AgentIdentity> {
+    this.#skills ??= this.config.skills?.length
+      ? await loadSkills(this.config.skills, this.#baseDir)
+      : [];
+    this.#mcp ??= this.config.tools?.mcp?.length
+      ? await connectMcpServers(this.config)
+      : { tools: [], close: () => Promise.resolve() };
+    this.#identity ??= await ensureIdentity(this.config, this.#provider, this.store);
+    return this.#identity;
+  }
+
   /** Handle one event end to end: context → inner loop → persist + audit. */
   async handle(event: AgentEvent): Promise<RunResult> {
+    const identity = await this.init();
     const startedAt = new Date().toISOString();
     const decisions: PermissionDecision[] = [];
     const engine = new PermissionEngine(this.config.permissions, (e) => {
@@ -90,7 +117,12 @@ export class AgentService {
     const history = sessionId !== undefined ? this.store.loadMessages(sessionId) : [];
 
     const result = await runAgent({
-      config: this.config,
+      config: {
+        ...this.config,
+        system_prompt: this.config.system_prompt +
+          skillsPromptSection(this.#skills ?? []) +
+          identityNote(this.config, identity.name),
+      },
       provider: this.#provider,
       tools: this.#buildTools(engine),
       input: event.input,
@@ -124,6 +156,7 @@ export class AgentService {
 
   async stop() {
     for (const trigger of this.#triggers) await trigger.stop();
+    await this.#mcp?.close();
     this.store.close();
   }
 }

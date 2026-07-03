@@ -25,7 +25,7 @@ permissions:
 
 ## Status
 
-Building — M2 (service agents) is code-complete: agents run as long-lived services with **webhook and cron triggers**, a **deny-by-default permission system** (`run_bash`/`http_request` with scoped environments), and **SQLite persistence with a full audit trail**. See **[Getting started](docs/getting-started.md)** and **[Service agents](docs/service-agents.md)**. Discord, skills, MCP, and Docker packaging are next ([roadmap](plans/003-roadmap.md)).
+Building — M3 is code-complete: **skills** (markdown know-how with progressive disclosure), an **MCP client** (stdio + HTTP, namespaced and filtered), the **Discord trigger**, and the **naming ritual** (agents choose their own names on first boot) — on top of M2's webhook/cron triggers, deny-by-default permissions, and SQLite audit trail. See **[Getting started](docs/getting-started.md)**, **[Service agents](docs/service-agents.md)**, and **[Skills & tools](docs/skills-and-tools.md)**. Docker packaging (M4) is next ([roadmap](plans/003-roadmap.md)).
 
 The plans are the source of truth:
 

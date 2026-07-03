@@ -26,8 +26,11 @@ export const ModelConfigSchema = z.strictObject({
 
 export const DiscordTriggerSchema = z.strictObject({
   type: z.literal("discord"),
+  /** Channel names or ids to listen in; omit for all channels. */
   channels: z.array(z.string().min(1)).optional(),
   require_mention: z.boolean().optional(),
+  /** Env var holding the bot token. */
+  token_env: z.string().min(1).default("DISCORD_BOT_TOKEN"),
 });
 
 export const WebhookTriggerSchema = z.strictObject({

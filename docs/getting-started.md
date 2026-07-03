@@ -34,7 +34,7 @@ limits:
 
 Notes:
 
-- **You don't name the agent** — `nickname` is your operator handle; the agent chooses its own name on first boot (coming with memory in M3).
+- **You don't name the agent** — `nickname` is your operator handle; the agent chooses its own name on first boot (the naming ritual — watch for the banner).
 - Unknown keys are **hard errors**. A typo'd `permisions:` must never silently no-op.
 - `api_key_env` defaults to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider. Configs hold env *references*, never secret values.
 - Any OpenAI-compatible endpoint works: set `model.base_url` (e.g. `http://localhost:11434/v1` for Ollama — no key required).

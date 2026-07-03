@@ -3,9 +3,11 @@
 import type { AgentConfig, Trigger } from "@looped/af";
 import { WebhookTrigger } from "./webhook.ts";
 import { CronTrigger } from "./cron.ts";
+import { DiscordTrigger } from "./discord.ts";
 
 export { CronTrigger, type CronTriggerOptions } from "./cron.ts";
 export { WebhookTrigger, type WebhookTriggerOptions } from "./webhook.ts";
+export { DiscordTrigger, type DiscordTriggerOptions } from "./discord.ts";
 
 /**
  * Instantiate the triggers a config declares. Discord arrives in M3.
@@ -31,8 +33,22 @@ export function triggersFromConfig(
       case "cron":
         triggers.push(new CronTrigger({ schedule: t.schedule, prompt: t.prompt }));
         break;
-      case "discord":
-        throw new Error("discord trigger lands in M3 (plans/003-roadmap.md)");
+      case "discord": {
+        const token = getEnv(t.token_env);
+        if (!token) {
+          throw new Error(
+            `discord trigger: bot token env var ${t.token_env} is not set`,
+          );
+        }
+        triggers.push(
+          new DiscordTrigger({
+            token,
+            channels: t.channels,
+            requireMention: t.require_mention,
+          }),
+        );
+        break;
+      }
     }
   }
   return triggers;
