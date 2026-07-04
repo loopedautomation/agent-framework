@@ -13,6 +13,7 @@ import { Store } from "../store/store.ts";
 import { type AgentIdentity, ensureIdentity, identityNote } from "./identity.ts";
 import { createSkillTool, loadSkills, type Skill, skillsPromptSection } from "../skills/skills.ts";
 import { connectMcpServers, type McpConnections } from "../tools/mcp.ts";
+import { SEARCH_AUTO_THRESHOLD, ToolRegistry } from "../tools/registry.ts";
 
 /** An event from the outside world, normalized by a trigger. */
 export interface AgentEvent {
@@ -77,18 +78,32 @@ export class AgentService {
    * Tools follow the permissions (minimalism: a tool the agent can't use
    * doesn't exist for it — no dead schemas burning a small model's context).
    */
-  #buildTools(engine: PermissionEngine): NativeTool[] {
-    const tools: NativeTool[] = [currentTimeTool, ...this.#extraTools, ...this.#mcp?.tools ?? []];
-    if (this.#skills?.length) tools.push(createSkillTool(this.#skills));
+  #buildTools(engine: PermissionEngine): () => NativeTool[] {
+    const always: NativeTool[] = [currentTimeTool, ...this.#extraTools];
+    if (this.#skills?.length) always.push(createSkillTool(this.#skills));
     if (this.config.permissions?.run?.length) {
-      tools.push(createRunBashTool({ permissions: engine, env: this.#env }));
+      always.push(createRunBashTool({ permissions: engine, env: this.#env }));
     }
     if (this.config.permissions?.net?.length) {
-      tools.push(createHttpRequestTool({ permissions: engine }));
+      always.push(createHttpRequestTool({ permissions: engine }));
     }
-    if (this.config.permissions?.read?.length) tools.push(createReadFileTool(engine));
-    if (this.config.permissions?.write?.length) tools.push(createWriteFileTool(engine));
-    return tools;
+    if (this.config.permissions?.read?.length) always.push(createReadFileTool(engine));
+    if (this.config.permissions?.write?.length) always.push(createWriteFileTool(engine));
+
+    // Natives and skills stay in context (small, framework-owned); MCP tools
+    // defer behind search_tools when the toolset gets big (tools.search).
+    const mcp = this.#mcp?.tools ?? [];
+    const mode = this.config.tools?.search ?? "auto";
+    const defer = mcp.length > 0 && (
+      mode === "on" ||
+      (mode === "auto" && always.length + mcp.length > SEARCH_AUTO_THRESHOLD)
+    );
+    if (!defer) {
+      const all = [...always, ...mcp];
+      return () => all;
+    }
+    const registry = new ToolRegistry(always, mcp);
+    return () => registry.active();
   }
 
   /**

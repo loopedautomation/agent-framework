@@ -21,7 +21,8 @@ export interface RunResult {
 export interface RunOptions {
   config: AgentConfig;
   provider: Provider;
-  tools?: NativeTool[];
+  /** Static toolset, or a resolver called each iteration (tool search grows it mid-run). */
+  tools?: NativeTool[] | (() => NativeTool[]);
   input: string;
   /** Prior conversation, e.g. from session memory. */
   history?: Message[];
@@ -43,8 +44,9 @@ function costOf(usage: Usage, config: AgentConfig): number | undefined {
  */
 export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const { config, provider, input } = opts;
-  const tools = opts.tools ?? [];
-  const toolsByName = new Map(tools.map((t) => [t.def.name, t]));
+  const resolveTools = typeof opts.tools === "function"
+    ? opts.tools
+    : () => opts.tools as NativeTool[] ?? [];
   const messages: Message[] = [...(opts.history ?? []), { role: "user", content: input }];
   const usage: Usage = { inputTokens: 0, outputTokens: 0 };
   let steps = 0;
@@ -60,6 +62,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
 
   while (steps < config.limits.max_steps) {
     steps++;
+    // Re-resolve per iteration: a search_tools call in the previous step may
+    // have activated tools that must be callable now.
+    const tools = resolveTools();
+    const toolsByName = new Map(tools.map((t) => [t.def.name, t]));
     let completion;
     try {
       completion = await provider.complete({
