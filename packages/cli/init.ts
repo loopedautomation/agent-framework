@@ -26,7 +26,7 @@ export interface InitOptions {
 }
 
 const MODELINE =
-  "# yaml-language-server: $schema=https://raw.githubusercontent.com/loopedautomation/agent-framework/main/schema/agent.json";
+  "# yaml-language-server: $schema=https://looped.sh/schema/agent.json";
 const IMAGE = "ghcr.io/loopedautomation/agent:latest";
 
 const DEFAULT_MODELS: Record<InitOptions["provider"], string> = {

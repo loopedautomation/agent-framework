@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/loopedautomation/agent-framework/main/schema/agent.json
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
 # M5: the agent that builds agents. Describe an agent in one Discord
 # message; receive a validated, ready-to-deploy agent project.
 #
