@@ -272,6 +272,16 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "search": {
+          "default": "auto",
+          "description": "Tool search: defer MCP tool schemas out of context behind a search_tools tool. auto defers when the agent has more than 10 tools; on always defers; off loads everything.",
+          "type": "string",
+          "enum": [
+            "auto",
+            "on",
+            "off"
+          ]
         }
       },
       "additionalProperties": false
