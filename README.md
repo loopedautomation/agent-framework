@@ -9,31 +9,32 @@ The idea: **an agent is a file** — one file that says the job, the model, the 
 ```yaml
 nickname: issue-bot   # agents name themselves; you just give them a handle
 description: Turns team Discord messages into GitHub issues.
-model: { provider: anthropic, id: claude-sonnet-5 }
+model: { provider: openai-compatible, id: gpt-5.4-mini }
 triggers:
   - type: discord
     channels: ["issues"]
-tools:
-  mcp:
-    - name: github
-      command: ["docker", "run", "-i", "ghcr.io/github/github-mcp-server"]
-      env:
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
+skills:
+  - ./skills/gh-issues.md
 permissions:
   net: [discord.com, gateway.discord.gg, api.github.com]
+  run: [gh]
 ```
 
-## Status
+## What's here
 
-Building — M4 is code-complete: the **`looped/agent` base image** (hardened, non-root, health-checked), the **custom-image recipe** (`FROM looped/agent` + one `apk add`), the **status surface** (`/healthz`, `/runs`, `/audit`), and the issue-bot as a **self-contained `docker compose up`** ([examples/issue-bot](examples/issue-bot/)) — on top of skills, MCP, Discord/webhook/cron triggers, deny-by-default permissions, and the SQLite audit trail. Docs: **[Getting started](docs/getting-started.md)** · **[Service agents](docs/service-agents.md)** · **[Skills & tools](docs/skills-and-tools.md)** · **[Deployment](docs/deployment.md)**. Next: live deployment + M5, the agent that builds agents ([roadmap](plans/003-roadmap.md)).
+- **The `af` CLI** — `af init` scaffolds a complete agent project (agent, secrets template, deployment shape); `af validate` checks it; `af run` runs it — an interactive REPL without triggers, a long-lived service with them.
+- **Triggers** — Discord (including observer agents), webhook, cron.
+- **Capability, added deliberately** — markdown [skills](skills/), MCP servers, a small native toolset, and tool search to keep schemas out of a small model's context.
+- **Deny-by-default permissions** — allowlisted hosts, executables, and paths; scoped secrets that never enter the model's context; every decision in a SQLite audit trail.
+- **Docker-native deployment** — the hardened `ghcr.io/loopedautomation/agent` base image, the one-`apk add` custom-image recipe, file-less env-var deploys, and a status surface (`/healthz`, `/runs`, `/audit`).
+- **Budgets by default** — per-run step and cost caps; cheap models are the default and the numbers stay boring.
 
-The plans are the source of truth:
+## Docs
 
-- [Plan 0 — Vision](plans/000-vision.md): why this exists, principles, non-goals
-- [Plan 1 — Architecture](plans/001-architecture.md): core concepts and design
-- [Plan 2 — MVP](plans/002-mvp.md): the Discord → GitHub issue agent
-- [Plan 3 — Roadmap](plans/003-roadmap.md): milestones, starting with the manifesto
-- [Plan 4 — Landscape](plans/004-landscape.md): positioning against eve, Docker Agent, n8n & co.
-- [Plan 5 — Platform](plans/005-platform.md): hosted platform, service business, agent hub
+Published at **[docs.looped.sh/agent-framework](https://docs.looped.sh/agent-framework)**, authored in [`docs/`](docs/):
 
-Runtime: [Deno](https://deno.com) + TypeScript.
+[Getting started](docs/getting-started.md) · [The agent file](docs/agent-file.md) · [Triggers](docs/triggers.md) · [Skills](docs/skills.md) · [Tools](docs/tools.md) · [Permissions](docs/permissions.md) · [Deployment](docs/deployment.md) · [CLI](docs/cli.md)
+
+Or start from a complete, runnable agent: the [examples](examples/) go from a minimal REPL bot to the Discord → GitHub [issue-bot](examples/issue-bot/) (`docker compose up`) and the [agent-builder](examples/agent-builder/) — the agent that builds agents.
+
+Runtime: [Deno](https://deno.com) + TypeScript. Pre-1.0, built in the open.

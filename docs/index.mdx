@@ -15,18 +15,15 @@ and the boundaries — and deploying it is a `docker run`.
 ```yaml title="agent.yaml"
 nickname: issue-bot   # agents name themselves; you just give them a handle
 description: Turns team Discord messages into GitHub issues.
-model: { provider: anthropic, id: claude-sonnet-5 }
+model: { provider: openai-compatible, id: gpt-5.4-mini }
 triggers:
   - type: discord
     channels: ["issues"]
-tools:
-  mcp:
-    - name: github
-      command: ["docker", "run", "-i", "ghcr.io/github/github-mcp-server"]
-      env:
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
+skills:
+  - ./skills/gh-issues.md
 permissions:
   net: [discord.com, gateway.discord.gg, api.github.com]
+  run: [gh]
 ```
 
 Start with the [manifesto](/agent-framework/manifesto) — three minutes; it's the
@@ -35,29 +32,49 @@ whole philosophy.
 <Cards>
   <Card
     title="Getting started"
-    description="Define an agent in YAML, validate it, and run it — zero to agent in minutes."
+    description="Zero to a running agent: scaffold a project, define it in YAML, validate it, run it."
     href="/agent-framework/getting-started"
   />
   <Card
-    title="Service agents"
-    description="Triggers (webhook, cron), deny-by-default permissions, secrets, and the audit trail."
-    href="/agent-framework/service-agents"
+    title="The agent file"
+    description="A guided tour of every block in agent.yaml — identity, model, memory, limits, and env."
+    href="/agent-framework/agent-file"
   />
   <Card
-    title="Skills & tools"
-    description="Skills teach, permissions grant, MCP connects — plus the Discord trigger."
-    href="/agent-framework/skills-and-tools"
+    title="Triggers"
+    description="Webhook, cron, and Discord — the events that wake the agent, and the service loop around them."
+    href="/agent-framework/triggers"
+  />
+  <Card
+    title="Skills"
+    description="Teach any CLI or API with a markdown file — knowledge, never capability."
+    href="/agent-framework/skills"
+  />
+  <Card
+    title="Tools"
+    description="The native toolset, MCP servers, and tool search — capability added deliberately, never by default."
+    href="/agent-framework/tools"
+  />
+  <Card
+    title="Permissions"
+    description="Deny-by-default allowlists, denials as information, secrets, and the sandbox layers."
+    href="/agent-framework/permissions"
   />
   <Card
     title="Deployment"
-    description="The container is the computer: the base image, custom images, and the status surface."
+    description="The container is the computer: the base image, custom images, compose fleets, and the status surface."
     href="/agent-framework/deployment"
+  />
+  <Card
+    title="CLI"
+    description="Every af command: init, run, validate, flags, schema, discord-invite."
+    href="/agent-framework/cli"
   />
 </Cards>
 
 The framework is built in the open:
 [loopedautomation/agent-framework](https://github.com/loopedautomation/agent-framework)
-— the [plans](https://github.com/loopedautomation/agent-framework/tree/main/plans) are
-the source of truth, and
-[examples/issue-bot](https://github.com/loopedautomation/agent-framework/tree/main/examples/issue-bot)
-is a complete, runnable agent deployed with `docker compose up`.
+— and the
+[examples](https://github.com/loopedautomation/agent-framework/tree/main/examples)
+are complete, runnable agents, from a minimal REPL bot to a Discord → GitHub agent
+deployed with `docker compose up`.

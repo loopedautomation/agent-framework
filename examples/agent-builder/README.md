@@ -1,6 +1,6 @@
 # agent-builder
 
-The M5 meta-agent: describe an agent in one Discord message, receive a scaffolded, validated, ready-to-deploy agent project in `agents/`.
+The meta-agent: describe an agent in one Discord message, receive a scaffolded, validated, ready-to-deploy agent project in `agents/`.
 
 How it stays reliable on a mini model: it doesn't hand-write boilerplate. It drives `af init` for the deterministic scaffolding (the same generator humans use), then edits only the semantic parts — description, purpose, trigger details — and refuses to report success until `af validate` passes.
 

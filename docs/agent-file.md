@@ -1,0 +1,127 @@
+---
+title: "The agent file"
+description: "A guided tour of every block in agent.yaml — identity, model, memory, limits, and env."
+---
+
+One agent, one job, one file. The agent file says everything about an agent: who it is, which model runs it, what wakes it, what it may touch. This page tours every block; the exhaustive field list lives in the [JSON Schema](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json), which your editor can enforce as you type ([set it up](getting-started.md#editor-support)) and `af schema` prints locally.
+
+A complete agent, for orientation:
+
+```yaml
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+nickname: issue-bot
+description: Turns team Discord messages into GitHub issues.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  pricing: { input_per_mtok: 0.15, output_per_mtok: 0.60 }
+
+purpose: |
+  You turn Discord messages into well-formed GitHub issues in myorg/myrepo,
+  using the gh CLI. Reply with the issue link. If a message isn't an issue
+  report or feature request, say so briefly instead of inventing one.
+
+triggers:
+  - type: discord
+    channels: ["issues"]
+
+skills:
+  - ./skills/gh-issues.md
+
+permissions:
+  net: [api.github.com]
+  run: [gh]
+
+env:
+  GITHUB_TOKEN: ${GITHUB_TOKEN}
+
+memory:
+  scope: thread
+
+limits:
+  max_steps: 15
+  max_cost: 0.05
+```
+
+Four keys are required: `nickname`, `description`, `model`, `purpose`. Everything else is opt-in — and unknown keys are **hard errors**, so a typo'd `permisions:` can never silently no-op.
+
+## Identity: nickname, description — and the name
+
+`nickname` is *your* handle for the agent — lowercase, hyphens (`^[a-z0-9][a-z0-9-]*$`). It names the compose service, the log lines, and the agent's database file. `description` is one line: what job this agent does.
+
+You don't name the agent. On first boot it chooses its own name — one LLM call, routed to the cheap `model.small` role, persisted for life in its SQLite identity. The CLI marks the occasion with the birth banner. You address the agent by its `nickname`; it signs its work with the name it chose. A fresh data volume means a new self — the agent renames itself.
+
+## Purpose
+
+`purpose` is the agent's job description and becomes its system prompt: what it does, how it behaves, and — just as important for event-driven agents — when to stay quiet. Be specific; this is the entire brief the model works from. A narrow, concrete purpose is what lets a small model be reliable.
+
+## Model
+
+```yaml
+model:
+  provider: openai-compatible   # or: anthropic
+  id: gpt-5.4-mini
+  # base_url: http://localhost:11434/v1   # any compatible endpoint, e.g. Ollama
+  # api_key_env: OPENAI_API_KEY           # a reference, never a value
+  # small: gpt-5.4-nano                   # for cheap internal calls
+  # fallbacks: [gpt-5.4]                  # tried in order when the primary fails
+  pricing:
+    input_per_mtok: 0.15
+    output_per_mtok: 0.60
+```
+
+- **`provider`** is a dialect, not a vendor: `openai-compatible` covers OpenAI, Ollama, vLLM, and anything speaking that API; `anthropic` is the native Anthropic API. Swapping providers is one config line — no provider is load-bearing.
+- **`base_url`** points `openai-compatible` at any endpoint. Local models need no key.
+- **`api_key_env`** names the env var holding the key — configs hold *references*, never secret values. Defaults to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider.
+- **`small`** is the model for cheap internal calls (the naming ritual, summaries). Defaults to the main `id` — set it to something tiny and these calls round to free.
+- **`fallbacks`** are model ids tried in order when the primary fails. A run that exhausts them ends with status `error_provider` rather than crashing the service.
+- **`pricing`** is your model's real prices, in USD per million tokens. It enables per-run cost reporting and is required to enforce `limits.max_cost` — a cap can't be enforced without prices.
+
+## Memory
+
+```yaml
+memory:
+  scope: thread   # default: none
+```
+
+`none` (the default) starts every run fresh. `thread` persists conversation history per conversation key — the Discord channel or thread, the webhook caller's `conversation_id`, or the REPL session — so follow-ups work ("make it weekly instead"). History lives in the agent's own SQLite file, nowhere else.
+
+## Limits
+
+```yaml
+limits:
+  max_steps: 20     # default: 20 inner-loop iterations
+  max_cost: 0.05    # USD per run; no default — requires model.pricing
+```
+
+These are dead-man's switches for unattended operation, on by default. Every run ends with a typed status:
+
+| Status | Meaning |
+| --- | --- |
+| `ok` | The agent finished its job. |
+| `error_max_steps` | The run hit `limits.max_steps` LLM calls. |
+| `error_max_cost` | The run hit `limits.max_cost` USD. |
+| `error_provider` | The provider failed after retries and every fallback. |
+
+A run that exceeds its budget ends with a status, not a runaway bill. Statuses, steps, tokens, and cost are recorded per run — see [the data volume](deployment.md#persistence-the-data-volume).
+
+## Env
+
+```yaml
+env:
+  GITHUB_TOKEN: ${GITHUB_TOKEN}
+```
+
+The `env:` block grants environment variables to tools and MCP servers — and only those; subprocesses never inherit the agent process's ambient environment. Values may be `${VAR}` references, resolved at startup from the process env, then from `/run/secrets/<VAR>` (Docker Compose file secrets). A missing reference fails at startup, not on the first request. Secrets never enter the model's context — the full story is in [Permissions](permissions.md#secrets).
+
+## The blocks with their own pages
+
+- **`triggers:`** — the events that wake the agent (Discord, webhook, cron). With triggers, `af run` starts a long-lived service; without, an interactive REPL. → [Triggers](triggers.md)
+- **`skills:`** — markdown files that teach the agent how to use something well. Knowledge, never capability. → [Skills](skills.md)
+- **`tools:`** — capability beyond the natives: MCP servers, and tool search to keep their schemas out of context. → [Tools](tools.md)
+- **`permissions:`** — deny-by-default allowlists for hosts, executables, and paths. Omit the block and the agent can touch nothing. → [Permissions](permissions.md)
+
+## Validating
+
+`af validate agent.yaml` parses the file, prints the identity, triggers, compiled sandbox flags, and every env var referenced — warning on any that aren't set. The same schema powers editor validation via the modeline shown above; the runtime, the schema, and the docs can't drift because they share one source of truth.

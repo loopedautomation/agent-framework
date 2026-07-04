@@ -1,16 +1,26 @@
 ---
 title: "Getting started"
-description: "Define an agent in YAML, validate it, and run it — zero to agent in minutes."
+description: "Zero to a running agent: scaffold a project, define it in YAML, validate it, run it."
 ---
 
-Status: pre-release — this walkthrough tracks `main` and covers the core: defining an agent in YAML and running it interactively from the CLI. The rest has shipped and has its own pages: triggers and permissions in [Service agents](service-agents.md), skills and MCP in [Skills & tools](skills-and-tools.md), Docker packaging in [Deployment](deployment.md) ([roadmap](https://github.com/loopedautomation/agent-framework/blob/main/plans/003-roadmap.md)).
+This walkthrough takes you from nothing to a running agent. The rest of the framework has its own pages: every config block in [The agent file](agent-file.md), events in [Triggers](triggers.md), capability in [Skills](skills.md) and [Tools](tools.md), boundaries in [Permissions](permissions.md), shipping in [Deployment](deployment.md).
 
 ## Prerequisites
 
-- [Deno](https://deno.com) 2.x
-- An API key for an OpenAI-compatible endpoint (or Anthropic)
+- [Deno](https://deno.com) 2.x and a checkout of [the repo](https://github.com/loopedautomation/agent-framework) — `af` below means `deno task af` from the repo root, until the CLI ships standalone
+- An API key for an OpenAI-compatible endpoint (or Anthropic) — or a local model, no key required
 
-## 1. Define an agent
+## 1. Scaffold an agent
+
+```sh
+deno task af init time-bot
+```
+
+`af init` asks three questions — trigger, provider, deployment shape (plus which CLIs the agent needs) — and generates a complete project: the agent file, a `.env.example` naming every secret it references, a README with the exact deploy steps, and a Dockerfile or compose file when the shape calls for one. Every question is also a flag, so the whole thing scripts as one line ([CLI reference](cli.md#af-init)).
+
+Or skip the generator and write the file by hand — it's one file, and that's the point.
+
+## 2. The agent file
 
 One agent, one job, one file:
 
@@ -38,15 +48,17 @@ Notes:
 - `api_key_env` defaults to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider. Configs hold env *references*, never secret values.
 - Any OpenAI-compatible endpoint works: set `model.base_url` (e.g. `http://localhost:11434/v1` for Ollama — no key required).
 
-## 2. Validate it
+Every block, explained: [The agent file](agent-file.md).
+
+## 3. Validate it
 
 ```sh
 deno task af validate agent.yaml
 ```
 
-Prints the parsed identity, trigger summary, and every env var the config references — with a warning for any that aren't set.
+Prints the parsed identity, trigger summary, compiled sandbox flags, and every env var the config references — with a warning for any that aren't set.
 
-## 3. Run it
+## 4. Run it
 
 ```sh
 export OPENAI_API_KEY=sk-...
@@ -54,13 +66,15 @@ deno task af run agent.yaml
 ```
 
 ```
-time-bot is listening (model: gpt-5.4-mini; ctrl-d to exit)
+Meridian (time-bot) is listening (model: gpt-5.4-mini; ctrl-d to exit)
 you> what time is it?
 
-time-bot> It's 21:14 UTC on July 3, 2026.
+Meridian> It's 21:14 UTC on July 3, 2026.
 
 [ok · 2 steps · 743in/41out tokens · $0.000136]
 ```
+
+Without triggers, `af run` is an interactive REPL — the fastest way to iterate on a `purpose`. Add `triggers:` to the config and the same command starts a long-lived service instead ([Triggers](triggers.md)).
 
 Every run reports its status, step count, tokens, and cost — cheap models are the default, and the numbers should stay boring.
 
@@ -81,16 +95,15 @@ These are dead-man's switches: a run that exceeds them ends with a typed status 
 Add this as the first line of any agent.yaml and your editor (VS Code, JetBrains, Neovim — anything running yaml-language-server) validates as you type: autocomplete on every key, hover docs from the field descriptions, red squiggles on typos:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/loopedautomation/agent-framework/main/schema/agent.json
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
 ```
 
 The schema is generated from the same source of truth the runtime enforces ([schema/agent.json](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json), kept current by CI), so nothing can exist in the gap between "accepted" and "documented". `af schema` prints it locally.
 
 ## What's next
 
-- Give the agent triggers (Discord, webhook, cron) and run it as a long-lived service: [Service agents](service-agents.md)
-- Teach it skills and wire up MCP servers: [Skills & tools](skills-and-tools.md)
+- Walk through every config block: [The agent file](agent-file.md)
+- Give the agent triggers (Discord, webhook, cron) and run it as a long-lived service: [Triggers](triggers.md)
+- Teach it skills and wire up tools: [Skills](skills.md) · [Tools](tools.md)
 - Package it and ship it: [Deployment](deployment.md)
 - Or start from a complete, runnable agent: the [issue-bot example](https://github.com/loopedautomation/agent-framework/tree/main/examples/issue-bot) — the same file shape, plus triggers, skills, and permissions, deployed with `docker compose up`
-
-The [plans](https://github.com/loopedautomation/agent-framework/tree/main/plans) are the source of truth.

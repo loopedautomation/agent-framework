@@ -7,8 +7,13 @@
     "manifesto",
     "getting-started",
     "---Guides---",
-    "service-agents",
-    "skills-and-tools",
-    "deployment"
+    "agent-file",
+    "triggers",
+    "skills",
+    "tools",
+    "permissions",
+    "deployment",
+    "---Reference---",
+    "cli"
   ]
 }
