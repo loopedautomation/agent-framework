@@ -1,4 +1,7 @@
-# Deployment: the container is the computer
+---
+title: "Deployment"
+description: "The container is the computer: the base image, custom images, and the status surface."
+---
 
 Status: covers M4. One agent per container; a fleet is a compose file.
 
@@ -35,7 +38,7 @@ COPY --chown=looped:looped skills/gh-issues.md /skills/gh-issues.md
 COPY --chown=looped:looped agent.yaml /agent/agent.yaml
 ```
 
-[`examples/issue-bot`](../examples/issue-bot/) is the complete pattern: Dockerfile + compose.yaml + `.env.example`. Deployment is:
+[`examples/issue-bot`](https://github.com/loopedautomation/agent-framework/tree/main/examples/issue-bot) is the complete pattern: Dockerfile + compose.yaml + `.env.example`. Deployment is:
 
 ```sh
 cd examples/issue-bot && cp .env.example .env  # fill in your keys

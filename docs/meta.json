@@ -1,0 +1,14 @@
+{
+  "title": "Looped Agent Framework",
+  "root": true,
+  "pages": [
+    "index",
+    "---Start here---",
+    "manifesto",
+    "getting-started",
+    "---Guides---",
+    "service-agents",
+    "skills-and-tools",
+    "deployment"
+  ]
+}

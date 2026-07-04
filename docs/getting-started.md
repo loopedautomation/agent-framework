@@ -1,6 +1,9 @@
-# Getting started
+---
+title: "Getting started"
+description: "Define an agent in YAML, validate it, and run it — zero to agent in minutes."
+---
 
-Status: pre-release — this walkthrough tracks `main` and covers the core: defining an agent in YAML and running it interactively from the CLI. The rest has shipped and has its own pages: triggers and permissions in [Service agents](service-agents.md), skills and MCP in [Skills & tools](skills-and-tools.md), Docker packaging in [Deployment](deployment.md) ([roadmap](../plans/003-roadmap.md)).
+Status: pre-release — this walkthrough tracks `main` and covers the core: defining an agent in YAML and running it interactively from the CLI. The rest has shipped and has its own pages: triggers and permissions in [Service agents](service-agents.md), skills and MCP in [Skills & tools](skills-and-tools.md), Docker packaging in [Deployment](deployment.md) ([roadmap](https://github.com/loopedautomation/agent-framework/blob/main/plans/003-roadmap.md)).
 
 ## Prerequisites
 
@@ -81,13 +84,13 @@ Add this as the first line of any agent.yaml and your editor (VS Code, JetBrains
 # yaml-language-server: $schema=https://raw.githubusercontent.com/loopedautomation/agent-framework/main/schema/agent.json
 ```
 
-The schema is generated from the same source of truth the runtime enforces ([schema/agent.json](../schema/agent.json), kept current by CI), so nothing can exist in the gap between "accepted" and "documented". `af schema` prints it locally.
+The schema is generated from the same source of truth the runtime enforces ([schema/agent.json](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json), kept current by CI), so nothing can exist in the gap between "accepted" and "documented". `af schema` prints it locally.
 
 ## What's next
 
 - Give the agent triggers (Discord, webhook, cron) and run it as a long-lived service: [Service agents](service-agents.md)
 - Teach it skills and wire up MCP servers: [Skills & tools](skills-and-tools.md)
 - Package it and ship it: [Deployment](deployment.md)
-- Or start from a complete, runnable agent: the [issue-bot example](../examples/issue-bot/) — the same file shape, plus triggers, skills, and permissions, deployed with `docker compose up`
+- Or start from a complete, runnable agent: the [issue-bot example](https://github.com/loopedautomation/agent-framework/tree/main/examples/issue-bot) — the same file shape, plus triggers, skills, and permissions, deployed with `docker compose up`
 
-The [plans](../plans/) are the source of truth.
+The [plans](https://github.com/loopedautomation/agent-framework/tree/main/plans) are the source of truth.

@@ -1,4 +1,7 @@
-# Service agents: triggers, permissions, and the audit trail
+---
+title: "Service agents"
+description: "Triggers (webhook, cron), deny-by-default permissions, secrets, and the audit trail."
+---
 
 Status: covers M2. An agent with `triggers:` in its config runs as a long-lived service — the outer loop. Without them, `af run` gives you the interactive REPL.
 
@@ -77,4 +80,4 @@ This is the "logged, reversible, and approval-gated" story: what did the agent d
 
 ## The M2 demo
 
-[`examples/echo-service`](../examples/echo-service/agent.yaml) is the whole story in one file: webhook-triggered, may run `echo` and nothing else. Ask it to `curl` something and read the denial in the reply — then find the same denial in the audit table.
+[`examples/echo-service`](https://github.com/loopedautomation/agent-framework/blob/main/examples/echo-service/agent.yaml) is the whole story in one file: webhook-triggered, may run `echo` and nothing else. Ask it to `curl` something and read the denial in the reply — then find the same denial in the audit table.

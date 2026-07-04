@@ -1,4 +1,7 @@
-# Skills, MCP, and the Discord trigger
+---
+title: "Skills & tools"
+description: "Skills teach, permissions grant, MCP connects — plus the Discord trigger."
+---
 
 Status: covers M3.
 
@@ -25,7 +28,7 @@ description: Create and manage GitHub issues with the gh CLI.
 ...full instructions...
 ```
 
-**Progressive disclosure** keeps this cheap-model friendly: the system prompt carries one line per skill; the agent reads the full document with the `read_skill` tool only when the task calls for it. See [`skills/gh-issues.md`](../skills/gh-issues.md) for the first-party example.
+**Progressive disclosure** keeps this cheap-model friendly: the system prompt carries one line per skill; the agent reads the full document with the `read_skill` tool only when the task calls for it. See [`skills/gh-issues.md`](https://github.com/loopedautomation/agent-framework/blob/main/skills/gh-issues.md) for the first-party example.
 
 The default recipe for integrating anything: **custom image provides the binary, skill provides the knowledge, permissions provide the safety.**
 
