@@ -7,7 +7,7 @@
 The idea: **an agent is a file** — one file that says the job, the model, the tools, and the boundaries — and deploying it is a `docker run`. Agents are long-running services that sit in a loop — wait for an event (a Discord message, a webhook, a cron tick), do their one job, deliver the result, go idle.
 
 ```yaml
-nickname: issue-bot   # agents name themselves; you just give them a handle
+handle: issue-bot     # agents name themselves; you just pick the handle
 description: Turns team Discord messages into GitHub issues.
 model: { provider: openai-compatible, id: gpt-5.4-mini }
 triggers:
@@ -33,7 +33,7 @@ permissions:
 
 Published at **[docs.looped.sh/agent-framework](https://docs.looped.sh/agent-framework)**, authored in [`docs/`](docs/):
 
-[Getting started](docs/getting-started.md) · [The agent file](docs/agent-file.md) · [Triggers](docs/triggers.md) · [Skills](docs/skills.md) · [Tools](docs/tools.md) · [Permissions](docs/permissions.md) · [Deployment](docs/deployment.md) · [CLI](docs/cli.md)
+[Quick start](docs/quick-start.md) · [The agent file](docs/agent-file.md) · [Triggers](docs/triggers.md) · [Skills](docs/skills.md) · [Tools](docs/tools.md) · [Permissions](docs/permissions.md) · [Deployment](docs/deployment.md) · [CLI](docs/cli.md)
 
 Or start from a complete, runnable agent: the [examples](examples/) go from a minimal REPL bot to the Discord → GitHub [issue-bot](examples/issue-bot/) (`docker compose up`) and the [agent-builder](examples/agent-builder/) — the agent that builds agents.
 

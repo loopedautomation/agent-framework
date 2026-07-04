@@ -3,7 +3,13 @@ title: "CLI"
 description: "Every af command: init, run, validate, flags, schema, discord-invite."
 ---
 
-`af` is the framework's CLI. Until it ships standalone, run it from a repo checkout as `deno task af`. Config paths default to `./agent.yaml`, and everywhere a file is expected, `LOOPED_AGENT_CONFIG` (the YAML itself in an env var) replaces it for [file-less deploys](deployment.md#file-less-deploys-config-via-env-var).
+`af` is the framework's CLI, published to JSR as [`@looped/af`](https://jsr.io/@looped/af). Install it once with Deno:
+
+```sh
+deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash -n af jsr:@looped/af
+```
+
+Config paths default to `./agent.yaml`, and everywhere a file is expected, `LOOPED_AGENT_CONFIG` (the YAML itself in an env var) replaces it for [file-less deploys](docker-run.md#file-less-deploys-config-via-env-var).
 
 ```
 af init [name]            Scaffold a new agent project (agent, secrets, deployment)
@@ -31,7 +37,7 @@ af init issue-helper --trigger discord --provider openai-compatible \
 | `--deploy` | `local` `docker` `compose` `compose-inline` `paas-git` `paas-env` | see below |
 | `--model` | any model id | sensible default per provider |
 | `--clis` | comma-separated executables | adds a Dockerfile layer + `permissions.run` |
-| `--nickname` / `[name]` | lowercase, hyphens | your handle for the agent |
+| `--handle` / `[name]` | lowercase, hyphens | what you call the agent |
 | `--dir` | a directory | where to scaffold (default `.`) |
 
 Every shape generates `agent.yaml`, `.env.example` (every secret the config references, ready to copy to `.env`), and a `README.md` with the exact deploy steps. The deploy shapes add:
@@ -39,19 +45,19 @@ Every shape generates `agent.yaml`, `.env.example` (every secret the config refe
 - **`local`** — nothing more: `af validate`, `af run`.
 - **`docker`** — the `docker run` incantation in the README (mounted config, env file, data volume).
 - **`compose`** — `compose.yaml` (+ `Dockerfile` when `--clis` needs one), `.gitignore`.
-- **`compose-inline`** — a single `compose.yaml` with the whole agent config embedded in `LOOPED_AGENT_CONFIG` — [one file, no agent.yaml](deployment.md#one-compose-file-the-whole-agent-inline).
+- **`compose-inline`** — a single `compose.yaml` with the whole agent config defined inline in a top-level `configs:` element and mounted at `/agent/agent.yaml` — [one file, no agent.yaml](docker-compose.md#one-compose-file-the-whole-agent-inline).
 - **`paas-git`** — `Dockerfile` + `compose.yaml` for platforms that build from a repo (e.g. Coolify): push, connect, set env vars, deploy.
 - **`paas-env`** — for "image + env vars" platforms: deploy the stock image with the config in `LOOPED_AGENT_CONFIG`, no files at all.
 
 ## af run
 
-Runs the agent: a long-lived service if the config has `triggers:`, an interactive REPL otherwise. First boot performs the naming ritual and prints the birth banner. Service mode starts the triggers and the [status surface](deployment.md#the-status-surface), and shuts down cleanly on SIGINT/SIGTERM.
+Runs the agent: a long-lived service if the config has `triggers:`, an interactive REPL otherwise. First boot performs the naming ritual and prints the birth banner. Service mode starts the triggers and the [status surface](docker-run.md#the-status-surface), and shuts down cleanly on SIGINT/SIGTERM.
 
 ## af validate
 
 ```
 ✓ agent.yaml is a valid agent definition
-  nickname: issue-bot
+  handle:   issue-bot
   model:    openai-compatible / gpt-5.4-mini
   triggers: discord
   sandbox:  --allow-net=api.github.com --allow-run=gh
@@ -71,8 +77,8 @@ Prints the Deno permission flags the config's `permissions:` block compiles to �
 
 ## af schema
 
-Prints the agent.yaml [JSON Schema](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json) — the same one the runtime enforces and [editors validate against](getting-started.md#editor-support).
+Prints the agent.yaml [JSON Schema](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json) — the same one the runtime enforces and [editors validate against](agent-file.md#editor-support).
 
 ## af discord-invite
 
-Prints the bot's OAuth invite URL with the correct scopes and permissions (View Channels, Send Messages, Read Message History) — no bitfield math. Needs the config (to find the Discord trigger's `token_env`) and that token set in the environment; it looks up the application id from the token. Part of the [Discord setup ritual](triggers.md#discord).
+Prints the bot's OAuth invite URL with the correct scopes and permissions (View Channels, Send Messages, Read Message History) — no bitfield math. Needs the config (to find the Discord trigger's `token_env`) and that token set in the environment; it looks up the application id from the token. Part of the [Discord setup](discord.mdx#setup).

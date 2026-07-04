@@ -1,6 +1,6 @@
 ---
 title: "Tools"
-description: "The native toolset, MCP servers, and tool search — capability added deliberately, never by default."
+description: "The native toolset, MCP servers, and tool search. Capability is added deliberately, never by default."
 ---
 
 The base toolset is deliberately small: a handful of natives, gated by permissions. Everything beyond that is added explicitly — a [skill](skills.md) plus a CLI, or an MCP server — because every tool an agent carries is attack surface, context cost, and one more way for a small model to get confused.
@@ -11,7 +11,7 @@ The base toolset is deliberately small: a handful of natives, gated by permissio
 
 | Tool | Present when | Notes |
 | --- | --- | --- |
-| `current_time` | always | the one freebie |
+| `current_time` | always | the only tool granted unconditionally |
 | `run_bash` | `permissions.run` grants executables | statically checked per executable; output capped at 8k chars |
 | `http_request` | `permissions.net` grants hosts | GET/POST/PUT/PATCH/DELETE/HEAD; 30s timeout; body capped at 8k chars |
 | `read_file` | `permissions.read` grants paths | capped at 8k chars |
@@ -23,7 +23,7 @@ An agent with no `permissions:` block gets `current_time` and whatever `read_ski
 
 ## MCP servers
 
-For when a good MCP server exists and is worth the context cost:
+Use an MCP server when a good one exists and is worth the context cost:
 
 ```yaml
 tools:

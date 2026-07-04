@@ -2,18 +2,23 @@
   "title": "Looped Agent Framework",
   "root": true,
   "pages": [
+    "---Introduction---",
     "index",
-    "---Start here---",
-    "manifesto",
-    "getting-started",
-    "---Guides---",
+    "quick-start",
     "agent-file",
-    "triggers",
+    "---Deployment---",
+    "docker-run",
+    "docker-compose",
+    "cli",
+    "---Channels---",
+    "discord",
+    "webhook",
+    "cron",
+    "---Capabilities---",
     "skills",
     "tools",
     "permissions",
-    "deployment",
-    "---Reference---",
-    "cli"
+    "---Models---",
+    "models"
   ]
 }

@@ -35,5 +35,11 @@ jobs:
           tags: |
             ghcr.io/loopedautomation/agent:latest
             ghcr.io/loopedautomation/agent:${{ github.sha }}
+          # Multi-arch pushes produce an OCI index; GHCR reads the package
+          # description from the index annotation, not the per-arch labels.
+          annotations: |
+            index:org.opencontainers.image.description=The Looped AF base agent image: Deno, the framework, and the native tools — hardened, non-root, health-checked. An agent is a file: mount your agent.yaml and run.
+            index:org.opencontainers.image.source=https://github.com/loopedautomation/agent-framework
+            index:org.opencontainers.image.licenses=Apache-2.0
           cache-from: type=gha
           cache-to: type=gha,mode=max

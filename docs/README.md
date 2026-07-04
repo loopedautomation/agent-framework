@@ -18,8 +18,10 @@ These files are in the docs site's format ([Fumadocs](https://fumadocs.dev)):
   repo-relative paths like `../examples/` would break on the site.
 - `meta.json` is the sidebar (order + section headings). `index.mdx` is the tab landing page and
   may use Fumadocs components (it won't render fully on GitHub — that's fine).
-- The [manifesto](../MANIFESTO.md) stays canonical at the repo root; the site generates its page
-  from it. This `README.md` is not published.
+- ` ```mermaid ` fences render as diagrams on both GitHub and the site (the site rewrites them to
+  a client component at build time).
+- The [manifesto](../MANIFESTO.md) stays canonical at the repo root — the site links to it on
+  GitHub rather than publishing a page. This `README.md` is not published either.
 
 Publishing: the docs site rebuilds on its own pushes; after changing docs here, trigger a rebuild
 (deploy hook) or push any commit to `loopedautomation/docs`.

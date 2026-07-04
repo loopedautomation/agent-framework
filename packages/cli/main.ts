@@ -1,4 +1,4 @@
-// af — the Looped AF CLI, a thin client over @looped/af.
+// af — the Looped AF CLI, a thin client over @looped/core.
 //   af run <agent.yaml>       run an agent: service mode if it has triggers, REPL otherwise
 //   af validate <agent.yaml>  validate a config and report env references
 //   af flags <agent.yaml>     print the Deno permission flags the config compiles to
@@ -16,7 +16,7 @@ import {
   type RunResult,
   startStatusServer,
   VERSION,
-} from "@looped/af";
+} from "@looped/core";
 import { fetchApplicationId, inviteUrl, triggersFromConfig } from "@looped/triggers";
 import { printBirthBanner } from "./banner.ts";
 import { DEPLOYS, generateProject, type InitOptions, PROVIDERS, TRIGGERS } from "./init.ts";
@@ -71,7 +71,7 @@ function statusLine(result: RunResult): string {
 async function validate(path: string) {
   const config = await resolveAgentConfig(path);
   console.log(`✓ ${path} is a valid agent definition`);
-  console.log(`  nickname: ${config.nickname}`);
+  console.log(`  handle:   ${config.handle}`);
   console.log(`  model:    ${config.model.provider} / ${config.model.id}`);
   console.log(`  triggers: ${config.triggers?.map((t) => t.type).join(", ") ?? "none (CLI only)"}`);
   const flags = permissionsToDenoFlags(config.permissions);
@@ -86,7 +86,7 @@ async function validate(path: string) {
 
 async function repl(config: AgentConfig, service: AgentService, name: string) {
   console.log(
-    `${name} (${config.nickname}) is listening (model: ${config.model.id}; ctrl-d to exit)`,
+    `${name} (${config.handle}) is listening (model: ${config.model.id}; ctrl-d to exit)`,
   );
   const conversationKey = config.memory?.scope === "thread" ? "cli" : undefined;
   while (true) {
@@ -109,7 +109,7 @@ async function serve(config: AgentConfig, service: AgentService, name: string) {
   await service.start(triggers);
   const status = startStatusServer(service);
   console.log(
-    `${name} (${config.nickname}) is running as a service ` +
+    `${name} (${config.handle}) is running as a service ` +
       `(triggers: ${config.triggers!.map((t) => t.type).join(", ")}; ctrl-c to stop)`,
   );
   await new Promise<void>((resolve) => {
@@ -126,7 +126,7 @@ async function run(path: string) {
   const baseDir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ".";
   const service = new AgentService({ config, baseDir });
   const identity = await service.init();
-  if (identity.isNew) printBirthBanner(config.nickname, identity.name);
+  if (identity.isNew) printBirthBanner(config.handle, identity.name);
   if (config.triggers?.length) await serve(config, service, identity.name);
   else await repl(config, service, identity.name);
 }
@@ -150,10 +150,10 @@ function choose<T extends string>(label: string, options: readonly T[], flagValu
 }
 
 function init(nameArg?: string) {
-  const nickname = nameArg ?? flag("nickname") ??
-    prompt("nickname (lowercase, hyphens — your handle for the agent):") ?? "";
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(nickname)) {
-    fail("nickname must be lowercase alphanumeric with hyphens");
+  const handle = nameArg ?? flag("handle") ??
+    prompt("handle (lowercase, hyphens — what you'll call the agent):") ?? "";
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(handle)) {
+    fail("handle must be lowercase alphanumeric with hyphens");
   }
   const trigger = choose("trigger", TRIGGERS, flag("trigger"));
   const provider = choose("provider", PROVIDERS, flag("provider"));
@@ -162,10 +162,10 @@ function init(nameArg?: string) {
     (flag("clis") ?? prompt("CLIs the agent needs (comma-separated, empty for none):") ?? "")
       .split(",").map((s) => s.trim()).filter(Boolean);
 
-  const options: InitOptions = { nickname, trigger, provider, model: flag("model"), clis, deploy };
+  const options: InitOptions = { handle, trigger, provider, model: flag("model"), clis, deploy };
   const files = generateProject(options);
 
-  const target = `${flag("dir") ?? "."}/${nickname}`;
+  const target = `${flag("dir") ?? "."}/${handle}`;
   try {
     if ([...Deno.readDirSync(target)].length) fail(`${target} exists and is not empty`);
   } catch (err) {
@@ -177,8 +177,9 @@ function init(nameArg?: string) {
   }
   console.log(`\n✓ ${target}/ scaffolded:`);
   for (const name of Object.keys(files)) console.log(`    ${name}`);
+  const todoFile = "agent.yaml" in files ? "agent.yaml" : "compose.yaml";
   console.log(
-    `\nnext: fill in the TODOs in ${target}/agent.yaml, then follow ${target}/README.md`,
+    `\nnext: fill in the TODOs in ${target}/${todoFile}, then follow ${target}/README.md`,
   );
 }
 

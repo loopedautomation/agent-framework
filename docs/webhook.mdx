@@ -1,0 +1,74 @@
+---
+title: "Webhook"
+description: "Run the agent over HTTP: an authenticated endpoint that returns the run result."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `webhook` trigger gives the agent an HTTP endpoint: POST an input and receive the run result back. It is the integration point for everything that isn't a chat platform — other services, scripts, schedulers, or your own UI.
+
+<Tabs items={['agent.yaml', 'compose.yaml']}>
+<Tab value="agent.yaml">
+
+```yaml
+triggers:
+  - type: webhook
+    # path: /            (default)
+    # port: 8080         (default)
+    token_env: WEBHOOK_TOKEN   # required — bearer auth, deny by default
+```
+
+</Tab>
+<Tab value="compose.yaml">
+
+```yaml
+configs:
+  agent-yaml:
+    content: |
+      handle: task-bot
+      description: Runs tasks submitted over HTTP.
+      model:
+        provider: openai-compatible
+        id: gpt-5.4-mini
+      purpose: |
+        You are a concise assistant. Complete the submitted task and
+        reply with the result.
+      triggers:
+        - type: webhook
+          token_env: WEBHOOK_TOKEN
+      memory:
+        scope: thread
+
+services:
+  task-bot:
+    image: ghcr.io/loopedautomation/agent:latest
+    configs:
+      - source: agent-yaml
+        target: /agent/agent.yaml
+    env_file: .env   # WEBHOOK_TOKEN and the model's API key
+    ports:
+      - "8080:8080"
+    volumes:
+      - task-bot-data:/data
+    restart: unless-stopped
+volumes:
+  task-bot-data:
+```
+
+</Tab>
+</Tabs>
+
+Call it:
+
+```sh
+curl -s localhost:8080 \
+  -H "authorization: Bearer $WEBHOOK_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"input": "run: echo hello", "conversation_id": "demo"}'
+```
+
+The response is the run result: `{"status": "ok", "reply": "...", "steps": 2, "cost_usd": 0.0001}`. Pass the same `conversation_id` to continue a conversation (with `memory.scope: thread` — [Memory](agent-file.md#memory)); omit it for one-shot runs.
+
+`token_env` is required — an unauthenticated endpoint contradicts deny-by-default. The token resolves at startup, and a missing env var fails then, not on the first request.
+
+Every call lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps, tokens, and cost.

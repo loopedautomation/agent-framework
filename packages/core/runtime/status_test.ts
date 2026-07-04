@@ -5,7 +5,7 @@ import { AgentService } from "./service.ts";
 import { startStatusServer } from "./status.ts";
 
 const CONFIG = parseAgentConfig(`
-nickname: status-bot
+handle: status-bot
 description: status test
 model:
   provider: openai-compatible
@@ -41,7 +41,7 @@ Deno.test("status surface: healthz open, runs/audit token-gated", async () => {
 
   const health = await (await fetch(`${base}/healthz`)).json();
   assertEquals(health.ok, true);
-  assertEquals(health.nickname, "status-bot");
+  assertEquals(health.handle, "status-bot");
   assertEquals(health.name, "Nova");
 
   const unauthorized = await fetch(`${base}/runs`);

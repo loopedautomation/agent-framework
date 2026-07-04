@@ -29,6 +29,14 @@ export function parseAgentConfig(yamlText: string, source?: string): AgentConfig
       source,
     );
   }
+  if (typeof data === "object" && data !== null && "nickname" in data) {
+    throw new ConfigError(
+      `${
+        source ?? "config"
+      }: \`nickname\` was renamed to \`handle\` — update the key and you're done`,
+      source,
+    );
+  }
   // Accepted-but-ignored config is a lie (#12): until custom TS tools are
   // implemented, declaring them is a loud error, not a silent no-op.
   const tools = (data as Record<string, unknown> | null)?.["tools"] as

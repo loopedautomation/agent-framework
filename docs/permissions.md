@@ -25,11 +25,11 @@ permissions:
 
 ## Denials are tool results
 
-A denied action is not a crash. The model sees `permission denied: run access to "curl" is not in the agent's permissions.run allowlist` as an ordinary tool result and adapts — asks differently, works within its grants, or reports what it couldn't do. Every decision, allowed and denied, lands in the [audit trail](deployment.md#persistence-the-data-volume).
+A denied action is not a crash. The model sees `permission denied: run access to "curl" is not in the agent's permissions.run allowlist` as an ordinary tool result and adapts — asks differently, works within its grants, or reports what it couldn't do. Every decision, allowed and denied, lands in the [audit trail](docker-run.md#persistence-the-data-volume).
 
-## Static analysis over hope
+## Static analysis of shell commands
 
-`run_bash` doesn't trust the shell: it extracts every executable from pipes and chains and checks each one against `run:`. Command substitution (`$(...)`, backticks, `<(...)`) is rejected outright — it can't be statically checked, so it doesn't run.
+`run_bash` does not trust the shell: it extracts every executable from pipes and chains and checks each one against `run:`. Command substitution (`$(...)`, backticks, `<(...)`) is rejected outright — it cannot be statically checked, so it does not run.
 
 ## Scoped environments
 
@@ -50,7 +50,7 @@ Resolution order: process env var → `/run/secrets/<NAME>` (Docker Compose file
 
 Enforcement is layered — the app-level engine described above, inside a runtime sandbox, inside a container:
 
-1. **The Deno sandbox.** The config compiles to Deno permission flags — `af flags agent.yaml` prints them, e.g. `--allow-net=api.github.com --allow-run=gh`. In the [base image](deployment.md#what-the-base-image-gives-you), reads are scoped to `/agent`, `/skills`, `/data`, `/run/secrets`; writes to `/data`; subprocess spawning to `bash` (which the permission engine then gates per-executable).
+1. **The Deno sandbox.** The config compiles to Deno permission flags — `af flags agent.yaml` prints them, e.g. `--allow-net=api.github.com --allow-run=gh`. In the [base image](docker-run.md#what-the-base-image-gives-you), reads are scoped to `/agent`, `/skills`, `/data`, `/run/secrets`; writes to `/data`; subprocess spawning to `bash` (which the permission engine then gates per-executable).
 2. **The container.** The unit of isolation. The compose examples add `read_only: true` and tmpfs.
 
 Two honest notes on where the layers actually sit:

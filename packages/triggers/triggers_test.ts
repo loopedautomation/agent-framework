@@ -8,7 +8,7 @@ import {
   type CompletionRequest,
   parseAgentConfig,
   type Provider,
-} from "@looped/af";
+} from "@looped/core";
 import { CronTrigger } from "./cron.ts";
 import { WebhookTrigger } from "./webhook.ts";
 import { triggersFromConfig } from "./mod.ts";
@@ -30,7 +30,7 @@ function scripted(script: Partial<Completion>[]): Provider {
 }
 
 const CONFIG = parseAgentConfig(`
-nickname: m2-bot
+handle: m2-bot
 description: M2 exit demo agent
 model:
   provider: openai-compatible

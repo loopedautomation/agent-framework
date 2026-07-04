@@ -126,7 +126,7 @@ Deno.test("withRetry retries retryable errors and gives up on the rest", async (
 
 Deno.test("createProvider resolves keys and tolerates keyless local endpoints", () => {
   const model = parseAgentConfig(`
-nickname: p
+handle: p
 description: d
 model:
   provider: openai-compatible

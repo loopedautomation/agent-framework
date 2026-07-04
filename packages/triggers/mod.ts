@@ -1,6 +1,6 @@
 // @looped/triggers — event sources for Looped agents.
 
-import type { AgentConfig, Trigger } from "@looped/af";
+import type { AgentConfig, Trigger } from "@looped/core";
 import { WebhookTrigger } from "./webhook.ts";
 import { CronTrigger } from "./cron.ts";
 import { DiscordTrigger } from "./discord.ts";

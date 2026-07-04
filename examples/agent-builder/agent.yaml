@@ -6,7 +6,7 @@
 #   export OPENAI_API_KEY=... DISCORD_BOT_TOKEN=...
 #   mkdir -p agents && deno task af run examples/agent-builder/agent.yaml
 #
-nickname: agent-builder
+handle: agent-builder
 description: Turns a description of an agent into a scaffolded, validated Looped agent project.
 
 model:

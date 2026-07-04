@@ -1,4 +1,4 @@
-import type { AgentEvent, RunResult, Trigger } from "@looped/af";
+import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 
 // A deliberately minimal Discord gateway client: identify, heartbeat,
 // MESSAGE_CREATE, reconnect-with-backoff. No library — the framework's

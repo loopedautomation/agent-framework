@@ -9,7 +9,7 @@ You create agent projects. The recipe: scaffold deterministically with `af init`
 
 ## 1. Decide the shape from the request
 
-- **nickname**: lowercase-with-hyphens, from the job (e.g. "summarize RSS to Discord" → `rss-digest`)
+- **handle**: lowercase-with-hyphens, from the job (e.g. "summarize RSS to Discord" → `rss-digest`)
 - **trigger**: reacting to Discord messages → `discord`; called by other systems → `webhook`; on a schedule → `cron`; interactive-only → `none`
 - **provider**: default `openai-compatible` unless the request names one
 - **clis**: only binaries the job truly needs (e.g. `gh` for GitHub work). Most agents need none — minimalism is the house style.
@@ -20,14 +20,14 @@ If the request is missing something essential (e.g. which channel, which repo), 
 ## 2. Scaffold
 
 ```sh
-deno task af init <nickname> --dir agents --trigger <trigger> --provider <provider> --deploy <deploy> --clis "<a,b or empty>"
+deno task af init <handle> --dir agents --trigger <trigger> --provider <provider> --deploy <deploy> --clis "<a,b or empty>"
 ```
 
-It creates `agents/<nickname>/` with agent.yaml, .env.example, README, and the deployment files.
+It creates `agents/<handle>/` with agent.yaml, .env.example, README, and the deployment files.
 
 ## 3. Fill in the TODOs
 
-Read `agents/<nickname>/agent.yaml` (read_file), then rewrite it with `write_file`, replacing every TODO:
+Read `agents/<handle>/agent.yaml` (read_file), then rewrite it with `write_file`, replacing every TODO:
 
 - **description**: one specific line.
 - **purpose**: the whole job description — what to do, how to behave, tone, and *when to stay quiet*. Write it like a brief for a competent new hire. Be concrete: name channels, repos, formats. 4–10 lines.
@@ -39,7 +39,7 @@ Keep everything else the scaffolder wrote (the modeline comment, memory, structu
 ## 4. Validate — never skip
 
 ```sh
-deno task af validate agents/<nickname>/agent.yaml
+deno task af validate agents/<handle>/agent.yaml
 ```
 
 If it fails, read the error, fix the file, validate again. Do not report success until validation passes.
@@ -50,9 +50,9 @@ Report: the file list, the one-line description, any env vars the deployer must 
 
 ## Config quick reference
 
-- `nickname` (handle; agent names itself), `description`, `model.provider` (`openai-compatible`|`anthropic`), `model.id`, `purpose`
+- `handle` (what you call it; the agent names itself), `description`, `model.provider` (`openai-compatible`|`anthropic`), `model.id`, `purpose`
 - triggers: `discord` (channels, require_mention, from_users, reply_channel, allow_silence), `webhook` (path, port, token_env — required), `cron` (schedule, prompt)
 - `permissions`: `net` (hosts), `run` (executables), `read`/`write` (path prefixes) — deny-by-default, grant only what the job needs
 - `skills` (paths), `tools.mcp` (name + command|url + env + include)
 - `memory.scope`: `thread`|`none` · `limits`: `max_steps` (default 20), `max_cost` (needs `model.pricing`)
-- Unknown keys are hard errors. `system_prompt` is the old name for `purpose`.
+- Unknown keys are hard errors. `system_prompt` and `nickname` are the old names for `purpose` and `handle`.

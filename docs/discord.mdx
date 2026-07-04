@@ -1,0 +1,82 @@
+---
+title: "Discord"
+description: "Connect an agent to Discord: setup, in-channel replies, and observer agents."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Triggers turn an agent into a long-lived service that waits for events, acts on them, delivers the result, and goes idle. The `discord` trigger connects that loop to a Discord server: the agent watches channels and replies in-channel to the messages that wake it.
+
+<Tabs items={['agent.yaml', 'compose.yaml']}>
+<Tab value="agent.yaml">
+
+```yaml
+triggers:
+  - type: discord
+    channels: ["issues"]        # names or ids; omit for all channels
+    # require_mention: true     # only respond when @-mentioned
+    # token_env: DISCORD_BOT_TOKEN (default)
+    # from_users: ["amin"]      # only handle these authors (user ids or usernames)
+    # reply_channel: "1522..."  # post replies here instead of the source channel
+    # allow_silence: true       # a reply of exactly __NO_REPLY__ posts nothing
+```
+
+</Tab>
+<Tab value="compose.yaml">
+
+```yaml
+configs:
+  agent-yaml:
+    content: |
+      handle: issue-bot
+      description: Turns team Discord messages into GitHub issues.
+      model:
+        provider: openai-compatible
+        id: gpt-5.4-mini
+      purpose: |
+        You turn Discord messages in the issues channel into well-formed
+        GitHub issues and reply with the issue link.
+      triggers:
+        - type: discord
+          channels: ["issues"]   # names or ids; omit for all channels
+      memory:
+        scope: thread
+
+services:
+  issue-bot:
+    image: ghcr.io/loopedautomation/agent:latest
+    configs:
+      - source: agent-yaml
+        target: /agent/agent.yaml
+    env_file: .env   # DISCORD_BOT_TOKEN and the model's API key
+    volumes:
+      - issue-bot-data:/data
+    restart: unless-stopped
+volumes:
+  issue-bot-data:
+```
+
+</Tab>
+</Tabs>
+
+## Setup
+
+Setting up a Discord bot takes about 15 minutes:
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), create a New Application with a Bot.
+2. Enable the **Message Content Intent** under Privileged Gateway Intents. Without it, messages arrive empty — this is the most common setup failure.
+3. Copy the bot token and export it: `export DISCORD_BOT_TOKEN=...`
+4. Run `af discord-invite agent.yaml` to print a ready-made invite URL with the correct scopes and permissions, then open it and invite the bot to your server.
+5. Run the agent: `af run agent.yaml`
+
+The agent replies in-channel to the triggering message; conversations are keyed per channel or thread, and `memory.scope: thread` continues them ([Memory](agent-file.md#memory)). It ignores bots, itself, and empty messages; long replies split at Discord's 2000-char limit.
+
+## Observer agents
+
+Three optional keys together turn the trigger from a chatbot into an observer — an agent that watches channels, reacts to specific people, and reports elsewhere (a review bot, a moderation assistant, a coach):
+
+- `from_users` — handle only these authors. The filter runs *before* the model is called: everyone else's messages are dropped in the trigger and never reach the provider.
+- `reply_channel` — deliver replies to a dedicated channel instead of the source. Out-of-channel replies quote the triggering message and link back to it.
+- `allow_silence` — let the agent say nothing. Instruct it in `purpose` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message.
+
+Every run — replied or silent — lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps, tokens, and cost.

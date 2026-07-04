@@ -1,9 +1,9 @@
 ---
 title: "Skills"
-description: "Teach any CLI or API with a markdown file — knowledge, never capability."
+description: "Teach the agent to use any CLI or API with a markdown file. Skills add knowledge, never capability."
 ---
 
-A skill is a markdown file that teaches the agent how to use something well. Skills carry **knowledge, never capability**: a skill can't grant permissions — the config's `permissions:` block stays the sole authority, so the worst a bad skill can be is misleading documentation.
+A skill is a markdown file that teaches the agent how to use something well. Skills carry **knowledge, never capability**: a skill cannot grant permissions — the config's `permissions:` block remains the sole authority, so the worst a bad skill can be is misleading documentation.
 
 ```yaml
 skills:
@@ -12,7 +12,7 @@ permissions:
   run: [gh]        # the capability half of the recipe
 ```
 
-This split is the default recipe for integrating anything: **the [custom image](deployment.md#the-custom-image-story) provides the binary, the skill provides the knowledge, the [permissions](permissions.md) provide the safety.** Most integrations don't need an MCP server — a good CLI plus a page of know-how beats forty tool schemas in a small model's context.
+This split is the standard recipe for integrating anything: **the [custom image](docker-run.md#the-custom-image-story) provides the binary, the skill provides the knowledge, and the [permissions](permissions.md) provide the safety.** Most integrations don't need an MCP server — a good CLI plus a page of instructions serves a small model better than forty tool schemas in its context.
 
 ## Authoring a skill
 

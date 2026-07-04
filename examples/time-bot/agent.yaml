@@ -4,7 +4,7 @@
 #
 #   OPENAI_API_KEY=... deno task af run examples/time-bot/agent.yaml
 #
-nickname: time-bot
+handle: time-bot
 description: Answers questions, and knows what time it is.
 
 model:

@@ -1,4 +1,4 @@
-// @looped/af — agent loop, config loader, providers, permissions, memory.
+// @looped/core — agent loop, config loader, providers, permissions, memory.
 
 export {
   type AgentConfig,

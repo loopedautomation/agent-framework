@@ -6,7 +6,7 @@ import { Store } from "../store/store.ts";
 import { ensureIdentity } from "./identity.ts";
 
 const CONFIG = parseAgentConfig(`
-nickname: name-bot
+handle: name-bot
 description: a test agent
 model:
   provider: openai-compatible
@@ -51,14 +51,14 @@ Deno.test("naming ritual: unusable replies fall back to the name pool, persisted
     const store = new Store(":memory:");
     const identity = await ensureIdentity(CONFIG, namer(badReply), store);
     assert(identity.isNew); // still a birth — the banner fires
-    assert(identity.name !== CONFIG.nickname, `got nickname for reply: "${badReply}"`);
+    assert(identity.name !== CONFIG.handle, `got handle for reply: "${badReply}"`);
     assert(identity.name.length >= 2);
     assertEquals(store.getIdentity("name"), identity.name); // persisted for life
     store.close();
   }
 });
 
-Deno.test("naming ritual: fallback pool is deterministic per nickname", async () => {
+Deno.test("naming ritual: fallback pool is deterministic per handle", async () => {
   const a = new Store(":memory:");
   const b = new Store(":memory:");
   const first = await ensureIdentity(CONFIG, namer(""), a);
@@ -68,7 +68,7 @@ Deno.test("naming ritual: fallback pool is deterministic per nickname", async ()
   b.close();
 });
 
-Deno.test("naming ritual: provider failure falls back to nickname, retries next boot", async () => {
+Deno.test("naming ritual: provider failure falls back to handle, retries next boot", async () => {
   const store = new Store(":memory:");
   const failing: Provider = {
     id: "mock",

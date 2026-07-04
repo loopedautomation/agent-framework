@@ -129,11 +129,11 @@ export const LimitsSchema = z.strictObject({
 }).describe("Per-run budgets — the dead-man's switches for unattended operation.");
 
 export const AgentConfigSchema = z.strictObject({
-  nickname: z
+  handle: z
     .string()
     .regex(
       /^[a-z0-9][a-z0-9-]*$/,
-      "nickname must be lowercase alphanumeric with hyphens (it names volumes, services, and log streams)",
+      "handle must be lowercase alphanumeric with hyphens (it names volumes, services, and log streams)",
     )
     .describe(
       "The operator's handle for this agent (compose service, logs, CLI, session keys). The agent chooses its own name on first boot.",

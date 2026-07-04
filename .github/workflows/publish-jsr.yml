@@ -1,0 +1,26 @@
+# Publish the workspace packages (@looped/af, @looped/core, @looped/triggers)
+# to JSR on every GitHub release, authenticated via OIDC — no tokens.
+# One-time setup per package on jsr.io: create it in the scope and link this
+# repository under Settings → GitHub repository.
+name: publish-jsr
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      # --allow-slow-types: the public API exports Zod schemas, whose explicit
+      # types are impractical (the no-slow-types lint rule is excluded repo-wide).
+      - run: deno publish --allow-slow-types

@@ -26,7 +26,7 @@ function scripted(script: Partial<Completion>[]): Provider & { requests: Complet
 }
 
 const CONFIG = parseAgentConfig(`
-nickname: loop-bot
+handle: loop-bot
 description: loop test agent
 model:
   provider: openai-compatible

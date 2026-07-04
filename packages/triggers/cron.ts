@@ -1,5 +1,5 @@
 import { Cron } from "croner";
-import type { AgentEvent, RunResult, Trigger } from "@looped/af";
+import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 
 export interface CronTriggerOptions {
   schedule: string;

@@ -1,15 +1,15 @@
 ---
-title: "The agent file"
+title: "Agent Config"
 description: "A guided tour of every block in agent.yaml — identity, model, memory, limits, and env."
 ---
 
-One agent, one job, one file. The agent file says everything about an agent: who it is, which model runs it, what wakes it, what it may touch. This page tours every block; the exhaustive field list lives in the [JSON Schema](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json), which your editor can enforce as you type ([set it up](getting-started.md#editor-support)) and `af schema` prints locally.
+Each agent is defined by a single file. The agent file describes everything about an agent: its identity, the model that runs it, the events that wake it, and the boundaries it operates within. This page walks through every block; the exhaustive field list lives in the [JSON Schema](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json), which your editor can enforce as you type ([set it up](#editor-support)) and `af schema` prints locally.
 
-A complete agent, for orientation:
+Here is a complete agent, for orientation:
 
 ```yaml
 # yaml-language-server: $schema=https://looped.sh/schema/agent.json
-nickname: issue-bot
+handle: issue-bot
 description: Turns team Discord messages into GitHub issues.
 
 model:
@@ -44,13 +44,13 @@ limits:
   max_cost: 0.05
 ```
 
-Four keys are required: `nickname`, `description`, `model`, `purpose`. Everything else is opt-in — and unknown keys are **hard errors**, so a typo'd `permisions:` can never silently no-op.
+Four keys are required: `handle`, `description`, `model`, and `purpose`. Everything else is optional, and unknown keys are validation errors — a misspelled `permisions:` fails immediately rather than being silently ignored.
 
-## Identity: nickname, description — and the name
+## Identity: handle, description — and the name
 
-`nickname` is *your* handle for the agent — lowercase, hyphens (`^[a-z0-9][a-z0-9-]*$`). It names the compose service, the log lines, and the agent's database file. `description` is one line: what job this agent does.
+`handle` is what *you* call the agent — lowercase, hyphens (`^[a-z0-9][a-z0-9-]*$`). It names the compose service, the log lines, and the agent's database file. `description` is one line: what job this agent does.
 
-You don't name the agent. On first boot it chooses its own name — one LLM call, routed to the cheap `model.small` role, persisted for life in its SQLite identity. The CLI marks the occasion with the birth banner. You address the agent by its `nickname`; it signs its work with the name it chose. A fresh data volume means a new self — the agent renames itself.
+You don't choose the agent's display name. On first boot the agent names itself with a single LLM call (routed to the `model.small` role) and persists the name in its SQLite identity; the CLI prints a banner when this happens. You address the agent by its `handle`, and it signs its work with the name it chose. A fresh data volume means a fresh identity, and the agent will name itself again.
 
 ## Purpose
 
@@ -75,8 +75,10 @@ model:
 - **`base_url`** points `openai-compatible` at any endpoint. Local models need no key.
 - **`api_key_env`** names the env var holding the key — configs hold *references*, never secret values. Defaults to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider.
 - **`small`** is the model for cheap internal calls (the naming ritual, summaries). Defaults to the main `id` — set it to something tiny and these calls round to free.
-- **`fallbacks`** are model ids tried in order when the primary fails. A run that exhausts them ends with status `error_provider` rather than crashing the service.
+- **`fallbacks`** names model ids to try in order when the primary fails — validated today, with the runtime chain still landing ([Models](models.md#when-the-provider-fails)).
 - **`pricing`** is your model's real prices, in USD per million tokens. It enables per-run cost reporting and is required to enforce `limits.max_cost` — a cap can't be enforced without prices.
+
+The full model story — dialects, keys, local endpoints, retries — is [Models](models.md).
 
 ## Memory
 
@@ -95,16 +97,16 @@ limits:
   max_cost: 0.05    # USD per run; no default — requires model.pricing
 ```
 
-These are dead-man's switches for unattended operation, on by default. Every run ends with a typed status:
+These limits protect unattended operation and are on by default. Every run ends with a typed status:
 
 | Status | Meaning |
 | --- | --- |
 | `ok` | The agent finished its job. |
 | `error_max_steps` | The run hit `limits.max_steps` LLM calls. |
 | `error_max_cost` | The run hit `limits.max_cost` USD. |
-| `error_provider` | The provider failed after retries and every fallback. |
+| `error_provider` | The provider failed after retries. |
 
-A run that exceeds its budget ends with a status, not a runaway bill. Statuses, steps, tokens, and cost are recorded per run — see [the data volume](deployment.md#persistence-the-data-volume).
+A run that exceeds its budget ends with a status, not a runaway bill. Statuses, steps, tokens, and cost are recorded per run — see [the data volume](docker-run.md#persistence-the-data-volume).
 
 ## Env
 
@@ -117,11 +119,21 @@ The `env:` block grants environment variables to tools and MCP servers — and o
 
 ## The blocks with their own pages
 
-- **`triggers:`** — the events that wake the agent (Discord, webhook, cron). With triggers, `af run` starts a long-lived service; without, an interactive REPL. → [Triggers](triggers.md)
-- **`skills:`** — markdown files that teach the agent how to use something well. Knowledge, never capability. → [Skills](skills.md)
+- **`triggers:`** — the events that wake the agent. With triggers, `af run` starts a long-lived service; without, an interactive REPL. → [Discord](discord.mdx) · [Webhook](webhook.mdx) · [Cron](cron.mdx)
+- **`skills:`** — markdown files that teach the agent how to use something well; they add knowledge, never capability. → [Skills](skills.md)
 - **`tools:`** — capability beyond the natives: MCP servers, and tool search to keep their schemas out of context. → [Tools](tools.md)
 - **`permissions:`** — deny-by-default allowlists for hosts, executables, and paths. Omit the block and the agent can touch nothing. → [Permissions](permissions.md)
 
 ## Validating
 
-`af validate agent.yaml` parses the file, prints the identity, triggers, compiled sandbox flags, and every env var referenced — warning on any that aren't set. The same schema powers editor validation via the modeline shown above; the runtime, the schema, and the docs can't drift because they share one source of truth.
+`af validate agent.yaml` parses the file, prints the identity, triggers, compiled sandbox flags, and every env var referenced — warning on any that aren't set.
+
+### Editor support
+
+Add this as the first line of any agent file and your editor (VS Code, JetBrains, Neovim — anything running yaml-language-server) validates as you type: autocomplete on every key, hover docs from the field descriptions, red squiggles on typos:
+
+```yaml
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+```
+
+The schema is generated from the same source of truth the runtime enforces ([schema/agent.json](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json), kept current by CI), so nothing can exist in the gap between "accepted" and "documented". `af schema` prints it locally.

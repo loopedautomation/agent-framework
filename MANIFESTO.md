@@ -40,7 +40,7 @@ Models improve monthly and vendors change their terms overnight. Swapping provid
 
 ## Agents name themselves
 
-You give an agent a job and a nickname. On first boot, it chooses its own name, and keeps it for life. This costs nothing and changes how it feels: you didn't configure a process, you hired someone.
+You give an agent a job and a handle. On first boot, it chooses its own name, and keeps it for life. This costs nothing and changes how it feels: you didn't configure a process, you hired someone.
 
 ---
 

@@ -1,9 +1,9 @@
 import { assert, assertEquals } from "@std/assert";
-import { parseAgentConfig } from "@looped/af";
+import { parseAgentConfig } from "@looped/core";
 import { DEPLOYS, generateProject, type InitOptions, PROVIDERS, TRIGGERS } from "./init.ts";
 
 const BASE: InitOptions = {
-  nickname: "test-agent",
+  handle: "test-agent",
   trigger: "webhook",
   provider: "openai-compatible",
   clis: [],
@@ -21,7 +21,7 @@ Deno.test("every option combination generates a schema-valid agent.yaml", () => 
             continue;
           }
           const config = parseAgentConfig(files["agent.yaml"], "generated");
-          assertEquals(config.nickname, "test-agent");
+          assertEquals(config.handle, "test-agent");
           if (clis.length) assertEquals(config.permissions?.run, ["gh", "jq"]);
           if (trigger !== "none") assertEquals(config.triggers?.[0].type, trigger);
         }
@@ -74,15 +74,19 @@ Deno.test("compose-inline: one file, embedded config is schema-valid", () => {
   const files = generateProject({ ...BASE, deploy: "compose-inline" });
   assert(!("agent.yaml" in files) && !("Dockerfile" in files));
   const compose = files["compose.yaml"];
-  // Extract the block scalar under LOOPED_AGENT_CONFIG and dedent it.
-  const start = compose.indexOf("LOOPED_AGENT_CONFIG: |");
+  // The config is a top-level configs element mounted at /agent/agent.yaml,
+  // not an env var — configuration stays out of the environment.
+  assert(!compose.includes("LOOPED_AGENT_CONFIG"));
+  assert(compose.includes("target: /agent/agent.yaml"));
+  // Extract the block scalar under content: and dedent it.
+  const start = compose.indexOf("content: |");
   const block = compose.slice(start).split("\n").slice(1);
   const embedded: string[] = [];
   for (const line of block) {
-    if (line === "" || line.startsWith("        ")) embedded.push(line.slice(8));
+    if (line === "" || line.startsWith("      ")) embedded.push(line.slice(6));
     else break;
   }
   const config = parseAgentConfig(embedded.join("\n"), "embedded");
-  assertEquals(config.nickname, "test-agent");
+  assertEquals(config.handle, "test-agent");
   assertEquals(config.triggers?.[0].type, "webhook");
 });

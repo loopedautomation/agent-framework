@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "nickname": {
+    "handle": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$",
       "description": "The operator's handle for this agent (compose service, logs, CLI, session keys). The agent chooses its own name on first boot."
@@ -375,7 +375,7 @@
     }
   },
   "required": [
-    "nickname",
+    "handle",
     "description",
     "model",
     "purpose"

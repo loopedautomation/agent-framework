@@ -15,7 +15,7 @@ export const DEPLOYS = [
 ] as const;
 
 export interface InitOptions {
-  nickname: string;
+  handle: string;
   trigger: (typeof TRIGGERS)[number];
   provider: (typeof PROVIDERS)[number];
   /** Model id; sensible default per provider. */
@@ -25,8 +25,7 @@ export interface InitOptions {
   deploy: (typeof DEPLOYS)[number];
 }
 
-const MODELINE =
-  "# yaml-language-server: $schema=https://looped.sh/schema/agent.json";
+const MODELINE = "# yaml-language-server: $schema=https://looped.sh/schema/agent.json";
 const IMAGE = "ghcr.io/loopedautomation/agent:latest";
 
 const DEFAULT_MODELS: Record<InitOptions["provider"], string> = {
@@ -44,7 +43,7 @@ function keyEnv(provider: InitOptions["provider"]): string | undefined {
 function agentYaml(o: InitOptions): string {
   const lines: string[] = [
     MODELINE,
-    `nickname: ${o.nickname} # your handle for it — the agent names itself on first boot`,
+    `handle: ${o.handle} # what you call it — the agent names itself on first boot`,
     `description: TODO one line — what job does this agent do?`,
     "",
     "model:",
@@ -126,28 +125,36 @@ function dockerfile(o: InitOptions): string {
 }
 
 function composeInlineYaml(o: InitOptions): string {
-  // The whole agent — config and deployment — in one compose file. The
-  // embedded YAML is a block scalar; drop the modeline (editors don't
-  // validate inside a string) and indent to sit under the key.
+  // The whole agent — config and deployment — in one compose file. The config
+  // is a top-level `configs:` element mounted at /agent/agent.yaml, keeping
+  // configuration out of the environment (inline `content:` needs Docker
+  // Compose v2.23.1+). The embedded YAML is a block scalar; drop the modeline
+  // (editors don't validate inside a string) and indent to sit under the key.
   const embedded = agentYaml(o)
     .split("\n")
     .slice(1) // modeline
-    .map((line) => (line ? `        ${line}` : ""))
+    .map((line) => (line ? `      ${line}` : ""))
     .join("\n")
     .trimEnd();
   const lines = [
-    "# One file: the agent's config is embedded below — no agent.yaml needed.",
+    "# One file: the agent's config is defined below and mounted in — no agent.yaml needed.",
+    "# Requires Docker Compose v2.23.1+ (inline `content:`).",
     "# NOTE: env references inside the config must be written $${VAR} (double",
     "# dollar) so compose passes them through for the runtime to resolve.",
-    "services:",
-    `  ${o.nickname}:`,
-    `    image: ${IMAGE}`,
-    "    environment:",
-    "      LOOPED_AGENT_CONFIG: |",
+    "configs:",
+    "  agent-yaml:",
+    "    content: |",
     embedded,
+    "",
+    "services:",
+    `  ${o.handle}:`,
+    `    image: ${IMAGE}`,
+    "    configs:",
+    "      - source: agent-yaml",
+    "        target: /agent/agent.yaml",
     "    env_file: .env",
     "    volumes:",
-    `      - ${o.nickname}-data:/data # the agent's memory and name live here`,
+    `      - ${o.handle}-data:/data # the agent's memory and name live here`,
   ];
   const ports = [
     "      # Status surface: curl localhost:9090/healthz",
@@ -162,18 +169,18 @@ function composeInlineYaml(o: InitOptions): string {
     "      - /tmp",
     "",
     "volumes:",
-    `  ${o.nickname}-data:`,
+    `  ${o.handle}-data:`,
   );
   return lines.join("\n") + "\n";
 }
 
 function composeYaml(o: InitOptions, withBuild: boolean): string {
-  const lines = ["services:", `  ${o.nickname}:`];
+  const lines = ["services:", `  ${o.handle}:`];
   lines.push(withBuild ? "    build: ." : `    image: ${IMAGE}`);
   if (!withBuild) lines.push("    volumes:", "      - ./agent.yaml:/agent/agent.yaml:ro");
   lines.push("    env_file: .env");
   if (withBuild) lines.push("    volumes:");
-  lines.push(`      - ${o.nickname}-data:/data # the agent's memory and name live here`);
+  lines.push(`      - ${o.handle}-data:/data # the agent's memory and name live here`);
   const ports = [
     "      # Status surface: curl localhost:9090/healthz",
     "      # If host port 9090 is taken, change only the left side.",
@@ -188,14 +195,14 @@ function composeYaml(o: InitOptions, withBuild: boolean): string {
     "      - /tmp",
     "",
     "volumes:",
-    `  ${o.nickname}-data:`,
+    `  ${o.handle}-data:`,
   );
   return lines.join("\n") + "\n";
 }
 
 function readme(o: InitOptions): string {
   const head = [
-    `# ${o.nickname}`,
+    `# ${o.handle}`,
     "",
     "Scaffolded by \`af init\`. Fill in the TODOs in \`agent.yaml\`, then:",
     "",
@@ -217,7 +224,7 @@ function readme(o: InitOptions): string {
         "af run",
         "```",
         "",
-        "(`af` = `deno task af` from a framework checkout until the CLI ships standalone.)",
+        "(Install the CLI first: `deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash -n af jsr:@looped/af`.)",
       );
       break;
     case "docker":
@@ -227,7 +234,7 @@ function readme(o: InitOptions): string {
         "docker run -d \\",
         "  -v ./agent.yaml:/agent/agent.yaml:ro \\",
         "  --env-file .env \\",
-        `  -v ${o.nickname}-data:/data \\`,
+        `  -v ${o.handle}-data:/data \\`,
         ...(o.trigger === "webhook" ? ["  -p 8080:8080 \\"] : []),
         `  ${IMAGE}`,
         "```",
@@ -238,7 +245,7 @@ function readme(o: InitOptions): string {
       break;
     case "compose-inline":
       steps.push(
-        "The agent's config lives **inside compose.yaml** (`LOOPED_AGENT_CONFIG`) — one file, no agent.yaml.",
+        "The agent's config lives **inside compose.yaml** — a top-level `configs:` element mounted into the container at `/agent/agent.yaml`. One file, no agent.yaml. Requires Docker Compose v2.23.1+ (inline `content:`).",
         "",
         "```sh",
         "cp .env.example .env",

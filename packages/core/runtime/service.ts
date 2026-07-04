@@ -71,7 +71,7 @@ export class AgentService {
     this.#baseDir = opts.baseDir ?? Deno.cwd();
     const dataDir = opts.dataDir ?? Deno.env.get("LOOPED_DATA_DIR") ?? ".looped";
     Deno.mkdirSync(dataDir, { recursive: true });
-    this.store = new Store(`${dataDir}/${opts.config.nickname}.db`);
+    this.store = new Store(`${dataDir}/${opts.config.handle}.db`);
   }
 
   /**

@@ -3,7 +3,7 @@ import { agentConfigJsonSchema } from "./schema.ts";
 import { collectEnvRefs, ConfigError, parseAgentConfig, resolveAgentConfig } from "./load.ts";
 
 const MINIMAL = `
-nickname: test-bot
+handle: test-bot
 description: A minimal test agent.
 model:
   provider: openai-compatible
@@ -13,7 +13,7 @@ purpose: You are a test agent.
 
 Deno.test("parses a minimal config and applies defaults", () => {
   const config = parseAgentConfig(MINIMAL);
-  assertEquals(config.nickname, "test-bot");
+  assertEquals(config.handle, "test-bot");
   assertEquals(config.model.provider, "openai-compatible");
   assertEquals(config.limits.max_steps, 20);
   assertEquals(config.permissions, undefined); // deny-by-default: nothing granted
@@ -21,7 +21,7 @@ Deno.test("parses a minimal config and applies defaults", () => {
 
 Deno.test("parses the full MVP-shaped config", () => {
   const config = parseAgentConfig(`
-nickname: issue-bot
+handle: issue-bot
 description: Turns team Discord messages into GitHub issues.
 model:
   provider: openai-compatible
@@ -103,7 +103,7 @@ Deno.test("rejects invalid YAML with a readable error", () => {
 
 Deno.test("collects env references from api_key_env, env, and mcp env", () => {
   const config = parseAgentConfig(`
-nickname: env-bot
+handle: env-bot
 description: env test
 model:
   provider: anthropic
@@ -130,14 +130,14 @@ env:
 Deno.test("the shipped issue-bot example is a valid agent definition", async () => {
   const path = new URL("../../../examples/issue-bot/agent.yaml", import.meta.url);
   const config = parseAgentConfig(await Deno.readTextFile(path), "examples/issue-bot/agent.yaml");
-  assertEquals(config.nickname, "issue-bot");
+  assertEquals(config.handle, "issue-bot");
   assertEquals(collectEnvRefs(config), ["GITHUB_TOKEN", "OPENAI_API_KEY"]);
 });
 
 Deno.test("emits a JSON schema with the top-level fields", () => {
   const schema = agentConfigJsonSchema();
   const props = schema.properties as Record<string, unknown>;
-  for (const key of ["nickname", "model", "purpose", "permissions", "limits"]) {
+  for (const key of ["handle", "model", "purpose", "permissions", "limits"]) {
     assert(key in props, `missing ${key} in JSON schema`);
   }
 });
@@ -146,7 +146,7 @@ Deno.test("system_prompt gets a rename hint, not a generic unknown-key error", (
   const err = assertThrows(
     () =>
       parseAgentConfig(
-        `nickname: old\ndescription: d\nmodel:\n  provider: anthropic\n  id: m\nsystem_prompt: legacy`,
+        `handle: old\ndescription: d\nmodel:\n  provider: anthropic\n  id: m\nsystem_prompt: legacy`,
       ),
     ConfigError,
   );
@@ -162,12 +162,12 @@ Deno.test("resolveAgentConfig: env var, file, both, neither", async () => {
     filePath,
     (n) => n === "LOOPED_AGENT_CONFIG" ? MINIMAL : undefined,
   );
-  assertEquals(fromEnv.nickname, "test-bot");
+  assertEquals(fromEnv.handle, "test-bot");
 
   // file only → parsed from file
   await Deno.writeTextFile(filePath, MINIMAL.replace("test-bot", "file-bot"));
   const fromFile = await resolveAgentConfig(filePath, () => undefined);
-  assertEquals(fromFile.nickname, "file-bot");
+  assertEquals(fromFile.handle, "file-bot");
 
   // both → loud conflict, never a guess
   await assertRejects(
@@ -195,6 +195,6 @@ Deno.test("tools.custom is rejected loudly until implemented", () => {
 Deno.test("the shipped agent-builder example is a valid agent definition", async () => {
   const path = new URL("../../../examples/agent-builder/agent.yaml", import.meta.url);
   const config = parseAgentConfig(await Deno.readTextFile(path), "examples/agent-builder");
-  assertEquals(config.nickname, "agent-builder");
+  assertEquals(config.handle, "agent-builder");
   assertEquals(config.permissions?.write, ["agents"]);
 });

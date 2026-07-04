@@ -54,7 +54,7 @@ Deno.test("no deferred tools → no search tool", () => {
 Deno.test("loop picks up tools activated by search on the next step", async () => {
   const registry = new ToolRegistry([], DEFERRED);
   const config = parseAgentConfig(
-    `nickname: search-bot\ndescription: d\nmodel:\n  provider: openai-compatible\n  id: m\npurpose: p`,
+    `handle: search-bot\ndescription: d\nmodel:\n  provider: openai-compatible\n  id: m\npurpose: p`,
   );
   // Step 1: model searches. Step 2: model calls the newly activated tool.
   // Step 3: done. The provider asserts the tool surface it was shown.

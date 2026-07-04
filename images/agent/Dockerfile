@@ -7,6 +7,10 @@
 #   docker run -v ./agent.yaml:/agent/agent.yaml:ro --env-file .env looped/agent
 FROM denoland/deno:alpine-2.9.1
 
+LABEL org.opencontainers.image.description="The Looped AF base agent image: Deno, the framework, and the native tools — hardened, non-root, health-checked. An agent is a file: mount your agent.yaml and run." \
+      org.opencontainers.image.source="https://github.com/loopedautomation/agent-framework" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
 # bash: the run_bash tool's contract (alpine ships only busybox sh).
 # Non-root always. 10001 avoids host-uid collisions.
 RUN apk add --no-cache bash \

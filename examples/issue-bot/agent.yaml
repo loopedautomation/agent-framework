@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://looped.sh/schema/agent.json
 # The MVP agent (plans/002-mvp.md): Discord message in, GitHub issue link out.
-# The agent chooses its own name on first boot; nickname is your handle for it.
-nickname: issue-bot
+# The agent chooses its own name on first boot; handle is what you call it.
+handle: issue-bot
 description: Turns team Discord messages into GitHub issues.
 
 model:

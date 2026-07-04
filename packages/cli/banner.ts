@@ -12,7 +12,7 @@ const ART = String.raw`
 const LOOP_GRADIENT = ["#22d3ee", "#38bdf8", "#60a5fa", "#818cf8", "#a78bfa", "#c084fc"];
 
 /** Print the birth banner: gradient art, then the agent's chosen name. */
-export function printBirthBanner(nickname: string, name: string) {
+export function printBirthBanner(handle: string, name: string) {
   const lines = ART.split("\n").slice(1);
   for (let i = 0; i < lines.length; i++) {
     console.log(`%c${lines[i]}`, `color: ${LOOP_GRADIENT[i % LOOP_GRADIENT.length]}`);
@@ -23,7 +23,7 @@ export function printBirthBanner(nickname: string, name: string) {
     "color: gray",
   );
   console.log(
-    `   ✦ first boot — %c${nickname}%c has chosen a name: %c${name}%c\n`,
+    `   ✦ first boot — %c${handle}%c has chosen a name: %c${name}%c\n`,
     "color: gray",
     "",
     "color: #22d3ee; font-weight: bold",

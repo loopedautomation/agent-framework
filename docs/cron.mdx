@@ -1,0 +1,58 @@
+---
+title: "Cron"
+description: "Run the agent on a schedule with a cron expression and a prompt."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `cron` trigger runs the agent on a schedule rather than in response to an external event:
+
+<Tabs items={['agent.yaml', 'compose.yaml']}>
+<Tab value="agent.yaml">
+
+```yaml
+triggers:
+  - type: cron
+    schedule: "0 9 * * 1"        # every Monday 09:00
+    prompt: Post a summary of open issues.
+```
+
+</Tab>
+<Tab value="compose.yaml">
+
+```yaml
+configs:
+  agent-yaml:
+    content: |
+      handle: summary-bot
+      description: Posts a weekly summary of open issues.
+      model:
+        provider: openai-compatible
+        id: gpt-5.4-mini
+      purpose: |
+        Each run, summarize the open issues and deliver the summary.
+      triggers:
+        - type: cron
+          schedule: "0 9 * * 1"   # every Monday 09:00
+          prompt: Post a summary of open issues.
+
+services:
+  summary-bot:
+    image: ghcr.io/loopedautomation/agent:latest
+    configs:
+      - source: agent-yaml
+        target: /agent/agent.yaml
+    env_file: .env   # the model's API key
+    volumes:
+      - summary-bot-data:/data
+    restart: unless-stopped
+volumes:
+  summary-bot-data:
+```
+
+</Tab>
+</Tabs>
+
+Each tick runs the agent with `prompt` as input. Results are logged and recorded in the [run history](docker-run.md#persistence-the-data-volume) — a configurable result sink is planned; until then, when the result needs to go somewhere, have the agent deliver it itself through an allowlisted API or CLI ([Permissions](permissions.md)).
+
+Every run reports its status, steps, tokens, and cost, and [`limits`](agent-file.md#limits) cap what an unattended schedule can spend.

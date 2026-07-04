@@ -1,4 +1,4 @@
-import type { AgentEvent, RunResult, Trigger } from "@looped/af";
+import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 
 export interface WebhookTriggerOptions {
   path: string;
