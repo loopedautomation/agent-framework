@@ -16,6 +16,10 @@ Deno.test("every option combination generates a schema-valid agent.yaml", () => 
       for (const deploy of DEPLOYS) {
         for (const clis of [[], ["gh", "jq"]]) {
           const files = generateProject({ ...BASE, trigger, provider, deploy, clis });
+          if (deploy === "compose-inline") {
+            assert("compose.yaml" in files); // embedded validity covered below
+            continue;
+          }
           const config = parseAgentConfig(files["agent.yaml"], "generated");
           assertEquals(config.nickname, "test-agent");
           if (clis.length) assertEquals(config.permissions?.run, ["gh", "jq"]);
@@ -64,4 +68,21 @@ Deno.test("webhook agents expose the trigger port; others don't", () => {
 Deno.test("all generated agent.yamls carry the schema modeline", () => {
   const files = generateProject(BASE);
   assert(files["agent.yaml"].startsWith("# yaml-language-server: $schema="));
+});
+
+Deno.test("compose-inline: one file, embedded config is schema-valid", () => {
+  const files = generateProject({ ...BASE, deploy: "compose-inline" });
+  assert(!("agent.yaml" in files) && !("Dockerfile" in files));
+  const compose = files["compose.yaml"];
+  // Extract the block scalar under LOOPED_AGENT_CONFIG and dedent it.
+  const start = compose.indexOf("LOOPED_AGENT_CONFIG: |");
+  const block = compose.slice(start).split("\n").slice(1);
+  const embedded: string[] = [];
+  for (const line of block) {
+    if (line === "" || line.startsWith("        ")) embedded.push(line.slice(8));
+    else break;
+  }
+  const config = parseAgentConfig(embedded.join("\n"), "embedded");
+  assertEquals(config.nickname, "test-agent");
+  assertEquals(config.triggers?.[0].type, "webhook");
 });

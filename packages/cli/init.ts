@@ -5,7 +5,14 @@
 
 export const TRIGGERS = ["discord", "webhook", "cron", "none"] as const;
 export const PROVIDERS = ["openai-compatible", "anthropic", "local"] as const;
-export const DEPLOYS = ["local", "docker", "compose", "paas-git", "paas-env"] as const;
+export const DEPLOYS = [
+  "local",
+  "docker",
+  "compose",
+  "compose-inline",
+  "paas-git",
+  "paas-env",
+] as const;
 
 export interface InitOptions {
   nickname: string;
@@ -118,6 +125,48 @@ function dockerfile(o: InitOptions): string {
   return lines.join("\n") + "\n";
 }
 
+function composeInlineYaml(o: InitOptions): string {
+  // The whole agent — config and deployment — in one compose file. The
+  // embedded YAML is a block scalar; drop the modeline (editors don't
+  // validate inside a string) and indent to sit under the key.
+  const embedded = agentYaml(o)
+    .split("\n")
+    .slice(1) // modeline
+    .map((line) => (line ? `        ${line}` : ""))
+    .join("\n")
+    .trimEnd();
+  const lines = [
+    "# One file: the agent's config is embedded below — no agent.yaml needed.",
+    "# NOTE: env references inside the config must be written $${VAR} (double",
+    "# dollar) so compose passes them through for the runtime to resolve.",
+    "services:",
+    `  ${o.nickname}:`,
+    `    image: ${IMAGE}`,
+    "    environment:",
+    "      LOOPED_AGENT_CONFIG: |",
+    embedded,
+    "    env_file: .env",
+    "    volumes:",
+    `      - ${o.nickname}-data:/data # the agent's memory and name live here`,
+  ];
+  const ports = [
+    "      # Status surface: curl localhost:9090/healthz",
+    '      - "127.0.0.1:9090:9090"',
+  ];
+  if (o.trigger === "webhook") ports.unshift('      - "8080:8080" # webhook trigger');
+  lines.push("    ports:", ...ports);
+  lines.push(
+    "    restart: unless-stopped",
+    "    read_only: true",
+    "    tmpfs:",
+    "      - /tmp",
+    "",
+    "volumes:",
+    `  ${o.nickname}-data:`,
+  );
+  return lines.join("\n") + "\n";
+}
+
 function composeYaml(o: InitOptions, withBuild: boolean): string {
   const lines = ["services:", `  ${o.nickname}:`];
   lines.push(withBuild ? "    build: ." : `    image: ${IMAGE}`);
@@ -187,6 +236,18 @@ function readme(o: InitOptions): string {
     case "compose":
       steps.push("```sh", "cp .env.example .env", "docker compose up -d", "```");
       break;
+    case "compose-inline":
+      steps.push(
+        "The agent's config lives **inside compose.yaml** (`LOOPED_AGENT_CONFIG`) — one file, no agent.yaml.",
+        "",
+        "```sh",
+        "cp .env.example .env",
+        "docker compose up -d",
+        "```",
+        "",
+        "Fill in the TODOs in `compose.yaml`. If you add env references to the embedded config, write them as `$${VAR}` so compose doesn't substitute the value at deploy time. Skills need real files — switch to the `compose` shape if you add skills later.",
+      );
+      break;
     case "paas-git":
       steps.push(
         "1. Push this directory to a git repository.",
@@ -218,6 +279,14 @@ function readme(o: InitOptions): string {
 
 /** Generate the project files for the chosen options: filename → content. */
 export function generateProject(o: InitOptions): Record<string, string> {
+  if (o.deploy === "compose-inline") {
+    return {
+      "compose.yaml": composeInlineYaml(o),
+      ".env.example": envExample(o),
+      "README.md": readme(o),
+      ".gitignore": ".env\n",
+    };
+  }
   const files: Record<string, string> = {
     "agent.yaml": agentYaml(o),
     ".env.example": envExample(o),
