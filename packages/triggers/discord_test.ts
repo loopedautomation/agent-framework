@@ -6,6 +6,7 @@ import {
   inviteUrl,
   shouldHandle,
   splitMessage,
+  typingLoop,
 } from "./discord.ts";
 
 const BOT_ID = "bot-1";
@@ -68,6 +69,18 @@ Deno.test("inviteUrl: correct client_id, scope, and permissions integer", () => 
     inviteUrl("1234567890"),
     "https://discord.com/oauth2/authorize?client_id=1234567890&scope=bot&permissions=68608",
   );
+});
+
+Deno.test("typingLoop: fires immediately, keeps firing, and stops cleanly", async () => {
+  let fired = 0;
+  const stop = typingLoop(() => fired++, 5);
+  assertEquals(fired, 1); // immediate first fire
+  await new Promise((r) => setTimeout(r, 20));
+  assert(fired > 1); // kept alive on the interval
+  stop();
+  const atStop = fired;
+  await new Promise((r) => setTimeout(r, 20));
+  assertEquals(fired, atStop); // nothing after stop
 });
 
 Deno.test("fetchApplicationId: returns id, throws readable error on bad token", async () => {

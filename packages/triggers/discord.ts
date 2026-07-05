@@ -91,6 +91,19 @@ export interface DiscordTriggerOptions extends DiscordFilterOptions {
   replyChannel?: string;
   /** Suppress the reply when the agent answers with the NO_REPLY sentinel (or nothing). */
   allowSilence?: boolean;
+  /** Show the typing indicator in the source channel while the agent works. */
+  showTyping?: boolean;
+}
+
+/**
+ * Fire `send` now and again every `intervalMs` until the returned stop
+ * function is called. Discord's typing indicator expires after ~10 s, so the
+ * default interval keeps it alive for the whole run.
+ */
+export function typingLoop(send: () => void, intervalMs = 8_000): () => void {
+  send();
+  const timer = setInterval(send, intervalMs);
+  return () => clearInterval(timer);
 }
 
 /**
@@ -221,13 +234,24 @@ export class DiscordTrigger implements Trigger {
               ? await this.#channelName(msg.channel_id)
               : undefined;
             if (!shouldHandle(msg, this.#botUserId, channelName, this.#opts)) break;
-            const result = await emit({
-              id: msg.id,
-              trigger: this.name,
-              input: msg.content,
-              conversationKey: `discord:${msg.channel_id}`,
-            });
-            await this.#reply(msg, result);
+            const stopTyping = this.#opts.showTyping
+              ? typingLoop(() => {
+                this.#api(`/channels/${msg.channel_id}/typing`, { method: "POST" })
+                  .then((res) => res.body?.cancel())
+                  .catch(() => {}); // typing is cosmetic — never let it break the run
+              })
+              : undefined;
+            try {
+              const result = await emit({
+                id: msg.id,
+                trigger: this.name,
+                input: msg.content,
+                conversationKey: `discord:${msg.channel_id}`,
+              });
+              await this.#reply(msg, result);
+            } finally {
+              stopTyping?.();
+            }
           }
           break;
         }
