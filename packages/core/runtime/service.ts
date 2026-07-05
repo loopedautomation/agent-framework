@@ -13,7 +13,12 @@ import { Store } from "../store/store.ts";
 import { type AgentIdentity, ensureIdentity, identityNote } from "./identity.ts";
 import { createSkillTool, loadSkills, type Skill, skillsPromptSection } from "../skills/skills.ts";
 import { createMemoryTools, type MemoryEvent, memoryPromptSection } from "../tools/memory.ts";
-import { connectMcpServers, type McpConnections } from "../tools/mcp.ts";
+import {
+  connectMcpServers,
+  type McpCallRecord,
+  type McpConnections,
+  withMcpAudit,
+} from "../tools/mcp.ts";
 import { SEARCH_AUTO_THRESHOLD, ToolRegistry } from "../tools/registry.ts";
 
 /** An event from the outside world, normalized by a trigger. */
@@ -92,6 +97,7 @@ export class AgentService {
   #buildTools(
     engine: PermissionEngine,
     onMemoryEvent: (event: MemoryEvent) => void,
+    onMcpCall: (call: McpCallRecord) => void,
   ): () => NativeTool[] {
     const always: NativeTool[] = [currentTimeTool, ...this.#extraTools];
     if (this.#skills?.length) always.push(createSkillTool(this.#skills));
@@ -109,7 +115,8 @@ export class AgentService {
 
     // Natives and skills stay in context (small, framework-owned); MCP tools
     // defer behind search_tools when the toolset gets big (tools.search).
-    const mcp = this.#mcp?.tools ?? [];
+    // Every MCP call is reported for the run's audit trail.
+    const mcp = withMcpAudit(this.#mcp?.tools ?? [], onMcpCall);
     const mode = this.config.tools?.search ?? "auto";
     const defer = mcp.length > 0 && (
       mode === "on" ||
@@ -143,6 +150,7 @@ export class AgentService {
     const identity = await this.init();
     const startedAt = new Date().toISOString();
     const decisions: PermissionDecision[] = [];
+    const mcpCalls: McpCallRecord[] = [];
     const engine = new PermissionEngine(this.config.permissions, (e) => {
       decisions.push(e.decision);
     });
@@ -162,7 +170,7 @@ export class AgentService {
           identityNote(this.config, identity.name),
       },
       provider: this.#provider,
-      tools: this.#buildTools(engine, (e) => memoryEvents.push(e)),
+      tools: this.#buildTools(engine, (e) => memoryEvents.push(e), (call) => mcpCalls.push(call)),
       input: event.input,
       history,
     });
@@ -183,6 +191,9 @@ export class AgentService {
     }
     for (const memoryEvent of memoryEvents) {
       this.store.recordAudit({ runId, kind: "memory", detail: memoryEvent });
+    }
+    for (const call of mcpCalls) {
+      this.store.recordAudit({ runId, kind: "mcp", detail: call });
     }
     return result;
   }

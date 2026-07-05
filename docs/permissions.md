@@ -31,6 +31,14 @@ A denied action is an ordinary tool result. The model sees `permission denied: r
 
 `run_bash` does not trust the shell: it extracts every executable from pipes and chains and checks each one against `run:`. Command substitution (`$(...)`, backticks, `<(...)`) is rejected outright, because there is no way to check it statically before it runs.
 
+The check reads the executable at the head of each segment; it can't see into the arguments. That is fine for ordinary tools, and it means you should keep programs that run *other* programs off the allowlist. Granting any of these hands over everything:
+
+- shells: `run: [bash]` lets `bash -c '<anything>'` through, since the inner command travels as an opaque string
+- interpreters: `python -c`, `node -e`, `deno run`
+- wrappers and exec flags: `env`, `xargs`, `timeout`, `find -exec`
+
+Grant the specific CLIs the agent's job needs (`gh`, `grep`) and let the [container](#the-layers) be the backstop. The MCP examples that launch a server via `bash -c` are unaffected: that spawn comes from your config at startup and never passes through `run_bash`.
+
 ## Scoped environments
 
 Subprocesses receive only the env vars the config's `env:` block grants, plus `PATH`/`HOME`; the agent process keeps its own ambient environment to itself. The same goes for MCP servers: each one sees only its own `env:` block.
@@ -55,5 +63,5 @@ Enforcement is layered: the app-level engine described above runs inside a runti
 
 Two honest notes on where the layers actually sit:
 
-- The Deno layer allows all *network* egress in the container (`--allow-net`). Per-host enforcement happens in the app-level permission engine, and the container's egress policy is layer 2; restrict it with your network setup where it matters. Automating per-agent egress policy is planned.
+- The Deno layer allows all *network* egress in the container (`--allow-net`). Per-host enforcement happens in the app-level permission engine, and the container's egress policy is layer 2; restrict it with your network setup where it matters.
 - `bash` subprocesses escape the Deno sandbox by design; the container boundary is what contains them. That is why there is no "run on the host" mode.

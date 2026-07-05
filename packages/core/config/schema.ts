@@ -138,6 +138,9 @@ const McpServerSchema = z
     include: z.array(z.string().min(1)).optional().describe(
       "Expose only these tools. Strongly recommended: a fat server must not blow a small model's context.",
     ),
+    readonly: z.boolean().optional().describe(
+      "Expose only tools whose readOnlyHint annotation marks them read-only. A guard against wiring write tools into a read-only job; the hint is self-reported by the server.",
+    ),
   })
   .refine((s) => (s.command === undefined) !== (s.url === undefined), {
     message: "an MCP server needs exactly one of `command` (stdio) or `url` (http)",
@@ -338,6 +341,8 @@ export interface McpServerConfig {
   env?: Record<string, string>;
   /** Expose only these tools. */
   include?: string[];
+  /** Expose only tools whose readOnlyHint annotation marks them read-only. */
+  readonly?: boolean;
 }
 
 /** Deny-by-default allowlists. Omitting a list means the agent can touch nothing on that axis. */
