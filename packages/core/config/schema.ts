@@ -45,6 +45,9 @@ const DiscordTriggerSchema = z.strictObject({
   allow_silence: z.boolean().default(false).describe(
     "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
   ),
+  show_typing: z.boolean().default(false).describe(
+    "Show the typing indicator in the source channel while the agent works. Looks odd with allow_silence: typing may end in no message.",
+  ),
 }).describe("Listen to Discord messages via the gateway; replies go in-channel by default.");
 
 const SlackTriggerSchema = z.strictObject({
@@ -259,6 +262,8 @@ export interface DiscordTriggerConfig {
   reply_channel?: string;
   /** Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
   allow_silence: boolean;
+  /** Show the typing indicator in the source channel while the agent works. */
+  show_typing: boolean;
 }
 
 /** A Slack trigger: listen to messages via Socket Mode. */
