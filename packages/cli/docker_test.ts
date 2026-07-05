@@ -116,6 +116,11 @@ triggers:
   assert(!args.includes("--env-file")); // no env file, no flag
 });
 
+Deno.test("DEFAULT_IMAGE is pinned to the CLI version, never :latest", async () => {
+  const { VERSION } = await import("@looped/core");
+  assertEquals(DEFAULT_IMAGE, `ghcr.io/loopedautomation/agent:${VERSION}`);
+});
+
 Deno.test("naming and lifecycle argv", () => {
   assertEquals(containerName("issue-bot"), "af-issue-bot");
   assertEquals(volumeName("issue-bot"), "issue-bot-data");

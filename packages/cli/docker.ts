@@ -3,9 +3,12 @@
 // never runs an agent on the host; these argv arrays ARE the deployment,
 // the same commands docs/docker-run.md teaches by hand.
 
-import type { AgentConfig } from "@looped/core";
+import { type AgentConfig, VERSION } from "@looped/core";
 
-export const DEFAULT_IMAGE = "ghcr.io/loopedautomation/agent:latest";
+// Pinned to the CLI's own version, never :latest — docker won't re-pull a
+// cached :latest, and a stale image blames the user's config with schema
+// errors. A new CLI means a new tag, which guarantees a matching pull.
+export const DEFAULT_IMAGE = `ghcr.io/loopedautomation/agent:${VERSION}`;
 
 /** Containers are discovered by this label, never by name-guessing. */
 export const LABEL = "af.agent";
