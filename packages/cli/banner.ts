@@ -1,6 +1,8 @@
 // The first-boot banner: shown once per agent, on the run where it names
 // itself. A little something for the devs.
 
+import { LOOP_GRADIENT } from "./style.ts";
+
 const ART = String.raw`
    ██╗      ██████╗  ██████╗ ██████╗ ███████╗██████╗      █████╗ ███████╗
    ██║     ██╔═══██╗██╔═══██╗██╔══██╗██╔════╝██╔══██╗    ██╔══██╗██╔════╝
@@ -8,8 +10,6 @@ const ART = String.raw`
    ██║     ██║   ██║██║   ██║██╔═══╝ ██╔══╝  ██║  ██║    ██╔══██║██╔══╝
    ███████╗╚██████╔╝╚██████╔╝██║     ███████╗██████╔╝    ██║  ██║██║
    ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝     ╚══════╝╚═════╝     ╚═╝  ╚═╝╚═╝`;
-
-const LOOP_GRADIENT = ["#22d3ee", "#38bdf8", "#60a5fa", "#818cf8", "#a78bfa", "#c084fc"];
 
 /** Print the birth banner: gradient art, then the agent's chosen name. */
 export function printBirthBanner(handle: string, name: string) {

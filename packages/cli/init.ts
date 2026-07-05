@@ -245,7 +245,7 @@ function readme(o: InitOptions): string {
         "af run",
         "```",
         "",
-        "(Install the CLI first: `deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash -n af jsr:@looped/af`.)",
+        "(Install the CLI first: `deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker -n af jsr:@looped/af`.)",
       );
       break;
     case "docker":

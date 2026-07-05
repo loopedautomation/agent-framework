@@ -18,9 +18,12 @@ RUN apk add --no-cache bash \
  && mkdir -p /agent /data /deno-dir \
  && chown -R looped:looped /data /deno-dir
 
+# AF_CONTAINER: tells `af run` it's already inside the container, so the
+# entrypoint executes the agent in-process instead of spawning docker.
 ENV DENO_DIR=/deno-dir \
-    LOOPED_DATA_DIR=/data \
-    LOOPED_STATUS_HOST=0.0.0.0
+    AF_DATA_DIR=/data \
+    AF_STATUS_HOST=0.0.0.0 \
+    AF_CONTAINER=1
 
 WORKDIR /looped
 COPY deno.json deno.lock LICENSE ./
