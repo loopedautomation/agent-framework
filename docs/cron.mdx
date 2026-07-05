@@ -55,4 +55,4 @@ volumes:
 
 Each tick runs the agent with `prompt` as input. Results are logged and recorded in the [run history](docker-run.md#persistence-the-data-volume) — a configurable result sink is planned; until then, when the result needs to go somewhere, have the agent deliver it itself through an allowlisted API or CLI ([Permissions](permissions.md)).
 
-Every run reports its status, steps, tokens, and cost, and [`limits`](agent-file.md#limits) cap what an unattended schedule can spend.
+Every run reports its status, steps and tokens, and [`limits`](agent-file.md#limits) cap what an unattended schedule can spend.

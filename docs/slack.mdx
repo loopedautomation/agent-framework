@@ -1,0 +1,40 @@
+---
+title: "Slack"
+description: "Connect an agent to Slack: Socket Mode setup, in-thread replies, and observer agents."
+---
+
+Triggers turn an agent into a long-lived service that waits for events, acts on them, delivers the result, and goes idle. The `slack` trigger connects that loop to a Slack workspace over Socket Mode — an outbound WebSocket, so the agent needs no public endpoint. It watches channels and replies in a thread under the messages that wake it.
+
+```yaml
+triggers:
+  - type: slack
+    channels: ["help"]          # names or ids; omit for all channels the bot is in
+    # require_mention: true     # only respond when @-mentioned (DMs always respond)
+    # token_env: SLACK_BOT_TOKEN (default)
+    # app_token_env: SLACK_APP_TOKEN (default)
+    # from_users: ["U0HAPPY"]   # only handle these authors (Slack user ids)
+    # reply_channel: "C0REVIEW" # post replies here instead of the source thread
+    # allow_silence: true       # a reply of exactly __NO_REPLY__ posts nothing
+```
+
+## Setup
+
+Setting up the Slack app takes about 10 minutes:
+
+1. In [api.slack.com/apps](https://api.slack.com/apps), create a new app (from scratch) in your workspace.
+2. Under **Socket Mode**, enable it and generate an **app-level token** with the `connections:write` scope — this is `SLACK_APP_TOKEN` (`xapp-…`).
+3. Under **OAuth & Permissions**, add the bot scopes `chat:write`, `channels:history`, `groups:history`, `im:history`, and `channels:read`, then install the app to the workspace. The **bot token** it produces is `SLACK_BOT_TOKEN` (`xoxb-…`).
+4. Under **Event Subscriptions**, enable events and subscribe to the bot events `message.channels`, `message.groups`, and `message.im`. Missing event subscriptions are the most common setup failure — the socket connects but nothing arrives.
+5. Export both tokens, invite the bot to a channel (`/invite @your-bot`), and run the agent: `af run agent.yaml`
+
+Replies go into a thread under the triggering message; conversations are keyed per thread (a DM is one rolling conversation), and `memory.scope: thread` continues them ([Memory](agent-file.md#memory)). The agent ignores bots, itself, message edits, and empty messages; long replies split at Slack's recommended 4000-char limit. If you change scopes later, reinstall the app — Slack applies them only on install.
+
+## Observer agents
+
+Three optional keys together turn the trigger from a chatbot into an observer — an agent that watches channels, reacts to specific people, and reports elsewhere (a review bot, a moderation assistant, a coach):
+
+- `from_users` — handle only these authors (Slack user ids, the `U…` kind). The filter runs *before* the model is called: everyone else's messages are dropped in the trigger and never reach the provider.
+- `reply_channel` — deliver replies to a dedicated channel instead of the source thread. Out-of-channel replies quote the triggering message and link back to it.
+- `allow_silence` — let the agent say nothing. Instruct it in `purpose` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message.
+
+Every run — replied or silent — lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps and tokens.

@@ -15,7 +15,6 @@ description: Turns team Discord messages into GitHub issues.
 model:
   provider: openai-compatible
   id: gpt-5.4-mini
-  pricing: { input_per_mtok: 0.15, output_per_mtok: 0.60 }
 
 purpose: |
   You turn Discord messages into well-formed GitHub issues in myorg/myrepo,
@@ -41,7 +40,6 @@ memory:
 
 limits:
   max_steps: 15
-  max_cost: 0.05
 ```
 
 Four keys are required: `handle`, `description`, `model`, and `purpose`. Everything else is optional, and unknown keys are validation errors — a misspelled `permisions:` fails immediately rather than being silently ignored.
@@ -63,20 +61,16 @@ model:
   provider: openai-compatible   # or: anthropic
   id: gpt-5.4-mini
   # base_url: http://localhost:11434/v1   # any compatible endpoint, e.g. Ollama
-  # api_key_env: OPENAI_API_KEY           # a reference, never a value
+  # api_key_env: OPENAI_API_KEY           # names the env var; the key stays out of config
   # small: gpt-5.4-nano                   # for cheap internal calls
   # fallbacks: [gpt-5.4]                  # tried in order when the primary fails
-  pricing:
-    input_per_mtok: 0.15
-    output_per_mtok: 0.60
 ```
 
-- **`provider`** is a dialect, not a vendor: `openai-compatible` covers OpenAI, Ollama, vLLM, and anything speaking that API; `anthropic` is the native Anthropic API. Swapping providers is one config line — no provider is load-bearing.
+- **`provider`** is a dialect: `openai-compatible` covers OpenAI, Ollama, vLLM, and anything speaking that API; `anthropic` is the native Anthropic API. Swapping providers is one config line — no provider is load-bearing.
 - **`base_url`** points `openai-compatible` at any endpoint. Local models need no key.
-- **`api_key_env`** names the env var holding the key — configs hold *references*, never secret values. Defaults to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider.
+- **`api_key_env`** names the env var holding the key; the key itself stays out of the config. Defaults to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider.
 - **`small`** is the model for cheap internal calls (the naming ritual, summaries). Defaults to the main `id` — set it to something tiny and these calls round to free.
 - **`fallbacks`** names model ids to try in order when the primary fails — validated today, with the runtime chain still landing ([Models](models.md#when-the-provider-fails)).
-- **`pricing`** is your model's real prices, in USD per million tokens. It enables per-run cost reporting and is required to enforce `limits.max_cost` — a cap can't be enforced without prices.
 
 The full model story — dialects, keys, local endpoints, retries — is [Models](models.md).
 
@@ -87,14 +81,13 @@ memory:
   scope: thread   # default: none
 ```
 
-`none` (the default) starts every run fresh. `thread` persists conversation history per conversation key — the Discord channel or thread, the webhook caller's `conversation_id`, or the REPL session — so follow-ups work ("make it weekly instead"). History lives in the agent's own SQLite file, nowhere else.
+`none` (the default) starts every run fresh. `thread` persists conversation history per conversation key — the chat channel or thread (Discord, Slack, Telegram), the webhook caller's `conversation_id`, or the REPL session — so follow-ups work ("make it weekly instead"). History lives in the agent's own SQLite file, nowhere else.
 
 ## Limits
 
 ```yaml
 limits:
   max_steps: 20     # default: 20 inner-loop iterations
-  max_cost: 0.05    # USD per run; no default — requires model.pricing
 ```
 
 These limits protect unattended operation and are on by default. Every run ends with a typed status:
@@ -103,10 +96,9 @@ These limits protect unattended operation and are on by default. Every run ends 
 | --- | --- |
 | `ok` | The agent finished its job. |
 | `error_max_steps` | The run hit `limits.max_steps` LLM calls. |
-| `error_max_cost` | The run hit `limits.max_cost` USD. |
 | `error_provider` | The provider failed after retries. |
 
-A run that exceeds its budget ends with a status, not a runaway bill. Statuses, steps, tokens, and cost are recorded per run — see [the data volume](docker-run.md#persistence-the-data-volume).
+A run that exceeds its budget ends immediately with the matching status, so an unattended agent can only spend what you've allowed. Each run's status, step count and token usage are recorded in [the data volume](docker-run.md#persistence-the-data-volume).
 
 ## Env
 
@@ -115,12 +107,12 @@ env:
   GITHUB_TOKEN: ${GITHUB_TOKEN}
 ```
 
-The `env:` block grants environment variables to tools and MCP servers — and only those; subprocesses never inherit the agent process's ambient environment. Values may be `${VAR}` references, resolved at startup from the process env, then from `/run/secrets/<VAR>` (Docker Compose file secrets). A missing reference fails at startup, not on the first request. Secrets never enter the model's context — the full story is in [Permissions](permissions.md#secrets).
+The `env:` block grants environment variables to tools and MCP servers — and only those; subprocesses never inherit the agent process's ambient environment. Values may be `${VAR}` references, resolved at startup from the process env, then from `/run/secrets/<VAR>` (Docker Compose file secrets). A missing reference fails at startup, before any event is handled. Secrets never enter the model's context — the full story is in [Permissions](permissions.md#secrets).
 
 ## The blocks with their own pages
 
-- **`triggers:`** — the events that wake the agent. With triggers, `af run` starts a long-lived service; without, an interactive REPL. → [Discord](discord.mdx) · [Webhook](webhook.mdx) · [Cron](cron.mdx)
-- **`skills:`** — markdown files that teach the agent how to use something well; they add knowledge, never capability. → [Skills](skills.md)
+- **`triggers:`** — the events that wake the agent. With triggers, `af run` starts a long-lived service; without, an interactive REPL. → [Discord](discord.mdx) · [Slack](slack.mdx) · [Telegram](telegram.mdx) · [Webhook](webhook.mdx) · [Cron](cron.mdx)
+- **`skills:`** — markdown files that teach the agent how to use something well; capability stays with the config. → [Skills](skills.md)
 - **`tools:`** — capability beyond the natives: MCP servers, and tool search to keep their schemas out of context. → [Tools](tools.md)
 - **`permissions:`** — deny-by-default allowlists for hosts, executables, and paths. Omit the block and the agent can touch nothing. → [Permissions](permissions.md)
 

@@ -1,22 +1,22 @@
 ---
 title: "Skills"
-description: "Teach the agent to use any CLI or API with a markdown file. Skills add knowledge, never capability."
+description: "Teach the agent to use any CLI or API with a markdown file. Skills add knowledge; capability stays with the config."
 ---
 
-A skill is a markdown file that teaches the agent how to use something well. Skills carry **knowledge, never capability**: a skill cannot grant permissions — the config's `permissions:` block remains the sole authority, so the worst a bad skill can be is misleading documentation.
+A skill is a markdown file that teaches the agent how to use something well. A skill carries knowledge and nothing else: it cannot grant permissions, and the config's `permissions:` block stays the sole authority over what the agent is allowed to do. This means that the worst a bad skill can be is misleading documentation.
 
 ```yaml
 skills:
   - ./skills/gh-issues.md
 permissions:
-  run: [gh]        # the capability half of the recipe
+  run: [gh]        # the grant that makes gh runnable
 ```
 
-This split is the standard recipe for integrating anything: **the [custom image](docker-run.md#the-custom-image-story) provides the binary, the skill provides the knowledge, and the [permissions](permissions.md) provide the safety.** Most integrations don't need an MCP server — a good CLI plus a page of instructions serves a small model better than forty tool schemas in its context.
+This split is how you integrate almost anything: the [custom image](docker-run.md#the-custom-image-story) provides the binary, the skill explains how to use it and the [permissions](permissions.md) block allows it to run. For most integrations, you don't need an MCP server. A CLI and a well written skill can go a long way.
 
 ## Authoring a skill
 
-Skill files take optional YAML frontmatter (`name`, `description`); otherwise the filename and first line stand in:
+A skill file can open with YAML frontmatter (`name` and `description`); if you leave it out, the filename and the first line stand in:
 
 ```markdown
 ---
@@ -32,11 +32,11 @@ Paths in `skills:` are relative to the agent file. Write a skill the way you'd w
 
 ## Progressive disclosure
 
-Skills stay cheap-model friendly by staying out of context until needed: the system prompt carries **one line per skill** (its name and description); the agent reads the full document with the `read_skill` tool only when the task calls for it. A shelf of ten skills costs ten lines, not ten documents.
+A skill stays out of the model's context until it's needed. The system prompt carries one line per skill (its name and description), and the agent reads the full document with the `read_skill` tool when the task calls for it. This means that an agent with ten skills spends ten lines of context on them until one is actually read.
 
 ## First-party skills
 
 The [`skills/`](https://github.com/loopedautomation/agent-framework/tree/main/skills) directory holds the skills maintained with the framework:
 
-- [`gh-issues`](https://github.com/loopedautomation/agent-framework/blob/main/skills/gh-issues.md) — create and manage GitHub issues with the `gh` CLI (used by the [issue-bot example](https://github.com/loopedautomation/agent-framework/tree/main/examples/issue-bot)).
-- [`looped-authoring`](https://github.com/loopedautomation/agent-framework/blob/main/skills/looped-authoring.md) — how to scaffold and validate Looped agents with the `af` CLI (used by the [agent-builder example](https://github.com/loopedautomation/agent-framework/tree/main/examples/agent-builder) — the agent that builds agents).
+- [`gh-issues`](https://github.com/loopedautomation/agent-framework/blob/main/skills/gh-issues.md) - create and manage GitHub issues with the `gh` CLI. The [issue-bot example](https://github.com/loopedautomation/agent-framework/tree/main/examples/issue-bot) uses it.
+- [`looped-authoring`](https://github.com/loopedautomation/agent-framework/blob/main/skills/looped-authoring.md) - scaffold and validate Looped agents with the `af` CLI. The [agent-zero example](https://github.com/loopedautomation/agent-framework/tree/main/examples/agent-zero), the agent that builds agents, uses it.

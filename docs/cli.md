@@ -1,19 +1,22 @@
 ---
 title: "CLI"
-description: "Every af command: init, run, validate, flags, schema, discord-invite."
+description: "Every af command: init, run, up, ps, down, validate, flags, schema, discord-invite."
 ---
 
 `af` is the framework's CLI, published to JSR as [`@looped/af`](https://jsr.io/@looped/af). Install it once with Deno:
 
 ```sh
-deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash -n af jsr:@looped/af
+deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker -n af jsr:@looped/af
 ```
 
-Config paths default to `./agent.yaml`, and everywhere a file is expected, `LOOPED_AGENT_CONFIG` (the YAML itself in an env var) replaces it for [file-less deploys](docker-run.md#file-less-deploys-config-via-env-var).
+The CLI is a docker frontend: agents always execute in the published container, never on your machine. Pointing `af` at an agent file starts the container with the config mounted, the data volume attached and the env file passed — the same commands the [Docker run](docker-run.md) page teaches by hand. Config paths default to `./agent.yaml`.
 
 ```
 af init [name]            Scaffold a new agent project (agent, secrets, deployment)
-af run [agent.yaml]       Run an agent (service mode with triggers, REPL without)
+af run [agent.yaml]       Run one agent in Docker, interactive (REPL without triggers)
+af up [agent.yaml...]     Start agents in Docker — foreground; -d to detach
+af ps                     List af containers
+af down [target...]       Stop and remove af containers (files or handles; none = all)
 af validate [agent.yaml]  Validate an agent definition
 af flags [agent.yaml]     Print compiled Deno permission flags
 af schema                 Print the agent.yaml JSON Schema
@@ -23,7 +26,7 @@ af discord-invite <agent.yaml>
 
 ## af init
 
-Scaffolds a complete agent project into `<name>/`. Interactive by default; every question is also a flag, so it scripts as one line:
+`af init` scaffolds a complete agent project into `<name>/`. It's interactive by default, and every question is also a flag, so you can script it as one line:
 
 ```sh
 af init issue-helper --trigger discord --provider openai-compatible \
@@ -40,18 +43,42 @@ af init issue-helper --trigger discord --provider openai-compatible \
 | `--handle` / `[name]` | lowercase, hyphens | what you call the agent |
 | `--dir` | a directory | where to scaffold (default `.`) |
 
-Every shape generates `agent.yaml`, `.env.example` (every secret the config references, ready to copy to `.env`), and a `README.md` with the exact deploy steps. The deploy shapes add:
+Every shape generates `agent.yaml`, `.env.example` (every secret the config references, ready to copy to `.env`) and a `README.md` with the exact deploy steps. Each deploy shape then adds its own files:
 
-- **`local`** — nothing more: `af validate`, `af run`.
-- **`docker`** — the `docker run` incantation in the README (mounted config, env file, data volume).
-- **`compose`** — `compose.yaml` (+ `Dockerfile` when `--clis` needs one), `.gitignore`.
-- **`compose-inline`** — a single `compose.yaml` with the whole agent config defined inline in a top-level `configs:` element and mounted at `/agent/agent.yaml` — [one file, no agent.yaml](docker-compose.md#one-compose-file-the-whole-agent-inline).
-- **`paas-git`** — `Dockerfile` + `compose.yaml` for platforms that build from a repo (e.g. Coolify): push, connect, set env vars, deploy.
-- **`paas-env`** — for "image + env vars" platforms: deploy the stock image with the config in `LOOPED_AGENT_CONFIG`, no files at all.
+- **`local`** - nothing more; you `af validate` and `af run`.
+- **`docker`** - the `docker run` command in the README, with the mounted config, env file and data volume.
+- **`compose`** - a `compose.yaml`, a `Dockerfile` when `--clis` needs one and a `.gitignore`.
+- **`compose-inline`** - a single `compose.yaml` with the agent config [defined inline](docker-compose.md#one-compose-file-the-whole-agent-inline) in a top-level `configs:` element and mounted at `/agent/agent.yaml`.
+- **`paas-git`** - a `Dockerfile` and `compose.yaml` for platforms that build from a repo (Coolify, for example): you push, connect, set the env vars and deploy.
+- **`paas-env`** - for platforms where a deploy is an image plus env vars: the stock image with the config in `AF_AGENT_CONFIG` and no files at all.
 
 ## af run
 
-Runs the agent: a long-lived service if the config has `triggers:`, an interactive REPL otherwise. First boot performs the naming ritual and prints the birth banner. Service mode starts the triggers and the [status surface](docker-run.md#the-status-surface), and shuts down cleanly on SIGINT/SIGTERM.
+`af run` starts one agent in Docker, interactive and in the foreground (`docker run -it --rm`): a long-lived service if the config has `triggers:` and a REPL if it doesn't. On first boot the agent picks its name and prints the birth banner. Ctrl-c stops the container; the `<handle>-data` volume stays, so the identity survives.
+
+Inside the published image the entrypoint calls the same command with `AF_CONTAINER=1` set, which makes `run` execute the agent in-process — that branch *is* the container entrypoint. Set `AF_CONTAINER=1` yourself only for framework development.
+
+## af up
+
+`af up` starts one container per agent file. The foreground default streams every agent's logs with a colored `[handle]` prefix and stops them all on ctrl-c; `-d` detaches with `--restart unless-stopped` and waits until each agent answers on its status port:
+
+```
+$ af up -d issue-bot/agent.yaml helpdesk/agent.yaml
+✓ issue-bot  running · status http://127.0.0.1:55031
+✓ helpdesk   running · status http://127.0.0.1:55047
+
+af ps to inspect · af down to stop
+```
+
+For every agent it mounts the config and any `skills:` read-only, attaches the `<handle>-data` volume, passes the `.env` next to the agent file (`--env-file` overrides), publishes the [status surface](docker-run.md#the-status-surface) on an ephemeral loopback port and webhook trigger ports directly, and runs the container `--read-only`. `--image` overrides the image; `--dry-run` prints the docker command(s) and starts nothing. A handle that already has a container fails loudly — `af down` it first.
+
+## af ps
+
+`af ps` lists the af-managed containers (running or stopped, discovered by the `af.agent` label) with their state, uptime and status-surface address.
+
+## af down
+
+`af down` gracefully stops and removes af containers — pass agent files or handles, or nothing for all of them. Data volumes are never removed: a lost volume is a fresh identity.
 
 ## af validate
 
@@ -65,11 +92,11 @@ Runs the agent: a long-lived service if the config has `triggers:`, an interacti
   ⚠ not set in this environment: GITHUB_TOKEN
 ```
 
-Parses the config (unknown keys are hard errors), prints the identity, triggers, compiled sandbox flags, and every env var referenced — warning on any that aren't set.
+`af validate` parses the config (unknown keys are hard errors) and prints the identity, the triggers, the compiled sandbox flags and every env var the config references, with a warning on any that aren't set in the environment.
 
 ## af flags
 
-Prints the Deno permission flags the config's `permissions:` block compiles to — [layer 1 of the sandbox](permissions.md#the-layers):
+`af flags` prints the Deno permission flags the config's `permissions:` block compiles to, which is [layer 1 of the sandbox](permissions.md#the-layers):
 
 ```
 --allow-net=api.github.com --allow-run=gh
@@ -77,8 +104,8 @@ Prints the Deno permission flags the config's `permissions:` block compiles to �
 
 ## af schema
 
-Prints the agent.yaml [JSON Schema](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json) — the same one the runtime enforces and [editors validate against](agent-file.md#editor-support).
+`af schema` prints the agent.yaml [JSON Schema](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json). It's the same schema the runtime enforces and the one [editors validate against](agent-file.md#editor-support).
 
 ## af discord-invite
 
-Prints the bot's OAuth invite URL with the correct scopes and permissions (View Channels, Send Messages, Read Message History) — no bitfield math. Needs the config (to find the Discord trigger's `token_env`) and that token set in the environment; it looks up the application id from the token. Part of the [Discord setup](discord.mdx#setup).
+`af discord-invite` prints the bot's OAuth invite URL with the correct scopes and permissions (View Channels, Send Messages and Read Message History), so you don't have to do the bitfield math yourself. It needs the config, to find the Discord trigger's `token_env`, and that token set in the environment; it looks up the application id from the token. It's part of the [Discord setup](discord.mdx#setup).

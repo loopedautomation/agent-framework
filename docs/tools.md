@@ -1,13 +1,13 @@
 ---
 title: "Tools"
-description: "The native toolset, MCP servers, and tool search. Capability is added deliberately, never by default."
+description: "The native toolset, MCP servers and tool search. Every capability is added deliberately."
 ---
 
-The base toolset is deliberately small: a handful of natives, gated by permissions. Everything beyond that is added explicitly — a [skill](skills.md) plus a CLI, or an MCP server — because every tool an agent carries is attack surface, context cost, and one more way for a small model to get confused.
+We kept the base toolset small: a handful of native tools, gated by permissions. Anything beyond that is something you add deliberately, either a [skill](skills.md) plus a CLI or an MCP server. Every tool an agent carries is more attack surface, more context and one more way for a small model to get confused, so the framework ships with very little and lets you add the rest.
 
 ## Native tools
 
-**Tools follow permissions.** A native exists for the agent only if the [permissions](permissions.md) block grants what it needs — no dead tool schemas burning context, and nothing to misuse:
+Tools follow permissions. A native tool exists for the agent only when the [permissions](permissions.md) block grants what it needs. This means that no unused tool schema takes up context, and there is nothing sitting there to misuse:
 
 | Tool | Present when | Notes |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ The base toolset is deliberately small: a handful of natives, gated by permissio
 | `read_skill` | `skills:` lists any | [progressive disclosure](skills.md#progressive-disclosure) |
 | `search_tools` | tool search is deferring | see below |
 
-An agent with no `permissions:` block gets `current_time` and whatever `read_skill` its skills warrant — nothing else.
+An agent with no `permissions:` block gets `current_time`, plus `read_skill` if it has skills. Nothing else.
 
 ## MCP servers
 
@@ -38,24 +38,24 @@ tools:
 ```
 
 - Tools are namespaced `mcp__github__create_issue` in the loop and the audit trail.
-- **`include:` is strongly recommended** — a 40-tool server is 40 schemas in a small model's context; expose the three you need.
-- Each server sees only its own `env:` block (values may be `${VAR}` references), never the agent's environment.
+- We strongly recommend `include:`. A 40-tool server puts 40 schemas into a small model's context; expose the three you actually need.
+- Each server sees only its own `env:` block (values may be `${VAR}` references); the agent's own environment stays private.
 - Results are truncated at 8k chars; servers connect at startup and close on shutdown.
 
 ## Tool search
 
-`include:` is the manual way to keep context lean; tool search is the automatic one. When the total toolset grows past 10, MCP tool schemas stay out of context entirely — the model gets a single `search_tools` schema instead of forty, and activates exactly what the task needs, mid-run:
+`include:` keeps context lean by hand; tool search does the same thing automatically. When the total toolset grows past 10, MCP tool schemas stay out of context entirely. The model gets a single `search_tools` schema, and it activates the tools the task needs while the run is underway:
 
 ```yaml
 tools:
   search: auto   # auto (default) | on | off
 ```
 
-- `auto` — defer MCP tools when the agent carries more than 10 tools in total; below that, everything loads normally.
-- `on` / `off` — always or never defer, regardless of count.
+- `auto` - defer MCP tools when the agent carries more than 10 tools in total; below that, everything loads normally.
+- `on` / `off` - always or never defer, regardless of count.
 
-A search is a keyword match against tool names and descriptions; the top matches (up to five, with a relevance cutoff) become callable for the rest of the run. Native and skill tools are never deferred — they're small and framework-owned. `include:` and `search` compose: filter the server down to what the agent should ever see, and let search handle when it sees it.
+A search is a keyword match against tool names and descriptions; the top matches (up to five, with a relevance cutoff) become callable for the rest of the run. Native and skill tools always load, since they are small and framework-owned. `include:` and `search` compose: `include:` filters the server down to what the agent should ever see, and search decides when it sees it.
 
 ## Custom tools
 
-`tools.custom` (TypeScript tool modules) is planned but **not yet implemented** — the config loader rejects it loudly rather than silently ignoring it ([#12](https://github.com/loopedautomation/agent-framework/issues/12)). Today, the escape hatch is the same as ever: give the agent a CLI and a [skill](skills.md).
+`tools.custom` (TypeScript tool modules) is planned and hasn't landed yet; the config loader rejects the key loudly, so a config that relies on it fails immediately ([#12](https://github.com/loopedautomation/agent-framework/issues/12)). In the meantime, give the agent a CLI and a [skill](skills.md).

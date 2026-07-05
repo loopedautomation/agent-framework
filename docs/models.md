@@ -1,9 +1,9 @@
 ---
 title: "Models"
-description: "The two provider dialects, API keys, local models, retry behavior, and cost reporting."
+description: "The two provider dialects, API keys, local models, and retry behavior."
 ---
 
-Every agent names its model in the required `model:` block; there is no fleet-wide default. The `provider` field is a **dialect, not a vendor**: two dialects cover effectively every hosted and local endpoint, and swapping providers is a one-line change. The short version lives in [Agent Config](agent-file.md#model); this page covers the details.
+Every agent names its model in the required `model:` block; there is no fleet-wide default. The `provider` field is a **dialect**: two dialects cover effectively every hosted and local endpoint, and swapping providers is a one-line change. The short version lives in [Agent Config](agent-file.md#model); this page covers the details.
 
 ```yaml
 model:
@@ -24,7 +24,7 @@ model:
 
 ## API keys
 
-Configs hold *references*, never secret values. At startup the runtime reads the key from the environment variable named by `api_key_env`, defaulting to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider:
+The config names an environment variable; the key itself stays out of the file. At startup the runtime reads the key from the environment variable named by `api_key_env`, defaulting to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider:
 
 ```yaml
 model:
@@ -35,7 +35,7 @@ model:
 
 Supply the variable the way your deployment supplies env: `export` locally, `--env-file .env` with `docker run`, `env_file:` in compose. One subtlety: the provider key is read straight from the process environment — unlike `${VAR}` references in the [`env:` block](agent-file.md#env), it does not fall back to `/run/secrets/<VAR>` files.
 
-A missing key fails at startup, never on the first request:
+A missing key fails at startup, before any event is handled:
 
 ```
 missing API key: set OPENAI_API_KEY (or point model.api_key_env at the right env var)
@@ -74,21 +74,6 @@ Transient failures retry themselves: rate limits (HTTP 429), overload (5xx), and
 A call that still fails ends the run with status `error_provider` and a one-line reason. The *run* fails; the *service* stays up, waiting for the next event — statuses are in the [limits table](agent-file.md#limits).
 
 **`fallbacks`** declares model ids to try in order when the primary fails. The schema accepts and validates the field today, but the runtime chain hasn't landed yet — until it does, a failed primary ends the run `error_provider` regardless of the list.
-
-## Pricing and cost
-
-The framework can't know your negotiated prices — or what your proxy charges — so cost is explicit (until models.dev integration lands):
-
-```yaml
-model:
-  provider: openai-compatible
-  id: gpt-5.4-mini
-  pricing:
-    input_per_mtok: 0.15    # USD per million input tokens
-    output_per_mtok: 0.60   # USD per million output tokens
-```
-
-With `pricing` set, every run records its cost alongside status, steps, and tokens, and `limits.max_cost` becomes enforceable — a cap can't be enforced without prices. Setting `limits.max_cost` without `pricing` is a validation error, not a silent no-op ([Limits](agent-file.md#limits)).
 
 ## What is deliberately not configurable
 

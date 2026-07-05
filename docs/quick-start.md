@@ -67,7 +67,7 @@ Meridian> It's 21:14 UTC on July 3, 2026.
 [ok · 2 steps · 743in/41out tokens · $0.000136]
 ```
 
-Your first agent is now running locally. The image's default command runs the mounted config, and the `/data` volume holds the agent's memory and identity — persist it and the agent keeps the name it chose. Every run reports its status, step count, token usage, and cost.
+Your first agent is now running locally. The image's default command runs the mounted config, and the `/data` volume holds the agent's memory and identity — persist it and the agent keeps the name it chose. Every run reports its status, step count and token usage.
 
 ## What's next
 
