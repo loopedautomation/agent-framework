@@ -7,8 +7,8 @@ import { NO_REPLY, splitMessage } from "./text.ts";
 // ~200 lines keeps the container minimal (Plan 0, principle 8).
 
 const API = "https://discord.com/api/v10";
-// GUILDS | GUILD_MESSAGES | MESSAGE_CONTENT
-const INTENTS = (1 << 0) | (1 << 9) | (1 << 15);
+// GUILDS | GUILD_MESSAGES | DIRECT_MESSAGES | MESSAGE_CONTENT
+const INTENTS = (1 << 0) | (1 << 9) | (1 << 12) | (1 << 15);
 
 export { NO_REPLY, splitMessage };
 
@@ -51,9 +51,9 @@ export interface DiscordMessage {
 
 /** Message filters shared by {@linkcode shouldHandle} and {@linkcode DiscordTriggerOptions}. */
 export interface DiscordFilterOptions {
-  /** Channel names or ids to listen in; empty/undefined = all channels. */
+  /** Channel names or ids to listen in; empty/undefined = all channels. DMs always pass. */
   channels?: string[];
-  /** Only handle messages that @-mention the bot. */
+  /** Only handle messages that @-mention the bot (DMs always pass). */
   requireMention?: boolean;
   /** Only handle messages from these authors (user ids or usernames); empty/undefined = anyone. */
   fromUsers?: string[];
@@ -74,12 +74,15 @@ export function shouldHandle(
     !opts.fromUsers.some((u) => u === msg.author.id || u === msg.author.username)
   ) return false;
   if (!msg.content.trim()) return false;
-  if (opts.channels?.length) {
+  // A DM addresses the bot by definition: the channel filter and the mention
+  // gate only apply to guild messages (DMs carry no guild_id).
+  const isDM = !msg.guild_id;
+  if (!isDM && opts.channels?.length) {
     const match = opts.channels.includes(msg.channel_id) ||
       (channelName !== undefined && opts.channels.includes(channelName));
     if (!match) return false;
   }
-  if (opts.requireMention && !msg.mentions?.some((m) => m.id === botUserId)) return false;
+  if (!isDM && opts.requireMention && !msg.mentions?.some((m) => m.id === botUserId)) return false;
   return true;
 }
 
@@ -218,6 +221,9 @@ export class DiscordTrigger implements Trigger {
               token: this.#opts.token,
               intents: INTENTS,
               properties: { os: "linux", browser: "looped-af", device: "looped-af" },
+              // Explicit presence so the bot reads as online for as long as
+              // the gateway connection is up.
+              presence: { since: null, activities: [], status: "online", afk: false },
             },
           }));
           break;

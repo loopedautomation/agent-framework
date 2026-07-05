@@ -77,7 +77,7 @@
                 "const": "discord"
               },
               "channels": {
-                "description": "Channel names or ids to listen in; omit for all channels the bot can see.",
+                "description": "Channel names or ids to listen in; omit for all channels the bot can see. DMs always pass.",
                 "type": "array",
                 "items": {
                   "type": "string",
@@ -85,7 +85,7 @@
                 }
               },
               "require_mention": {
-                "description": "Only respond when the bot is @-mentioned.",
+                "description": "Only respond when the bot is @-mentioned. DMs always address the bot.",
                 "type": "boolean"
               },
               "token_env": {

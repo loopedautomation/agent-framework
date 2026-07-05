@@ -15,6 +15,7 @@ function msg(overrides: Partial<DiscordMessage>): DiscordMessage {
   return {
     id: "m1",
     channel_id: "c-issues",
+    guild_id: "g1",
     content: "the export breaks on big files",
     author: { id: "user-1" },
     ...overrides,
@@ -41,6 +42,15 @@ Deno.test("shouldHandle: require_mention", () => {
   const opts = { requireMention: true };
   assert(!shouldHandle(msg({}), BOT_ID, "issues", opts));
   assert(shouldHandle(msg({ mentions: [{ id: BOT_ID }] }), BOT_ID, "issues", opts));
+});
+
+Deno.test("shouldHandle: DMs skip the channel filter and the mention gate", () => {
+  const dm = msg({ guild_id: undefined, channel_id: "dm-1" });
+  assert(shouldHandle(dm, BOT_ID, undefined, { channels: ["issues"], requireMention: true }));
+  // from_users still applies in DMs
+  assert(!shouldHandle(dm, BOT_ID, undefined, { fromUsers: ["someone-else"] }));
+  // and the bot's own DMs are still ignored
+  assert(!shouldHandle(msg({ guild_id: undefined, author: { id: BOT_ID } }), BOT_ID, undefined, {}));
 });
 
 Deno.test("shouldHandle: from_users matches by id or username, drops everyone else", () => {
