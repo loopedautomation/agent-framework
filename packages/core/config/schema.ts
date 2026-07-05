@@ -30,9 +30,11 @@ const ModelConfigSchema = z.strictObject({
 const DiscordTriggerSchema = z.strictObject({
   type: z.literal("discord"),
   channels: z.array(z.string().min(1)).optional().describe(
-    "Channel names or ids to listen in; omit for all channels the bot can see.",
+    "Channel names or ids to listen in; omit for all channels the bot can see. DMs always pass.",
   ),
-  require_mention: z.boolean().optional().describe("Only respond when the bot is @-mentioned."),
+  require_mention: z.boolean().optional().describe(
+    "Only respond when the bot is @-mentioned. DMs always address the bot.",
+  ),
   token_env: z.string().min(1).default("DISCORD_BOT_TOKEN").describe(
     "Env var holding the Discord bot token.",
   ),
@@ -250,9 +252,9 @@ export interface ModelConfig {
 export interface DiscordTriggerConfig {
   /** Discriminant for TriggerConfig. */
   type: "discord";
-  /** Channel names or ids to listen in; omit for all channels the bot can see. */
+  /** Channel names or ids to listen in; omit for all channels the bot can see. DMs always pass. */
   channels?: string[];
-  /** Only respond when the bot is @-mentioned. */
+  /** Only respond when the bot is @-mentioned. DMs always address the bot. */
   require_mention?: boolean;
   /** Env var holding the Discord bot token. */
   token_env: string;
