@@ -1,20 +1,12 @@
 name: Publish base image
 
-# Two lanes, mirroring JSR's immutability:
-#   push to main    → :latest and :<sha> (moving tags, track main)
-#   release publish → :X.Y.Z, :X.Y, :X — built once from the tagged commit,
-#                     never rebuilt, exactly like the JSR packages published
-#                     from the same release event. The CLI pins its default
-#                     image to :X.Y.Z (packages/cli/docker.ts).
+# Images are born on release, exactly like the JSR packages published from
+# the same event:
+#   :X.Y.Z, :X.Y, :X — immutable, built once from the tagged commit
+#   :latest          — moves to the newest release
+# The CLI pins its default image to :X.Y.Z (packages/cli/docker.ts).
+# workflow_dispatch pushes only :<sha> — a test build, no channel moves.
 on:
-  push:
-    branches: [main]
-    paths:
-      - images/**
-      - packages/**
-      - deno.json
-      - deno.lock
-      - .github/workflows/publish-image.yml
   release:
     types: [published]
   workflow_dispatch:
@@ -39,9 +31,9 @@ jobs:
               echo "release tag $V != VERSION $SRC in packages/core/mod.ts" >&2
               exit 1
             fi
-            echo "tags=$IMAGE:$V,$IMAGE:${V%.*},$IMAGE:${V%%.*}" >> "$GITHUB_OUTPUT"
+            echo "tags=$IMAGE:$V,$IMAGE:${V%.*},$IMAGE:${V%%.*},$IMAGE:latest" >> "$GITHUB_OUTPUT"
           else
-            echo "tags=$IMAGE:latest,$IMAGE:$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            echo "tags=$IMAGE:$GITHUB_SHA" >> "$GITHUB_OUTPUT"
           fi
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
