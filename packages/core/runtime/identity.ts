@@ -12,21 +12,64 @@ export interface AgentIdentity {
 
 const NAME_KEY = "name";
 
+// Left to its own devices, every agent independently "chooses" the same
+// modal name — famously Nova. Two counters: name the attractors so the
+// model steers around them, and hand each birth three random spark words
+// so the search starts somewhere different.
+const OVERUSED_NAMES = "Nova, Aria, Echo, Sage, Luna, Lyra, Aurora";
+
+const SPARK_WORDS = [
+  "amber",
+  "basalt",
+  "cedar",
+  "delta",
+  "ember",
+  "fjord",
+  "garnet",
+  "harbor",
+  "indigo",
+  "juniper",
+  "kestrel",
+  "lantern",
+  "meridian",
+  "nimbus",
+  "ochre",
+  "prism",
+  "quartz",
+  "reef",
+  "saffron",
+  "tundra",
+  "umber",
+  "vellum",
+  "willow",
+  "zenith",
+];
+
+function sparkWords(): string {
+  const picks = new Set<string>();
+  while (picks.size < 3) {
+    picks.add(SPARK_WORDS[Math.floor(Math.random() * SPARK_WORDS.length)]);
+  }
+  return [...picks].join(", ");
+}
+
 // When the model responds but the name is unusable, the agent still gets a
 // real name — drawn deterministically from a pool, persisted like any other.
+// The pool shares no names with OVERUSED_NAMES; determinism keeps it out of
+// the convergence problem, but an agent told to avoid Nova shouldn't be one.
 const FALLBACK_NAMES = [
   "Ada",
-  "Echo",
+  "Ember",
   "Helix",
   "Iris",
   "Juno",
   "Möbius",
-  "Nova",
+  "Nyx",
   "Orbit",
   "Piper",
   "Quinn",
   "Rio",
-  "Sage",
+  "Sol",
   "Tess",
   "Vega",
   "Wren",
@@ -70,11 +113,14 @@ export async function ensureIdentity(
       system: "You are a newly created agent choosing your own name — a one-time ritual. " +
         "Pick a short, memorable personal name (one word, or two at most) that suits " +
         "your job. Not a description, not your job title — a name. " +
+        `Avoid the names agents before you always reach for: ${OVERUSED_NAMES}. ` +
         "Reply with the name only: no punctuation, no explanation.",
       messages: [{
         role: "user",
         content: `Your job: ${config.description}\n` +
-          `Your operator calls you "${config.handle}". What is your name?`,
+          `Your operator calls you "${config.handle}".\n` +
+          `Three spark words, if you want a starting point: ${sparkWords()}.\n` +
+          `What is your name?`,
       }],
       maxTokens: 20,
     });

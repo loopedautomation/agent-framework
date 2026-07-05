@@ -46,6 +46,20 @@ Deno.test("naming ritual: happens once, persists, uses the small model role", as
   store.close();
 });
 
+Deno.test("naming ritual: the prompt steers away from the modal names", async () => {
+  const store = new Store(":memory:");
+  const provider = namer("Basalt");
+  await ensureIdentity(CONFIG, provider, store);
+
+  const req = provider.requests[0];
+  assert(req.system?.includes("Nova")); // the avoid-list names the attractor
+  const user = req.messages[0].content as string;
+  const words = user.match(/starting point: (.+)\./)?.[1].split(", ") ?? [];
+  assertEquals(words.length, 3); // three spark words, all distinct
+  assertEquals(new Set(words).size, 3);
+  store.close();
+});
+
 Deno.test("naming ritual: unusable replies fall back to the name pool, persisted", async () => {
   for (const badReply of ["", "I cannot choose a name for myself as an AI", "!!!"]) {
     const store = new Store(":memory:");
