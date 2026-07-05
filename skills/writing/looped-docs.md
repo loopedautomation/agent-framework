@@ -29,7 +29,7 @@ Good: ## A denial is an answer
 ```
 
 **No marketing adjectives.** Never: seamlessly, effortlessly, powerful,
-blazing, robust, delightful. If a claim needs an adverb to sound good, the
+blazing, robust, delightful, quietly. If a claim needs an adverb to sound good, the
 claim is weak - make it concrete instead.
 
 ```text
@@ -146,8 +146,8 @@ category name.
 1. Search the draft for ", not " and ", never " - rewrite any contrast hits.
 2. Search for "—" (the em dash) - replace every one with a regular dash or
    restructure the sentence.
-3. Search for: seamless, effortless, powerful, robust, simply, just - justify
-   or delete each.
+3. Search for: seamless, effortless, powerful, robust, simply, just, quietly -
+   justify or delete each.
 4. Read the first sentence of every section aloud. If two in a row have the
    same shape, vary one.
 5. Read the page out loud. Any sentence you wouldn't actually say, rewrite

@@ -38,7 +38,9 @@ tools:
 ```
 
 - Tools are namespaced `mcp__github__create_issue` in the loop and the audit trail.
-- We strongly recommend `include:`. A 40-tool server puts 40 schemas into a small model's context; expose the three you actually need.
+- We strongly recommend `include:`. A 40-tool server puts 40 schemas into a small model's context; expose the three you actually need. `include:` is also the permission surface for MCP: a tool you didn't include does not exist for the agent.
+- `readonly: true` on a server exposes only tools whose `readOnlyHint` annotation marks them read-only, which is a good fit when the job only reads. The hint is self-reported by the server, so treat this as a guard against wiring write tools into a read-only job; the trust decision is still whether to declare the server at all.
+- Every MCP call is recorded in the audit trail with the tool name and whether it succeeded, alongside the run's permission decisions.
 - Each server sees only its own `env:` block (values may be `${VAR}` references); the agent's own environment stays private.
 - Results are truncated at 8k chars; servers connect at startup and close on shutdown.
 
