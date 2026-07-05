@@ -69,7 +69,7 @@ Deno.test("rejects unknown keys loudly (typos must not silently no-op)", () => {
 
 Deno.test("rejects an unknown trigger type", () => {
   assertThrows(
-    () => parseAgentConfig(MINIMAL + `triggers:\n  - type: slack\n`),
+    () => parseAgentConfig(MINIMAL + `triggers:\n  - type: teams\n`),
     ConfigError,
   );
 });

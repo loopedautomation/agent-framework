@@ -47,6 +47,57 @@ export const DiscordTriggerSchema = z.strictObject({
   ),
 }).describe("Listen to Discord messages via the gateway; replies go in-channel by default.");
 
+export const SlackTriggerSchema = z.strictObject({
+  type: z.literal("slack"),
+  channels: z.array(z.string().min(1)).optional().describe(
+    "Channel names or ids to listen in; omit for all channels the bot is in.",
+  ),
+  require_mention: z.boolean().optional().describe(
+    "Only respond when the bot is @-mentioned. DMs always address the bot.",
+  ),
+  token_env: z.string().min(1).default("SLACK_BOT_TOKEN").describe(
+    "Env var holding the bot token (xoxb-…) — reads channel info, posts replies.",
+  ),
+  app_token_env: z.string().min(1).default("SLACK_APP_TOKEN").describe(
+    "Env var holding the app-level token (xapp-…, scope connections:write) for Socket Mode.",
+  ),
+  from_users: z.array(z.string().min(1)).optional().describe(
+    "Only handle messages from these Slack user ids (U…); the filter runs before the model is called. Omit for anyone.",
+  ),
+  reply_channel: z.string().min(1).optional().describe(
+    "Channel id to post replies into instead of the source thread. Out-of-channel replies quote the triggering message and link back.",
+  ),
+  allow_silence: z.boolean().default(false).describe(
+    "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+  ),
+}).describe(
+  "Listen to Slack messages via Socket Mode (no public endpoint); replies go in-thread by default.",
+);
+
+export const TelegramTriggerSchema = z.strictObject({
+  type: z.literal("telegram"),
+  chats: z.array(z.string().min(1)).optional().describe(
+    "Chat ids, group titles, or public @usernames to listen in; omit for all chats the bot sees.",
+  ),
+  require_mention: z.boolean().optional().describe(
+    "Only respond when the bot is @-mentioned. Private chats always address the bot.",
+  ),
+  token_env: z.string().min(1).default("TELEGRAM_BOT_TOKEN").describe(
+    "Env var holding the bot token from @BotFather.",
+  ),
+  from_users: z.array(z.string().min(1)).optional().describe(
+    "Only handle messages from these authors (user ids or usernames); the filter runs before the model is called. Omit for anyone.",
+  ),
+  reply_chat: z.string().min(1).optional().describe(
+    "Chat id to post replies into instead of the source chat. Out-of-chat replies quote the triggering message and link back.",
+  ),
+  allow_silence: z.boolean().default(false).describe(
+    "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+  ),
+}).describe(
+  "Listen to Telegram messages via Bot API long-polling (no public endpoint); replies go in-chat by default.",
+);
+
 export const WebhookTriggerSchema = z.strictObject({
   type: z.literal("webhook"),
   path: z.string().startsWith("/").default("/").describe("HTTP path to serve."),
@@ -66,6 +117,8 @@ export const CronTriggerSchema = z.strictObject({
 
 export const TriggerSchema = z.discriminatedUnion("type", [
   DiscordTriggerSchema,
+  SlackTriggerSchema,
+  TelegramTriggerSchema,
   WebhookTriggerSchema,
   CronTriggerSchema,
 ]).describe("An event source that wakes the agent.");
@@ -106,7 +159,7 @@ export const PermissionsSchema = z.strictObject({
 
 export const MemoryConfigSchema = z.strictObject({
   scope: z.enum(["thread", "none"]).default("none").describe(
-    "thread: conversation history persists per conversation key (Discord channel, webhook conversation_id). none: every run starts fresh.",
+    "thread: conversation history persists per conversation key (chat channel or thread, webhook conversation_id). none: every run starts fresh.",
   ),
 }).describe("What the agent remembers between events.");
 

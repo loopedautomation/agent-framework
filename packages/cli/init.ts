@@ -3,7 +3,7 @@
 // main.ts. Principle (#19): no scaffold may require hand-managing files on a
 // server — files live in git or on your laptop, or nowhere (env-var deploy).
 
-export const TRIGGERS = ["discord", "webhook", "cron", "none"] as const;
+export const TRIGGERS = ["discord", "slack", "telegram", "webhook", "cron", "none"] as const;
 export const PROVIDERS = ["openai-compatible", "anthropic", "local"] as const;
 export const DEPLOYS = [
   "local",
@@ -69,6 +69,25 @@ function agentYaml(o: InitOptions): string {
         "    # token_env: DISCORD_BOT_TOKEN (default)",
       );
       break;
+    case "slack":
+      lines.push(
+        "",
+        "triggers:",
+        "  - type: slack",
+        '    channels: ["general"] # TODO the channels to listen in',
+        "    # token_env: SLACK_BOT_TOKEN (default)",
+        "    # app_token_env: SLACK_APP_TOKEN (default)",
+      );
+      break;
+    case "telegram":
+      lines.push(
+        "",
+        "triggers:",
+        "  - type: telegram",
+        '    # chats: ["-100123"] # TODO chat ids or group titles; omit for all',
+        "    # token_env: TELEGRAM_BOT_TOKEN (default)",
+      );
+      break;
     case "webhook":
       lines.push(
         "",
@@ -97,7 +116,7 @@ function agentYaml(o: InitOptions): string {
       `  run: [${o.clis.join(", ")}] # the Dockerfile installs these`,
     );
   }
-  if (o.trigger === "discord" || o.trigger === "webhook") {
+  if (["discord", "slack", "telegram", "webhook"].includes(o.trigger)) {
     lines.push("", "memory:", "  scope: thread");
   }
   return lines.join("\n") + "\n";
@@ -108,6 +127,8 @@ function envExample(o: InitOptions): string {
   const key = keyEnv(o.provider);
   if (key) vars.push(`${key}=`);
   if (o.trigger === "discord") vars.push("DISCORD_BOT_TOKEN=");
+  if (o.trigger === "slack") vars.push("SLACK_BOT_TOKEN=", "SLACK_APP_TOKEN=");
+  if (o.trigger === "telegram") vars.push("TELEGRAM_BOT_TOKEN=");
   if (o.trigger === "webhook") vars.push("WEBHOOK_TOKEN=");
   return "# Copy to .env and fill in. Never commit .env.\n" + vars.join("\n") + "\n";
 }

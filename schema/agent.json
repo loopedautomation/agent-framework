@@ -124,6 +124,112 @@
             "properties": {
               "type": {
                 "type": "string",
+                "const": "slack"
+              },
+              "channels": {
+                "description": "Channel names or ids to listen in; omit for all channels the bot is in.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "require_mention": {
+                "description": "Only respond when the bot is @-mentioned. DMs always address the bot.",
+                "type": "boolean"
+              },
+              "token_env": {
+                "default": "SLACK_BOT_TOKEN",
+                "description": "Env var holding the bot token (xoxb-…) — reads channel info, posts replies.",
+                "type": "string",
+                "minLength": 1
+              },
+              "app_token_env": {
+                "default": "SLACK_APP_TOKEN",
+                "description": "Env var holding the app-level token (xapp-…, scope connections:write) for Socket Mode.",
+                "type": "string",
+                "minLength": 1
+              },
+              "from_users": {
+                "description": "Only handle messages from these Slack user ids (U…); the filter runs before the model is called. Omit for anyone.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "reply_channel": {
+                "description": "Channel id to post replies into instead of the source thread. Out-of-channel replies quote the triggering message and link back.",
+                "type": "string",
+                "minLength": 1
+              },
+              "allow_silence": {
+                "default": false,
+                "description": "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false,
+            "description": "Listen to Slack messages via Socket Mode (no public endpoint); replies go in-thread by default."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "telegram"
+              },
+              "chats": {
+                "description": "Chat ids, group titles, or public @usernames to listen in; omit for all chats the bot sees.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "require_mention": {
+                "description": "Only respond when the bot is @-mentioned. Private chats always address the bot.",
+                "type": "boolean"
+              },
+              "token_env": {
+                "default": "TELEGRAM_BOT_TOKEN",
+                "description": "Env var holding the bot token from @BotFather.",
+                "type": "string",
+                "minLength": 1
+              },
+              "from_users": {
+                "description": "Only handle messages from these authors (user ids or usernames); the filter runs before the model is called. Omit for anyone.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "reply_chat": {
+                "description": "Chat id to post replies into instead of the source chat. Out-of-chat replies quote the triggering message and link back.",
+                "type": "string",
+                "minLength": 1
+              },
+              "allow_silence": {
+                "default": false,
+                "description": "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false,
+            "description": "Listen to Telegram messages via Bot API long-polling (no public endpoint); replies go in-chat by default."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "webhook"
               },
               "path": {
@@ -319,7 +425,7 @@
       "properties": {
         "scope": {
           "default": "none",
-          "description": "thread: conversation history persists per conversation key (Discord channel, webhook conversation_id). none: every run starts fresh.",
+          "description": "thread: conversation history persists per conversation key (chat channel or thread, webhook conversation_id). none: every run starts fresh.",
           "type": "string",
           "enum": [
             "thread",

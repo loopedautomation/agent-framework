@@ -1,7 +1,7 @@
 // The M2 exit demo, as a test: a curl-shaped request triggers the agent,
 // a permitted command runs, a denied command fails cleanly, and both the
 // run and the denial land in the audit trail.
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   AgentService,
   type Completion,
@@ -120,6 +120,46 @@ Deno.test("triggersFromConfig: missing webhook token fails at startup", () => {
     assert((err as Error).message.includes("M2_WEBHOOK_TOKEN"));
   }
   assert(threw);
+});
+
+Deno.test("triggersFromConfig: builds slack and telegram triggers, fails loudly on missing tokens", () => {
+  const config = parseAgentConfig(`
+handle: chat-bot
+description: multi-channel test agent
+model:
+  provider: openai-compatible
+  id: test-model
+purpose: test
+triggers:
+  - type: slack
+    channels: ["help"]
+  - type: telegram
+`);
+  const env: Record<string, string> = {
+    SLACK_BOT_TOKEN: "xoxb-1",
+    SLACK_APP_TOKEN: "xapp-1",
+    TELEGRAM_BOT_TOKEN: "123:abc",
+  };
+  const triggers = triggersFromConfig(config, (n) => env[n]);
+  assertEquals(triggers.map((t) => t.name), ["slack", "telegram"]);
+
+  // Each missing token names its env var at startup, not first message.
+  const without = (name: string) => (n: string) => n === name ? undefined : env[n];
+  assertThrows(
+    () => triggersFromConfig(config, without("SLACK_APP_TOKEN")),
+    Error,
+    "SLACK_APP_TOKEN",
+  );
+  assertThrows(
+    () => triggersFromConfig(config, without("SLACK_BOT_TOKEN")),
+    Error,
+    "SLACK_BOT_TOKEN",
+  );
+  assertThrows(
+    () => triggersFromConfig(config, without("TELEGRAM_BOT_TOKEN")),
+    Error,
+    "TELEGRAM_BOT_TOKEN",
+  );
 });
 
 Deno.test("cron trigger fires with its configured prompt", async () => {

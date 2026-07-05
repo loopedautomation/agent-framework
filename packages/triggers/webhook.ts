@@ -74,7 +74,6 @@ export class WebhookTrigger implements Trigger {
         status: result.status,
         reply: result.reply,
         steps: result.steps,
-        cost_usd: result.costUsd ?? null,
       }, { status: result.status === "ok" ? 200 : 500 });
     });
     return Promise.resolve();

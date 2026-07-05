@@ -4,7 +4,10 @@ import type { AgentConfig, Trigger } from "@looped/core";
 import { WebhookTrigger } from "./webhook.ts";
 import { CronTrigger } from "./cron.ts";
 import { DiscordTrigger } from "./discord.ts";
+import { SlackTrigger } from "./slack.ts";
+import { TelegramTrigger } from "./telegram.ts";
 
+export { NO_REPLY } from "./text.ts";
 export { CronTrigger, type CronTriggerOptions } from "./cron.ts";
 export { WebhookTrigger, type WebhookTriggerOptions } from "./webhook.ts";
 export {
@@ -13,12 +16,13 @@ export {
   fetchApplicationId,
   INVITE_PERMISSIONS,
   inviteUrl,
-  NO_REPLY,
 } from "./discord.ts";
+export { SlackTrigger, type SlackTriggerOptions } from "./slack.ts";
+export { TelegramTrigger, type TelegramTriggerOptions } from "./telegram.ts";
 
 /**
- * Instantiate the triggers a config declares. Discord arrives in M3.
- * Webhook tokens resolve from token_env here — startup, not first request.
+ * Instantiate the triggers a config declares.
+ * Tokens resolve from *_env here — startup, not first request.
  */
 export function triggersFromConfig(
   config: AgentConfig,
@@ -54,6 +58,47 @@ export function triggersFromConfig(
             requireMention: t.require_mention,
             fromUsers: t.from_users,
             replyChannel: t.reply_channel,
+            allowSilence: t.allow_silence,
+          }),
+        );
+        break;
+      }
+      case "slack": {
+        const token = getEnv(t.token_env);
+        if (!token) {
+          throw new Error(`slack trigger: bot token env var ${t.token_env} is not set`);
+        }
+        const appToken = getEnv(t.app_token_env);
+        if (!appToken) {
+          throw new Error(
+            `slack trigger: app-level token env var ${t.app_token_env} is not set (Socket Mode needs it)`,
+          );
+        }
+        triggers.push(
+          new SlackTrigger({
+            token,
+            appToken,
+            channels: t.channels,
+            requireMention: t.require_mention,
+            fromUsers: t.from_users,
+            replyChannel: t.reply_channel,
+            allowSilence: t.allow_silence,
+          }),
+        );
+        break;
+      }
+      case "telegram": {
+        const token = getEnv(t.token_env);
+        if (!token) {
+          throw new Error(`telegram trigger: bot token env var ${t.token_env} is not set`);
+        }
+        triggers.push(
+          new TelegramTrigger({
+            token,
+            chats: t.chats,
+            requireMention: t.require_mention,
+            fromUsers: t.from_users,
+            replyChat: t.reply_chat,
             allowSilence: t.allow_silence,
           }),
         );
