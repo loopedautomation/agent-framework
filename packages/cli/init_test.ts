@@ -54,7 +54,7 @@ Deno.test("deployment shapes produce the right files", () => {
   assert(withClis["compose.yaml"].includes("build: .")); // clis → baked image
 
   const envDeploy = generateProject({ ...BASE, deploy: "paas-env" });
-  assert(envDeploy["README.md"].includes("LOOPED_AGENT_CONFIG"));
+  assert(envDeploy["README.md"].includes("AF_AGENT_CONFIG"));
   assert(!("Dockerfile" in envDeploy));
 });
 
@@ -76,7 +76,7 @@ Deno.test("compose-inline: one file, embedded config is schema-valid", () => {
   const compose = files["compose.yaml"];
   // The config is a top-level configs element mounted at /agent/agent.yaml,
   // not an env var — configuration stays out of the environment.
-  assert(!compose.includes("LOOPED_AGENT_CONFIG"));
+  assert(!compose.includes("AF_AGENT_CONFIG"));
   assert(compose.includes("target: /agent/agent.yaml"));
   // Extract the block scalar under content: and dedent it.
   const start = compose.indexOf("content: |");

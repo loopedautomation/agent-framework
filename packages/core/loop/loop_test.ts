@@ -31,13 +31,9 @@ description: loop test agent
 model:
   provider: openai-compatible
   id: test-model
-  pricing:
-    input_per_mtok: 1.00
-    output_per_mtok: 2.00
 purpose: You are a test agent.
 limits:
   max_steps: 3
-  max_cost: 5.00
 `);
 
 const echoTool = defineTool({
@@ -96,18 +92,6 @@ Deno.test("ends with error_max_steps when the model never stops calling tools", 
   const result = await runAgent({ config: CONFIG, provider, tools: [echoTool], input: "loop" });
   assertEquals(result.status, "error_max_steps");
   assertEquals(result.steps, 3);
-});
-
-Deno.test("ends with error_max_cost when spend exceeds the cap", async () => {
-  const provider = scripted([
-    {
-      toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"x"}' }],
-      usage: { inputTokens: 4_000_000, outputTokens: 1_000_000 }, // $6 at test pricing
-    },
-  ]);
-  const result = await runAgent({ config: CONFIG, provider, tools: [echoTool], input: "go" });
-  assertEquals(result.status, "error_max_cost");
-  assert(result.costUsd! > 5);
 });
 
 Deno.test("history carries across runs", async () => {

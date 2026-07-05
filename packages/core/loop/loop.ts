@@ -3,7 +3,7 @@ import type { Message, Provider, Usage } from "../providers/types.ts";
 import { ProviderError } from "../providers/types.ts";
 import type { NativeTool } from "../tools/types.ts";
 
-export type RunStatus = "ok" | "error_max_steps" | "error_max_cost" | "error_provider";
+export type RunStatus = "ok" | "error_max_steps" | "error_provider";
 
 export interface RunResult {
   status: RunStatus;
@@ -12,8 +12,6 @@ export interface RunResult {
   /** Inner-loop iterations consumed (LLM calls). */
   steps: number;
   usage: Usage;
-  /** Total cost in USD, when the model has pricing configured. */
-  costUsd?: number;
   /** Full transcript including this run — feed back in as `history`. */
   messages: Message[];
 }
@@ -26,15 +24,6 @@ export interface RunOptions {
   input: string;
   /** Prior conversation, e.g. from session memory. */
   history?: Message[];
-}
-
-function costOf(usage: Usage, config: AgentConfig): number | undefined {
-  const pricing = config.model.pricing;
-  if (!pricing) return undefined;
-  return (
-    (usage.inputTokens / 1_000_000) * pricing.input_per_mtok +
-    (usage.outputTokens / 1_000_000) * pricing.output_per_mtok
-  );
 }
 
 /**
@@ -56,7 +45,6 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     reply,
     steps,
     usage,
-    costUsd: costOf(usage, config),
     messages,
   });
 
@@ -88,12 +76,6 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       content: completion.content,
       toolCalls: completion.toolCalls.length ? completion.toolCalls : undefined,
     });
-
-    const cost = costOf(usage, config);
-    const maxCost = config.limits.max_cost;
-    if (maxCost !== undefined && cost !== undefined && cost > maxCost) {
-      return finish("error_max_cost", `run exceeded max_cost ($${cost.toFixed(4)} > $${maxCost})`);
-    }
 
     if (completion.toolCalls.length === 0) {
       return finish("ok", completion.content);

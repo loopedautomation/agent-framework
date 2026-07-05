@@ -22,9 +22,9 @@ export function startStatusServer(
   opts: StatusServerOptions = {},
 ): Deno.HttpServer {
   const startedAt = Date.now();
-  const hostname = opts.hostname ?? Deno.env.get("LOOPED_STATUS_HOST") ?? "127.0.0.1";
-  const port = opts.port ?? Number(Deno.env.get("LOOPED_STATUS_PORT") ?? 9090);
-  const token = opts.token ?? Deno.env.get("LOOPED_STATUS_TOKEN");
+  const hostname = opts.hostname ?? Deno.env.get("AF_STATUS_HOST") ?? "127.0.0.1";
+  const port = opts.port ?? Number(Deno.env.get("AF_STATUS_PORT") ?? 9090);
+  const token = opts.token ?? Deno.env.get("AF_STATUS_TOKEN");
 
   const authorized = (req: Request, remoteHost: string): boolean => {
     if (token) return req.headers.get("authorization") === `Bearer ${token}`;

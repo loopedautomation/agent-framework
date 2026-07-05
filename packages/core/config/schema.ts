@@ -25,15 +25,6 @@ export const ModelConfigSchema = z.strictObject({
   fallbacks: z.array(z.string().min(1)).optional().describe(
     "Model ids to fall back to when the primary fails.",
   ),
-  pricing: z
-    .strictObject({
-      input_per_mtok: z.number().nonnegative().describe("USD per million input tokens."),
-      output_per_mtok: z.number().nonnegative().describe("USD per million output tokens."),
-    })
-    .optional()
-    .describe(
-      "USD per million tokens; enables per-run cost reporting and is required when limits.max_cost is set. Explicit until models.dev integration lands.",
-    ),
 }).describe("Which model runs this agent, and how to reach it.");
 
 export const DiscordTriggerSchema = z.strictObject({
@@ -123,9 +114,6 @@ export const LimitsSchema = z.strictObject({
   max_steps: z.number().int().positive().default(20).describe(
     "Inner-loop iterations (LLM calls) before the run ends with error_max_steps.",
   ),
-  max_cost: z.number().positive().optional().describe(
-    "USD per run before the run ends with error_max_cost. Requires model.pricing.",
-  ),
 }).describe("Per-run budgets — the dead-man's switches for unattended operation.");
 
 export const AgentConfigSchema = z.strictObject({
@@ -170,16 +158,18 @@ export const AgentConfigSchema = z.strictObject({
   ),
   memory: MemoryConfigSchema.optional(),
   limits: LimitsSchema.default({ max_steps: 20 }),
-}).refine((c) => c.limits.max_cost === undefined || c.model.pricing !== undefined, {
-  message:
-    "limits.max_cost requires model.pricing (a cost cap can't be enforced without prices; models.dev integration is planned)",
-  path: ["limits", "max_cost"],
 }).describe(
   "A Looped AF agent: one job, one file. https://github.com/loopedautomation/agent-framework",
 );
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 export type ModelConfig = z.infer<typeof ModelConfigSchema>;
+
+/** The env var each provider reads its API key from when api_key_env is omitted. */
+export const DEFAULT_API_KEY_ENV: Record<ModelConfig["provider"], string> = {
+  "openai-compatible": "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+};
 export type TriggerConfig = z.infer<typeof TriggerSchema>;
 export type Permissions = z.infer<typeof PermissionsSchema>;
 

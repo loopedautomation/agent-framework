@@ -69,7 +69,7 @@ export class AgentService {
     this.#env = resolveEnv(opts.config.env);
     this.#extraTools = opts.extraTools ?? [];
     this.#baseDir = opts.baseDir ?? Deno.cwd();
-    const dataDir = opts.dataDir ?? Deno.env.get("LOOPED_DATA_DIR") ?? ".looped";
+    const dataDir = opts.dataDir ?? Deno.env.get("AF_DATA_DIR") ?? ".looped";
     Deno.mkdirSync(dataDir, { recursive: true });
     this.store = new Store(`${dataDir}/${opts.config.handle}.db`);
   }
@@ -156,7 +156,6 @@ export class AgentService {
       reply: result.reply,
       steps: result.steps,
       usage: result.usage,
-      costUsd: result.costUsd,
       startedAt,
     });
     for (const decision of decisions) {

@@ -50,27 +50,6 @@
             "type": "string",
             "minLength": 1
           }
-        },
-        "pricing": {
-          "description": "USD per million tokens; enables per-run cost reporting and is required when limits.max_cost is set. Explicit until models.dev integration lands.",
-          "type": "object",
-          "properties": {
-            "input_per_mtok": {
-              "type": "number",
-              "minimum": 0,
-              "description": "USD per million input tokens."
-            },
-            "output_per_mtok": {
-              "type": "number",
-              "minimum": 0,
-              "description": "USD per million output tokens."
-            }
-          },
-          "required": [
-            "input_per_mtok",
-            "output_per_mtok"
-          ],
-          "additionalProperties": false
         }
       },
       "required": [
@@ -363,11 +342,6 @@
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
-        },
-        "max_cost": {
-          "description": "USD per run before the run ends with error_max_cost. Requires model.pricing.",
-          "type": "number",
-          "exclusiveMinimum": 0
         }
       },
       "additionalProperties": false,

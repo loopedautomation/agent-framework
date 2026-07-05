@@ -268,10 +268,10 @@ function readme(o: InitOptions): string {
         "Deploy the stock image with **no files at all**:",
         "",
         `1. Image: \`${IMAGE}\``,
-        "2. Env vars: everything in `.env.example`, **plus** `LOOPED_AGENT_CONFIG` set to the full contents of `agent.yaml`:",
+        "2. Env vars: everything in `.env.example`, **plus** `AF_AGENT_CONFIG` set to the full contents of `agent.yaml`:",
         "",
         "```sh",
-        "cat agent.yaml # paste this as the value of LOOPED_AGENT_CONFIG",
+        "cat agent.yaml # paste this as the value of AF_AGENT_CONFIG",
         "```",
         "",
         "3. Add a persistent volume at `/data`" +

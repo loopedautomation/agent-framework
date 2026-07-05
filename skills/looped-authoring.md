@@ -54,5 +54,5 @@ Report: the file list, the one-line description, any env vars the deployer must 
 - triggers: `discord` (channels, require_mention, from_users, reply_channel, allow_silence), `webhook` (path, port, token_env — required), `cron` (schedule, prompt)
 - `permissions`: `net` (hosts), `run` (executables), `read`/`write` (path prefixes) — deny-by-default, grant only what the job needs
 - `skills` (paths), `tools.mcp` (name + command|url + env + include)
-- `memory.scope`: `thread`|`none` · `limits`: `max_steps` (default 20), `max_cost` (needs `model.pricing`)
+- `memory.scope`: `thread`|`none` · `limits`: `max_steps` (default 20)
 - Unknown keys are hard errors. `system_prompt` and `nickname` are the old names for `purpose` and `handle`.

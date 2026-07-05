@@ -1,4 +1,4 @@
-import type { ModelConfig } from "../config/schema.ts";
+import { DEFAULT_API_KEY_ENV, type ModelConfig } from "../config/schema.ts";
 import { type Provider, ProviderError } from "./types.ts";
 import { OpenAICompatibleProvider } from "./openai.ts";
 import { AnthropicProvider } from "./anthropic.ts";
@@ -7,11 +7,6 @@ export * from "./types.ts";
 export { OpenAICompatibleProvider } from "./openai.ts";
 export { AnthropicProvider } from "./anthropic.ts";
 export { withRetry } from "./retry.ts";
-
-const DEFAULT_KEY_ENV: Record<ModelConfig["provider"], string> = {
-  "openai-compatible": "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-};
 
 /**
  * Build a provider from config. The API key is read from the env var named
@@ -23,7 +18,7 @@ export function createProvider(
   model: ModelConfig,
   getEnv: (name: string) => string | undefined = Deno.env.get,
 ): Provider {
-  const keyEnv = model.api_key_env ?? DEFAULT_KEY_ENV[model.provider];
+  const keyEnv = model.api_key_env ?? DEFAULT_API_KEY_ENV[model.provider];
   const apiKey = getEnv(keyEnv);
   if (!apiKey && !(model.provider === "openai-compatible" && model.base_url)) {
     throw new ProviderError(

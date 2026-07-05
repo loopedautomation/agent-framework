@@ -28,9 +28,6 @@ model:
   id: gpt-5.4-mini
   small: gpt-5.4-mini
   api_key_env: OPENAI_API_KEY
-  pricing:
-    input_per_mtok: 0.15
-    output_per_mtok: 0.60
 purpose: You manage GitHub issues for the team.
 triggers:
   - type: discord
@@ -56,11 +53,10 @@ memory:
   scope: thread
 limits:
   max_steps: 10
-  max_cost: 0.10
 `);
   assertEquals(config.triggers?.length, 2);
   assertEquals(config.memory?.scope, "thread");
-  assertEquals(config.limits.max_cost, 0.10);
+  assertEquals(config.limits.max_steps, 10);
 });
 
 Deno.test("rejects unknown keys loudly (typos must not silently no-op)", () => {
@@ -127,6 +123,47 @@ env:
   ]);
 });
 
+Deno.test("collectEnvRefs includes the provider's default key env when api_key_env is omitted", () => {
+  // MINIMAL names no api_key_env, so the openai-compatible default applies.
+  assertEquals(collectEnvRefs(parseAgentConfig(MINIMAL)), ["OPENAI_API_KEY"]);
+
+  const claude = parseAgentConfig(`
+handle: claude-bot
+description: anthropic default key env
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+purpose: test
+`);
+  assertEquals(collectEnvRefs(claude), ["ANTHROPIC_API_KEY"]);
+});
+
+Deno.test("collectEnvRefs skips the key env for keyless base_url endpoints", () => {
+  const local = parseAgentConfig(`
+handle: local-bot
+description: local model, no key needed
+model:
+  provider: openai-compatible
+  id: llama3.1
+  base_url: http://localhost:11434/v1
+purpose: test
+`);
+  assertEquals(collectEnvRefs(local), []);
+
+  // An explicit api_key_env still counts, base_url or not (e.g. OpenRouter).
+  const openrouter = parseAgentConfig(`
+handle: router-bot
+description: keyed base_url endpoint
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  base_url: https://openrouter.ai/api/v1
+  api_key_env: OPENROUTER_API_KEY
+purpose: test
+`);
+  assertEquals(collectEnvRefs(openrouter), ["OPENROUTER_API_KEY"]);
+});
+
 Deno.test("the shipped issue-bot example is a valid agent definition", async () => {
   const path = new URL("../../../examples/issue-bot/agent.yaml", import.meta.url);
   const config = parseAgentConfig(await Deno.readTextFile(path), "examples/issue-bot/agent.yaml");
@@ -160,7 +197,7 @@ Deno.test("resolveAgentConfig: env var, file, both, neither", async () => {
   // env var only → parsed from env
   const fromEnv = await resolveAgentConfig(
     filePath,
-    (n) => n === "LOOPED_AGENT_CONFIG" ? MINIMAL : undefined,
+    (n) => n === "AF_AGENT_CONFIG" ? MINIMAL : undefined,
   );
   assertEquals(fromEnv.handle, "test-bot");
 
@@ -171,7 +208,7 @@ Deno.test("resolveAgentConfig: env var, file, both, neither", async () => {
 
   // both → loud conflict, never a guess
   await assertRejects(
-    () => resolveAgentConfig(filePath, (n) => (n === "LOOPED_AGENT_CONFIG" ? MINIMAL : undefined)),
+    () => resolveAgentConfig(filePath, (n) => (n === "AF_AGENT_CONFIG" ? MINIMAL : undefined)),
     ConfigError,
     "remove one",
   );
@@ -184,6 +221,18 @@ Deno.test("resolveAgentConfig: env var, file, both, neither", async () => {
   );
 });
 
+Deno.test("LOOPED_AGENT_CONFIG gets a rename hint, not a missing-file error", async () => {
+  await assertRejects(
+    () =>
+      resolveAgentConfig(
+        "missing.yaml",
+        (n) => (n === "LOOPED_AGENT_CONFIG" ? MINIMAL : undefined),
+      ),
+    ConfigError,
+    "renamed to AF_AGENT_CONFIG",
+  );
+});
+
 Deno.test("tools.custom is rejected loudly until implemented", () => {
   const err = assertThrows(
     () => parseAgentConfig(MINIMAL + `tools:\n  custom: [./my-tool.ts]\n`),
@@ -192,9 +241,9 @@ Deno.test("tools.custom is rejected loudly until implemented", () => {
   assert(err.message.includes("not implemented"));
 });
 
-Deno.test("the shipped agent-builder example is a valid agent definition", async () => {
-  const path = new URL("../../../examples/agent-builder/agent.yaml", import.meta.url);
-  const config = parseAgentConfig(await Deno.readTextFile(path), "examples/agent-builder");
-  assertEquals(config.handle, "agent-builder");
+Deno.test("the shipped agent-zero example is a valid agent definition", async () => {
+  const path = new URL("../../../examples/agent-zero/agent.yaml", import.meta.url);
+  const config = parseAgentConfig(await Deno.readTextFile(path), "examples/agent-zero");
+  assertEquals(config.handle, "agent-zero");
   assertEquals(config.permissions?.write, ["agents"]);
 });

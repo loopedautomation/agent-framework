@@ -39,7 +39,6 @@ Deno.test("runs and audit records land in the trail", () => {
     reply: "done",
     steps: 2,
     usage: { inputTokens: 100, outputTokens: 20 },
-    costUsd: 0.00012,
     startedAt: new Date().toISOString(),
   });
   store.recordAudit({

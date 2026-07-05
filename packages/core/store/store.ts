@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS runs (
   steps INTEGER NOT NULL,
   input_tokens INTEGER NOT NULL,
   output_tokens INTEGER NOT NULL,
-  cost_usd REAL,
   started_at TEXT NOT NULL,
   finished_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -51,7 +50,6 @@ export interface RunRecord {
   reply: string;
   steps: number;
   usage: Usage;
-  costUsd?: number;
   startedAt: string;
 }
 
@@ -117,8 +115,8 @@ export class Store {
     const result = this.#db
       .prepare(
         `INSERT INTO runs (session_id, trigger, input, status, reply, steps,
-          input_tokens, output_tokens, cost_usd, started_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          input_tokens, output_tokens, started_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         run.sessionId ?? null,
@@ -129,7 +127,6 @@ export class Store {
         run.steps,
         run.usage.inputTokens,
         run.usage.outputTokens,
-        run.costUsd ?? null,
         run.startedAt,
       );
     return Number(result.lastInsertRowid);

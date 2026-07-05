@@ -1,5 +1,5 @@
 ---
-title: "Agent Config"
+title: "Agent config"
 description: "A guided tour of every block in agent.yaml — identity, model, memory, limits, and env."
 ---
 

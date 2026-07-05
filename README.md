@@ -23,11 +23,11 @@ permissions:
 ## What's here
 
 - **The `af` CLI** — `af init` scaffolds a complete agent project (agent, secrets template, deployment shape); `af validate` checks it; `af run` runs it — an interactive REPL without triggers, a long-lived service with them.
-- **Triggers** — Discord (including observer agents), webhook, cron.
+- **Triggers** — Discord, Slack, and Telegram (including observer agents), webhook, cron.
 - **Capability, added deliberately** — markdown [skills](skills/), MCP servers, a small native toolset, and tool search to keep schemas out of a small model's context.
 - **Deny-by-default permissions** — allowlisted hosts, executables, and paths; scoped secrets that never enter the model's context; every decision in a SQLite audit trail.
 - **Docker-native deployment** — the hardened `ghcr.io/loopedautomation/agent` base image, the one-`apk add` custom-image recipe, file-less env-var deploys, and a status surface (`/healthz`, `/runs`, `/audit`).
-- **Budgets by default** — per-run step and cost caps; cheap models are the default and the numbers stay boring.
+- **Budgets by default** — every run has a step cap, and cheap models are the default, so spending stays predictable.
 
 ## Docs
 
@@ -35,6 +35,6 @@ Published at **[docs.looped.sh/agent-framework](https://docs.looped.sh/agent-fra
 
 [Quick start](docs/quick-start.md) · [The agent file](docs/agent-file.md) · [Triggers](docs/triggers.md) · [Skills](docs/skills.md) · [Tools](docs/tools.md) · [Permissions](docs/permissions.md) · [Deployment](docs/deployment.md) · [CLI](docs/cli.md)
 
-Or start from a complete, runnable agent: the [examples](examples/) go from a minimal REPL bot to the Discord → GitHub [issue-bot](examples/issue-bot/) (`docker compose up`) and the [agent-builder](examples/agent-builder/) — the agent that builds agents.
+Or start from a complete, runnable agent: the [examples](examples/) go from a minimal REPL bot to the Discord → GitHub [issue-bot](examples/issue-bot/) (`docker compose up`) and the [agent-zero](examples/agent-zero/) — the agent that builds agents.
 
 Runtime: [Deno](https://deno.com) + TypeScript. Pre-1.0, built in the open.

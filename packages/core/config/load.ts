@@ -1,6 +1,6 @@
 import { parse } from "@std/yaml";
 import { z } from "zod";
-import { type AgentConfig, AgentConfigSchema } from "./schema.ts";
+import { type AgentConfig, AgentConfigSchema, DEFAULT_API_KEY_ENV } from "./schema.ts";
 
 export class ConfigError extends Error {
   constructor(message: string, readonly source?: string) {
@@ -61,7 +61,7 @@ export function parseAgentConfig(yamlText: string, source?: string): AgentConfig
 
 /**
  * Resolve an agent definition from its two possible sources: a config file,
- * or the LOOPED_AGENT_CONFIG env var holding the YAML itself (the file-less
+ * or the AF_AGENT_CONFIG env var holding the YAML itself (the file-less
  * deploy for platforms where env vars are easy and file mounts aren't).
  * Both present is a conflict and fails loudly — never guess which config runs.
  */
@@ -69,7 +69,12 @@ export async function resolveAgentConfig(
   path: string,
   getEnv: (name: string) => string | undefined = Deno.env.get,
 ): Promise<AgentConfig> {
-  const inline = getEnv("LOOPED_AGENT_CONFIG");
+  if (getEnv("LOOPED_AGENT_CONFIG")?.trim()) {
+    throw new ConfigError(
+      "LOOPED_AGENT_CONFIG was renamed to AF_AGENT_CONFIG; set the new name instead",
+    );
+  }
+  const inline = getEnv("AF_AGENT_CONFIG");
   if (!inline?.trim()) return await loadAgentConfig(path);
 
   let fileExists = false;
@@ -80,11 +85,11 @@ export async function resolveAgentConfig(
   }
   if (fileExists) {
     throw new ConfigError(
-      `both LOOPED_AGENT_CONFIG and ${path} are present — remove one so it's unambiguous which config runs`,
+      `both AF_AGENT_CONFIG and ${path} are present — remove one so it's unambiguous which config runs`,
       path,
     );
   }
-  return parseAgentConfig(inline, "LOOPED_AGENT_CONFIG");
+  return parseAgentConfig(inline, "AF_AGENT_CONFIG");
 }
 
 /** Load an agent definition from a YAML file. */
@@ -101,12 +106,20 @@ export async function loadAgentConfig(path: string): Promise<AgentConfig> {
 const ENV_REF = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
 /**
- * Env var names referenced by the config (`${VAR}` values in env blocks and
- * `api_key_env`). The config only ever holds references — never secret values.
+ * Env var names the config needs at runtime: `${VAR}` values in env blocks,
+ * plus the API key env var — api_key_env when set, otherwise the provider's
+ * default, matching createProvider. An openai-compatible model with a
+ * base_url tolerates a missing key (local endpoints), so only an explicit
+ * api_key_env counts there.
  */
 export function collectEnvRefs(config: AgentConfig): string[] {
   const refs = new Set<string>();
-  if (config.model.api_key_env) refs.add(config.model.api_key_env);
+  const { provider, api_key_env, base_url } = config.model;
+  if (api_key_env) {
+    refs.add(api_key_env);
+  } else if (!(provider === "openai-compatible" && base_url)) {
+    refs.add(DEFAULT_API_KEY_ENV[provider]);
+  }
   const scan = (env?: Record<string, string>) => {
     for (const value of Object.values(env ?? {})) {
       const m = value.match(ENV_REF);
