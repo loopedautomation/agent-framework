@@ -6,8 +6,8 @@
   "imports": {
     "@std/yaml": "jsr:@std/yaml@^1",
     "@std/assert": "jsr:@std/assert@^1",
-    "zod": "npm:zod@^4",
-    "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@^1",
+    "zod": "npm:zod@4.4.3",
+    "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@1.29.0",
     "@std/path": "jsr:@std/path@^1"
   }
 }

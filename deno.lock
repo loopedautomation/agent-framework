@@ -6,9 +6,9 @@
     "jsr:@std/internal@^1.0.14": "1.0.14",
     "jsr:@std/path@1": "1.1.6",
     "jsr:@std/yaml@1": "1.1.2",
-    "npm:@modelcontextprotocol/sdk@1": "1.29.0_zod@4.4.3",
-    "npm:croner@9": "9.1.0",
-    "npm:zod@4": "4.4.3"
+    "npm:@modelcontextprotocol/sdk@1.29.0": "1.29.0_zod@4.4.3",
+    "npm:croner@9.1.0": "9.1.0",
+    "npm:zod@4.4.3": "4.4.3"
   },
   "jsr": {
     "@std/assert@1.0.19": {
@@ -311,8 +311,8 @@
         "toidentifier"
       ]
     },
-    "iconv-lite@0.7.2": {
-      "integrity": "sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==",
+    "iconv-lite@0.7.3": {
+      "integrity": "sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==",
       "dependencies": [
         "safer-buffer"
       ]
@@ -562,14 +562,14 @@
           "jsr:@std/assert@1",
           "jsr:@std/path@1",
           "jsr:@std/yaml@1",
-          "npm:@modelcontextprotocol/sdk@1",
-          "npm:zod@4"
+          "npm:@modelcontextprotocol/sdk@1.29.0",
+          "npm:zod@4.4.3"
         ]
       },
       "packages/triggers": {
         "dependencies": [
           "jsr:@std/assert@1",
-          "npm:croner@9"
+          "npm:croner@9.1.0"
         ]
       }
     }
