@@ -6,6 +6,7 @@
  * af up <agent.yaml...>     start agents in Docker (foreground; -d to detach)
  * af down / af ps           stop / list af containers
  * af validate <agent.yaml>  validate a config and report env references
+ * af update                 reinstall af at the latest published version
  * ```
  *
  * Nothing executes on the host: run/up start the published container image.
@@ -36,6 +37,7 @@ import {
 import { init } from "./init_command.ts";
 import { runLocal, validate } from "./local.ts";
 import { accent, dim, table } from "./style.ts";
+import { update } from "./update_command.ts";
 
 // Set by the image: `run` executes in-process (the container entrypoint)
 // instead of spawning docker inside docker.
@@ -52,6 +54,7 @@ function usage(): string {
     ["af flags [agent.yaml]", "Print compiled Deno permission flags"],
     ["af schema", "Print the agent.yaml JSON Schema"],
     ["af discord-invite [agent.yaml]", "Print the bot's OAuth invite URL (no bitfield math)"],
+    ["af update", "Reinstall af at the latest published version"],
   ];
   const flags: [string, string][] = [
     ["-d, --detach", "up: leave agents running in the background (restart unless-stopped)"],
@@ -112,6 +115,9 @@ async function main() {
       case "discord-invite":
         if (!arg) fail("usage: af discord-invite [agent.yaml]");
         await discordInvite(arg);
+        break;
+      case "update":
+        await update();
         break;
       default:
         console.log(usage());

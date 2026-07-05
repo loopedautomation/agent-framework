@@ -1,7 +1,7 @@
 // The first-boot banner: shown once per agent, on the run where it names
 // itself. A little something for the devs.
 
-import { LOOP_GRADIENT } from "./style.ts";
+import { ACCENT, LOOP_GRADIENT } from "./style.ts";
 
 const ART = String.raw`
    ██╗      ██████╗  ██████╗ ██████╗ ███████╗██████╗      █████╗ ███████╗
@@ -26,7 +26,7 @@ export function printBirthBanner(handle: string, name: string) {
     `   ✦ first boot — %c${handle}%c has chosen a name: %c${name}%c\n`,
     "color: gray",
     "",
-    "color: #22d3ee; font-weight: bold",
+    `color: ${ACCENT}; font-weight: bold`,
     "",
   );
 }
