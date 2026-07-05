@@ -5,6 +5,8 @@
     "./packages/cli"
   ],
   "tasks": {
+    "changeset": "deno run --allow-read --allow-write --allow-env --allow-sys --allow-run=git npm:@changesets/cli@2.31.0",
+    "version": "deno task changeset version && deno run --allow-read --allow-write scripts/sync-versions.ts",
     "test": "deno test --allow-read --allow-write --allow-env --allow-run=bash --allow-net=127.0.0.1,0.0.0.0 packages/",
     "check": "deno check packages/",
     "ok": "deno fmt --check && deno lint && deno task check && deno task test",
