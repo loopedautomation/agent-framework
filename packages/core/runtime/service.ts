@@ -17,9 +17,11 @@ import { SEARCH_AUTO_THRESHOLD, ToolRegistry } from "../tools/registry.ts";
 
 /** An event from the outside world, normalized by a trigger. */
 export interface AgentEvent {
+  /** Unique event id, for logs and correlation. */
   id: string;
   /** Which trigger produced it: "webhook", "cron", "cli", "discord", ... */
   trigger: string;
+  /** The text the agent is asked to act on. */
   input: string;
   /** Session identity (e.g. a thread id). Absent → the run has no history. */
   conversationKey?: string;
@@ -27,12 +29,17 @@ export interface AgentEvent {
 
 /** A trigger connects outward, emits events, and carries replies back. */
 export interface Trigger {
+  /** Trigger name, e.g. "discord" or "cron". */
   readonly name: string;
+  /** Connect and begin emitting events; `emit` runs the agent and resolves with the result. */
   start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void>;
+  /** Disconnect and stop emitting. */
   stop(): Promise<void>;
 }
 
+/** Options for constructing an {@linkcode AgentService}. */
 export interface AgentServiceOptions {
+  /** The agent's parsed config. */
   config: AgentConfig;
   /** Defaults to createProvider(config.model); injectable for tests. */
   provider?: Provider;
@@ -50,7 +57,9 @@ export interface AgentServiceOptions {
  * agent — one agent per container.
  */
 export class AgentService {
+  /** The agent's config, as passed in. */
   readonly config: AgentConfig;
+  /** The agent's SQLite store: sessions, runs, audit, identity. */
   readonly store: Store;
   #provider: Provider;
   #env: Record<string, string>;
@@ -61,6 +70,7 @@ export class AgentService {
   #skills?: Skill[];
   #mcp?: McpConnections;
 
+  /** Resolves env references, opens the store, and builds the provider. */
   constructor(opts: AgentServiceOptions) {
     this.config = opts.config;
     this.#provider = opts.provider ?? createProvider(opts.config.model);
@@ -164,6 +174,7 @@ export class AgentService {
     return result;
   }
 
+  /** Start every trigger, routing its events through {@linkcode AgentService.handle}. */
   async start(triggers: Trigger[]) {
     this.#triggers = triggers;
     for (const trigger of triggers) {
@@ -171,6 +182,7 @@ export class AgentService {
     }
   }
 
+  /** Stop triggers, close MCP connections, and close the store. */
   async stop() {
     for (const trigger of this.#triggers) await trigger.stop();
     await this.#mcp?.close();

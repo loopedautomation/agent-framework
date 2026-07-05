@@ -1,12 +1,19 @@
-// af — the Looped AF CLI, a docker frontend over @looped/core.
-//   af run <agent.yaml>       run one agent in Docker, interactive
-//   af up <agent.yaml...>     start agents in Docker (foreground; -d to detach)
-//   af down / af ps           stop / list af containers
-//   af validate <agent.yaml>  validate a config and report env references
-//
-// Nothing executes on the host: run/up start the published container image.
-// Inside the container (AF_CONTAINER=1, set by the image) `run` executes the
-// agent in-process — that in-process branch IS the container entrypoint.
+/**
+ * af - the Looped AF CLI, a docker frontend over @looped/core.
+ *
+ * ```
+ * af run <agent.yaml>       run one agent in Docker, interactive
+ * af up <agent.yaml...>     start agents in Docker (foreground; -d to detach)
+ * af down / af ps           stop / list af containers
+ * af validate <agent.yaml>  validate a config and report env references
+ * ```
+ *
+ * Nothing executes on the host: run/up start the published container image.
+ * Inside the container (AF_CONTAINER=1, set by the image) `run` executes the
+ * agent in-process - that in-process branch IS the container entrypoint.
+ *
+ * @module
+ */
 
 import {
   agentConfigJsonSchema,

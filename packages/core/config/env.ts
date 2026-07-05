@@ -2,6 +2,7 @@ import { ConfigError } from "./load.ts";
 
 const ENV_REF = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
+/** Overrides for {@linkcode resolveEnv}, used by tests. */
 export interface ResolveEnvOptions {
   /** Injectable for tests. */
   getEnv?: (name: string) => string | undefined;

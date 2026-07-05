@@ -1,12 +1,27 @@
-// @looped/core — agent loop, config loader, providers, permissions, memory.
+/**
+ * The agent runtime for Looped AF: the agent loop, config loader, model
+ * providers, permission engine, native tools, skills and the store. Everything
+ * an agent process needs to load an agent.yaml, connect a model, and run.
+ *
+ * @module
+ */
 
 export {
   type AgentConfig,
   agentConfigJsonSchema,
   AgentConfigSchema,
+  type AgentConfigValidator,
+  type CronTriggerConfig,
+  type DiscordTriggerConfig,
+  type LimitsConfig,
+  type McpServerConfig,
+  type MemoryConfig,
   type ModelConfig,
   type Permissions,
+  type SlackTriggerConfig,
+  type TelegramTriggerConfig,
   type TriggerConfig,
+  type WebhookTriggerConfig,
 } from "./config/schema.ts";
 export {
   collectEnvRefs,
@@ -15,7 +30,7 @@ export {
   parseAgentConfig,
   resolveAgentConfig,
 } from "./config/load.ts";
-export { resolveEnv } from "./config/env.ts";
+export { resolveEnv, type ResolveEnvOptions } from "./config/env.ts";
 export {
   AnthropicProvider,
   type Completion,
@@ -25,6 +40,9 @@ export {
   OpenAICompatibleProvider,
   type Provider,
   ProviderError,
+  type ProviderErrorKind,
+  type RetryOptions,
+  type StopReason,
   type ToolCall,
   type ToolDef,
   type Usage,
@@ -33,12 +51,13 @@ export {
 export {
   type PermissionDecision,
   PermissionEngine,
+  type PermissionKind,
   permissionsToDenoFlags,
 } from "./permissions/engine.ts";
-export { defineTool, type NativeTool } from "./tools/types.ts";
+export { defineTool, type NativeTool, type ToolArgs, type ToolSchema } from "./tools/types.ts";
 export { currentTimeTool } from "./tools/time.ts";
-export { createRunBashTool, extractExecutables } from "./tools/bash.ts";
-export { createHttpRequestTool } from "./tools/http.ts";
+export { createRunBashTool, extractExecutables, type RunBashOptions } from "./tools/bash.ts";
+export { createHttpRequestTool, type HttpRequestOptions } from "./tools/http.ts";
 export { createReadFileTool, createWriteFileTool } from "./tools/files.ts";
 export { SEARCH_AUTO_THRESHOLD, ToolRegistry } from "./tools/registry.ts";
 export { runAgent, type RunOptions, type RunResult, type RunStatus } from "./loop/loop.ts";
@@ -52,7 +71,7 @@ export {
 export { connectMcpServers, type McpConnections, mcpToolsFromClient } from "./tools/mcp.ts";
 export { type AgentIdentity, ensureIdentity, identityNote } from "./runtime/identity.ts";
 export { startStatusServer, type StatusServerOptions } from "./runtime/status.ts";
-export { Store } from "./store/store.ts";
+export { type AuditRecord, type RunRecord, Store } from "./store/store.ts";
 export {
   type AgentEvent,
   AgentService,
@@ -60,4 +79,5 @@ export {
   type Trigger,
 } from "./runtime/service.ts";
 
+/** The @looped/core package version. */
 export const VERSION = "0.1.0";

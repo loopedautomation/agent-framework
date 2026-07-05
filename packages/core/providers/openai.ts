@@ -66,17 +66,20 @@ function toStopReason(finish: string | undefined, toolCalls: ToolCall[]): StopRe
 
 /** Provider adapter for the OpenAI chat-completions dialect. */
 export class OpenAICompatibleProvider implements Provider {
+  /** Provider identifier. */
   readonly id = "openai-compatible";
   #apiKey: string;
   #baseUrl: string;
   #fetch: typeof fetch;
 
+  /** Create the provider from an API key, optional base URL, and an injectable fetch for tests. */
   constructor(opts: OpenAICompatibleOptions) {
     this.#apiKey = opts.apiKey;
     this.#baseUrl = (opts.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "");
     this.#fetch = opts.fetch ?? fetch;
   }
 
+  /** Run one completion, with retry on retryable provider errors. */
   complete(req: CompletionRequest): Promise<Completion> {
     return withRetry(() => this.#completeOnce(req));
   }

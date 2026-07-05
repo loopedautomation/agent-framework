@@ -2,6 +2,7 @@ import type { AgentConfig } from "../config/schema.ts";
 import type { Provider } from "../providers/types.ts";
 import type { Store } from "../store/store.ts";
 
+/** The agent's persistent identity, established on first boot. */
 export interface AgentIdentity {
   /** The agent's self-chosen name. */
   name: string;

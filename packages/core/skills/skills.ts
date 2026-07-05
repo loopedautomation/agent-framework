@@ -9,7 +9,9 @@ import { defineTool, type NativeTool } from "../tools/types.ts";
  * authority on what's runnable/reachable (Plan 1).
  */
 export interface Skill {
+  /** Skill name; the model uses it with the read_skill tool. */
   name: string;
+  /** One line shown in the system prompt. */
   description: string;
   /** Full markdown body, loaded into context only when the agent asks. */
   content: string;
@@ -78,6 +80,7 @@ export function skillsPromptSection(skills: Skill[]): string {
     `when a task calls for them:\n${lines}`;
 }
 
+/** Build the read_skill native tool: returns a skill's full content by name. */
 export function createSkillTool(skills: Skill[]): NativeTool {
   const byName = new Map(skills.map((s) => [s.name, s]));
   return defineTool({

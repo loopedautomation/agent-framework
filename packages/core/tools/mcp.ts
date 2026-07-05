@@ -7,8 +7,11 @@ import type { NativeTool } from "./types.ts";
 
 const MAX_RESULT_CHARS = 8_000;
 
+/** Live MCP connections: the tools they provide and a way to shut them down. */
 export interface McpConnections {
+  /** Tools from all connected servers, namespaced mcp__<server>__<tool>. */
   tools: NativeTool[];
+  /** Close every client connection. */
   close(): Promise<void>;
 }
 

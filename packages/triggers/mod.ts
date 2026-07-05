@@ -1,4 +1,10 @@
-// @looped/triggers — event sources for Looped agents.
+/**
+ * Event sources that wake a Looped AF agent - Discord, Slack, Telegram,
+ * webhook and cron - plus {@linkcode triggersFromConfig} to build them
+ * from an agent config.
+ *
+ * @module
+ */
 
 import type { AgentConfig, Trigger } from "@looped/core";
 import { WebhookTrigger } from "./webhook.ts";
@@ -7,18 +13,44 @@ import { DiscordTrigger } from "./discord.ts";
 import { SlackTrigger } from "./slack.ts";
 import { TelegramTrigger } from "./telegram.ts";
 
+export type {
+  AgentConfig,
+  AgentEvent,
+  CronTriggerConfig,
+  DiscordTriggerConfig,
+  LimitsConfig,
+  McpServerConfig,
+  MemoryConfig,
+  Message,
+  ModelConfig,
+  Permissions,
+  RunResult,
+  RunStatus,
+  SlackTriggerConfig,
+  TelegramTriggerConfig,
+  ToolCall,
+  Trigger,
+  TriggerConfig,
+  Usage,
+  WebhookTriggerConfig,
+} from "@looped/core";
 export { NO_REPLY } from "./text.ts";
 export { CronTrigger, type CronTriggerOptions } from "./cron.ts";
 export { WebhookTrigger, type WebhookTriggerOptions } from "./webhook.ts";
 export {
+  type DiscordFilterOptions,
   DiscordTrigger,
   type DiscordTriggerOptions,
   fetchApplicationId,
   INVITE_PERMISSIONS,
   inviteUrl,
 } from "./discord.ts";
-export { SlackTrigger, type SlackTriggerOptions } from "./slack.ts";
-export { TelegramTrigger, type TelegramTriggerOptions } from "./telegram.ts";
+export { type SlackFilterOptions, SlackTrigger, type SlackTriggerOptions } from "./slack.ts";
+export {
+  type TelegramFilterOptions,
+  TelegramTrigger,
+  type TelegramTriggerOptions,
+} from "./telegram.ts";
 
 /**
  * Instantiate the triggers a config declares.

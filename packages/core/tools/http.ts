@@ -4,13 +4,17 @@ import { defineTool, type NativeTool } from "./types.ts";
 
 const MAX_BODY_CHARS = 8_000;
 
+/** Options for {@linkcode createHttpRequestTool}. */
 export interface HttpRequestOptions {
+  /** Engine that decides which hosts are reachable. */
   permissions: PermissionEngine;
   /** Injectable for tests. */
   fetch?: typeof fetch;
+  /** Abort the request after this long. Defaults to 30s. */
   timeoutMs?: number;
 }
 
+/** Build the http_request native tool: fetches allowlisted hosts, truncating long bodies. */
 export function createHttpRequestTool(opts: HttpRequestOptions): NativeTool {
   const doFetch = opts.fetch ?? fetch;
   const timeoutMs = opts.timeoutMs ?? 30_000;

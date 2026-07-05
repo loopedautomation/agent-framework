@@ -6,7 +6,7 @@ import { AnthropicProvider } from "./anthropic.ts";
 export * from "./types.ts";
 export { OpenAICompatibleProvider } from "./openai.ts";
 export { AnthropicProvider } from "./anthropic.ts";
-export { withRetry } from "./retry.ts";
+export { type RetryOptions, withRetry } from "./retry.ts";
 
 /**
  * Build a provider from config. The API key is read from the env var named

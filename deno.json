@@ -15,9 +15,5 @@
     "lineWidth": 100,
     "exclude": ["**/*.md"]
   },
-  "lint": {
-    "rules": {
-      "exclude": ["no-slow-types"]
-    }
-  }
+  "lint": {}
 }

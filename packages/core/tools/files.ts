@@ -15,6 +15,7 @@ function resolvePath(path: string): string {
   return resolve(path);
 }
 
+/** Build the read_file native tool: reads allowlisted paths, truncating long files. */
 export function createReadFileTool(permissions: PermissionEngine): NativeTool {
   return defineTool({
     name: "read_file",
@@ -37,6 +38,7 @@ export function createReadFileTool(permissions: PermissionEngine): NativeTool {
   });
 }
 
+/** Build the write_file native tool: writes allowlisted paths, creating parent directories. */
 export function createWriteFileTool(permissions: PermissionEngine): NativeTool {
   return defineTool({
     name: "write_file",

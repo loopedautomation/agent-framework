@@ -1,10 +1,14 @@
 import { resolve } from "@std/path";
 import type { Permissions } from "../config/schema.ts";
 
+/** The permission axis a decision applies to. */
 export type PermissionKind = "net" | "run" | "read" | "write";
 
+/** The outcome of one permission check, recorded to the audit trail. */
 export interface PermissionDecision {
+  /** Whether the action is allowed. */
   allowed: boolean;
+  /** Which axis was checked. */
   kind: PermissionKind;
   /** What was asked for (host, executable, path). */
   subject: string;
@@ -12,6 +16,7 @@ export interface PermissionDecision {
   reason?: string;
 }
 
+/** Receives every permission decision, e.g. to write it to the audit store. */
 export type AuditSink = (event: {
   kind: "permission";
   decision: PermissionDecision;
@@ -37,6 +42,7 @@ export class PermissionEngine {
   #permissions: Permissions;
   #audit?: AuditSink;
 
+  /** Create an engine over the config's allowlists; undefined permissions deny everything. */
   constructor(permissions: Permissions | undefined, audit?: AuditSink) {
     this.#permissions = permissions ?? {};
     this.#audit = audit;
@@ -55,6 +61,7 @@ export class PermissionEngine {
     return decision;
   }
 
+  /** Check whether `host` is in the net allowlist. */
   net(host: string): PermissionDecision {
     const allowed = (this.#permissions.net ?? []).some((p) => hostMatches(p, host));
     return this.#decide("net", host, allowed, "permissions.net");
@@ -67,6 +74,7 @@ export class PermissionEngine {
     return this.#decide("run", executable, allowed, "permissions.run");
   }
 
+  /** Check whether `path` (already resolved) is under a read allowlist prefix. */
   read(path: string): PermissionDecision {
     // Prefixes may be relative (resolved against cwd) — the checked path
     // arrives already resolved, so both sides normalize before matching.
@@ -74,6 +82,7 @@ export class PermissionEngine {
     return this.#decide("read", path, allowed, "permissions.read");
   }
 
+  /** Check whether `path` (already resolved) is under a write allowlist prefix. */
   write(path: string): PermissionDecision {
     const allowed = (this.#permissions.write ?? []).some((p) => pathMatches(resolve(p), path));
     return this.#decide("write", path, allowed, "permissions.write");

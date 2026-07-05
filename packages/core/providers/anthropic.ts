@@ -70,17 +70,20 @@ function toStopReason(reason: string | undefined): StopReason {
 
 /** Provider adapter for the Anthropic Messages API. */
 export class AnthropicProvider implements Provider {
+  /** Provider identifier. */
   readonly id = "anthropic";
   #apiKey: string;
   #baseUrl: string;
   #fetch: typeof fetch;
 
+  /** Create the provider from an API key, optional base URL, and an injectable fetch for tests. */
   constructor(opts: AnthropicOptions) {
     this.#apiKey = opts.apiKey;
     this.#baseUrl = (opts.baseUrl ?? "https://api.anthropic.com").replace(/\/$/, "");
     this.#fetch = opts.fetch ?? fetch;
   }
 
+  /** Run one completion, with retry on retryable provider errors. */
   complete(req: CompletionRequest): Promise<Completion> {
     return withRetry(() => this.#completeOnce(req));
   }

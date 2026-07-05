@@ -1,7 +1,10 @@
 import { ProviderError } from "./types.ts";
 
+/** Tuning for {@linkcode withRetry}. */
 export interface RetryOptions {
+  /** Total attempts including the first. Defaults to 3. */
   attempts?: number;
+  /** Backoff base; delay is base * 2^attempt. Defaults to 500. */
   baseDelayMs?: number;
   /** Injectable for tests. */
   sleep?: (ms: number) => Promise<void>;

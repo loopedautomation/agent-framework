@@ -33,6 +33,7 @@ export class ToolRegistry {
   #activated = new Set<string>();
   #searchTool: NativeTool;
 
+  /** Create a registry: `always` tools stay active, `deferred` tools hide behind search_tools. */
   constructor(always: NativeTool[], deferred: NativeTool[]) {
     this.#always = always;
     this.#deferred = deferred;

@@ -2,8 +2,14 @@ import { parse } from "@std/yaml";
 import { z } from "zod";
 import { type AgentConfig, AgentConfigSchema, DEFAULT_API_KEY_ENV } from "./schema.ts";
 
+/** A configuration problem: invalid YAML, schema violation, or a missing reference. */
 export class ConfigError extends Error {
-  constructor(message: string, readonly source?: string) {
+  /** Create a ConfigError, optionally naming the file or config it came from. */
+  constructor(
+    message: string,
+    /** The file or config the error came from. */
+    readonly source?: string,
+  ) {
     super(message);
     this.name = "ConfigError";
   }
@@ -52,7 +58,9 @@ export function parseAgentConfig(yamlText: string, source?: string): AgentConfig
   const result = AgentConfigSchema.safeParse(data);
   if (!result.success) {
     throw new ConfigError(
-      `${source ?? "config"} is not a valid agent definition:\n${z.prettifyError(result.error)}`,
+      `${source ?? "config"} is not a valid agent definition:\n${
+        z.prettifyError(result.error as z.ZodError)
+      }`,
       source,
     );
   }

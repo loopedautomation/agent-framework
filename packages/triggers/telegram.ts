@@ -17,9 +17,11 @@ export interface TelegramMessage {
   text?: string;
 }
 
+/** Message filters shared by {@linkcode shouldHandle} and {@linkcode TelegramTriggerOptions}. */
 export interface TelegramFilterOptions {
   /** Chat ids, group titles, or public @usernames to listen in; empty/undefined = all chats. */
   chats?: string[];
+  /** Only handle messages that @-mention the bot (private chats always pass). */
   requireMention?: boolean;
   /** Only handle messages from these authors (user ids or usernames); empty/undefined = anyone. */
   fromUsers?: string[];
@@ -56,7 +58,9 @@ export function shouldHandle(
   return true;
 }
 
+/** Options for {@linkcode TelegramTrigger}. */
 export interface TelegramTriggerOptions extends TelegramFilterOptions {
+  /** Telegram bot token (from @BotFather). */
   token: string;
   /** Post replies into this chat id instead of the source chat. */
   replyChat?: string;
@@ -64,13 +68,19 @@ export interface TelegramTriggerOptions extends TelegramFilterOptions {
   allowSilence?: boolean;
 }
 
+/**
+ * Long-polls the Telegram Bot API and wakes the agent on matching messages,
+ * replying in the source chat (or a configured reply chat).
+ */
 export class TelegramTrigger implements Trigger {
+  /** Trigger name, used as the event's `trigger` field. */
   readonly name = "telegram";
   #opts: TelegramTriggerOptions;
   #stopped = false;
   #abort?: AbortController;
   #backoffMs = 1_000;
 
+  /** Create the trigger; nothing polls until {@linkcode start}. */
   constructor(opts: TelegramTriggerOptions) {
     this.#opts = opts;
   }
@@ -121,6 +131,7 @@ export class TelegramTrigger implements Trigger {
     }
   }
 
+  /** Verify the token and start the getUpdates long-poll loop. */
   async start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
     const res = await this.#api("getMe");
     if (!res.ok) {
@@ -171,6 +182,7 @@ export class TelegramTrigger implements Trigger {
     }
   }
 
+  /** Stop the poll loop and abort the in-flight getUpdates request. */
   stop(): Promise<void> {
     this.#stopped = true;
     this.#abort?.abort();

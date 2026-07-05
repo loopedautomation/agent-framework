@@ -42,20 +42,33 @@ CREATE TABLE IF NOT EXISTS identity (
 );
 `;
 
+/** One completed run, as written to the runs table. */
 export interface RunRecord {
+  /** Session the run belonged to; absent for sessionless runs. */
   sessionId?: number;
+  /** Which trigger produced the event, e.g. "cron" or "cli". */
   trigger: string;
+  /** The input text the agent received. */
   input: string;
+  /** How the run ended. */
   status: RunStatus;
+  /** The agent's final reply. */
   reply: string;
+  /** Inner-loop iterations consumed. */
   steps: number;
+  /** Token usage for the whole run. */
   usage: Usage;
+  /** ISO timestamp of when the run started. */
   startedAt: string;
 }
 
+/** One audit event, as written to the audit table. */
 export interface AuditRecord {
+  /** Run the event belongs to, when known. */
   runId?: number;
+  /** Event kind, e.g. "permission". */
   kind: string;
+  /** Event payload; stored as JSON. */
   detail: unknown;
 }
 
@@ -66,12 +79,14 @@ export interface AuditRecord {
 export class Store {
   #db: DatabaseSync;
 
+  /** Open (or create) the SQLite database at `path` and apply the schema. */
   constructor(path: string) {
     this.#db = new DatabaseSync(path);
     this.#db.exec("PRAGMA journal_mode = WAL;");
     this.#db.exec(SCHEMA);
   }
 
+  /** Close the underlying database. */
   close() {
     this.#db.close();
   }
@@ -104,6 +119,7 @@ export class Store {
     }
   }
 
+  /** Load a session's transcript in order. */
   loadMessages(sessionId: number): Message[] {
     const rows = this.#db
       .prepare("SELECT message_json FROM messages WHERE session_id = ? ORDER BY seq")
@@ -111,6 +127,7 @@ export class Store {
     return rows.map((r) => JSON.parse(r.message_json));
   }
 
+  /** Insert a run record; returns the new run id. */
   recordRun(run: RunRecord): number {
     const result = this.#db
       .prepare(
@@ -132,6 +149,7 @@ export class Store {
     return Number(result.lastInsertRowid);
   }
 
+  /** Insert an audit event. */
   recordAudit(record: AuditRecord) {
     this.#db
       .prepare("INSERT INTO audit (run_id, kind, detail_json) VALUES (?, ?, ?)")
@@ -145,6 +163,7 @@ export class Store {
       .all(limit) as Record<string, unknown>[];
   }
 
+  /** Most recent audit events, newest first. */
   recentAudit(limit = 50): Record<string, unknown>[] {
     return this.#db
       .prepare("SELECT * FROM audit ORDER BY id DESC LIMIT ?")
@@ -159,6 +178,7 @@ export class Store {
     return row?.value;
   }
 
+  /** Persist an identity fact, overwriting any previous value. */
   setIdentity(key: string, value: string) {
     this.#db
       .prepare(

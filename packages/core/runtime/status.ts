@@ -1,11 +1,14 @@
 import type { AgentService } from "./service.ts";
 
+/** Options for {@linkcode startStatusServer}. Env vars AF_STATUS_* fill any gaps. */
 export interface StatusServerOptions {
-  /** Loopback by default — expose deliberately, not accidentally. */
+  /** Loopback by default - exposure is deliberate. */
   hostname?: string;
+  /** Port to listen on. Defaults to 9090. */
   port?: number;
   /** Bearer token for /runs and /audit. Unset → loopback callers only. */
   token?: string;
+  /** Called with the bound address once listening. */
   onListen?: (addr: { hostname: string; port: number }) => void;
 }
 

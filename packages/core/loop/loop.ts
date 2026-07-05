@@ -3,24 +3,32 @@ import type { Message, Provider, Usage } from "../providers/types.ts";
 import { ProviderError } from "../providers/types.ts";
 import type { NativeTool } from "../tools/types.ts";
 
+/** How a run ended: cleanly, out of steps, or on a provider failure. */
 export type RunStatus = "ok" | "error_max_steps" | "error_provider";
 
+/** What one run produced. */
 export interface RunResult {
+  /** How the run ended. */
   status: RunStatus;
   /** The agent's final text (or a description of why the run ended). */
   reply: string;
   /** Inner-loop iterations consumed (LLM calls). */
   steps: number;
+  /** Token usage summed over the run's LLM calls. */
   usage: Usage;
   /** Full transcript including this run — feed back in as `history`. */
   messages: Message[];
 }
 
+/** Inputs to {@linkcode runAgent}. */
 export interface RunOptions {
+  /** The agent's config; purpose becomes the system prompt, limits cap the run. */
   config: AgentConfig;
+  /** The LLM backend to call. */
   provider: Provider;
   /** Static toolset, or a resolver called each iteration (tool search grows it mid-run). */
   tools?: NativeTool[] | (() => NativeTool[]);
+  /** The user-facing input that starts the run. */
   input: string;
   /** Prior conversation, e.g. from session memory. */
   history?: Message[];

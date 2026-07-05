@@ -25,9 +25,11 @@ export interface SlackMessage {
   thread_ts?: string;
 }
 
+/** Message filters shared by {@linkcode shouldHandle} and {@linkcode SlackTriggerOptions}. */
 export interface SlackFilterOptions {
   /** Channel names or ids to listen in; empty/undefined = all channels the bot is in. */
   channels?: string[];
+  /** Only handle messages that @-mention the bot (DMs always pass). */
   requireMention?: boolean;
   /** Only handle messages from these Slack user ids (U…); empty/undefined = anyone. */
   fromUsers?: string[];
@@ -60,6 +62,7 @@ export function shouldHandle(
   return true;
 }
 
+/** Options for {@linkcode SlackTrigger}. */
 export interface SlackTriggerOptions extends SlackFilterOptions {
   /** Bot token (xoxb-…) — reads channel info, posts replies. */
   token: string;
@@ -71,7 +74,12 @@ export interface SlackTriggerOptions extends SlackFilterOptions {
   allowSilence?: boolean;
 }
 
+/**
+ * Listens over Slack Socket Mode and wakes the agent on matching messages,
+ * replying in the source thread (or a configured reply channel).
+ */
 export class SlackTrigger implements Trigger {
+  /** Trigger name, used as the event's `trigger` field. */
   readonly name = "slack";
   #opts: SlackTriggerOptions;
   #ws?: WebSocket;
@@ -80,6 +88,7 @@ export class SlackTrigger implements Trigger {
   #channelNames = new Map<string, string | undefined>();
   #reconnectDelayMs = 1_000;
 
+  /** Create the trigger; nothing connects until {@linkcode start}. */
   constructor(opts: SlackTriggerOptions) {
     this.#opts = opts;
   }
@@ -162,6 +171,7 @@ export class SlackTrigger implements Trigger {
     await this.#reply(msg, result);
   }
 
+  /** Open the Socket Mode connection; matching messages emit events and get replies. */
   async start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
     const auth = await this.#api("auth.test");
     if (!auth.ok) {
@@ -222,6 +232,7 @@ export class SlackTrigger implements Trigger {
     }, delay);
   }
 
+  /** Close the socket and stop reconnecting. */
   stop(): Promise<void> {
     this.#stopped = true;
     this.#ws?.close();

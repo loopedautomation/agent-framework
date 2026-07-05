@@ -1,7 +1,9 @@
 // Shared reply-text helpers for chat triggers (Discord, Slack, Telegram).
 
-// With allow_silence, the agent signals "nothing to say" by replying with
-// exactly this sentinel — the trigger then posts nothing instead of noise.
+/**
+ * Sentinel reply for allow_silence: the agent answers with exactly this
+ * string to signal "nothing to say", and the trigger posts nothing.
+ */
 export const NO_REPLY = "__NO_REPLY__";
 
 /** Chat platforms cap message length; split on line boundaries where possible. */

@@ -1,7 +1,10 @@
 import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 
+/** Options for {@linkcode WebhookTrigger}. */
 export interface WebhookTriggerOptions {
+  /** URL path the trigger accepts POSTs on. */
   path: string;
+  /** TCP port to listen on. */
   port: number;
   /** The expected bearer token (already resolved from token_env). */
   token: string;
@@ -26,14 +29,17 @@ function timingSafeEqual(a: string, b: string): boolean {
  * Responds synchronously with the run result.
  */
 export class WebhookTrigger implements Trigger {
+  /** Trigger name, used as the event's `trigger` field. */
   readonly name = "webhook";
   #opts: WebhookTriggerOptions;
   #server?: Deno.HttpServer;
 
+  /** Create the trigger; no server runs until {@linkcode start}. */
   constructor(opts: WebhookTriggerOptions) {
     this.#opts = opts;
   }
 
+  /** Start the HTTP server; each authorized POST emits an event and returns the run result. */
   start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
     const { path, port, token } = this.#opts;
     this.#server = Deno.serve({
@@ -79,6 +85,7 @@ export class WebhookTrigger implements Trigger {
     return Promise.resolve();
   }
 
+  /** Shut down the HTTP server. */
   async stop(): Promise<void> {
     await this.#server?.shutdown();
   }

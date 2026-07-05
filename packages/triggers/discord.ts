@@ -12,8 +12,10 @@ const INTENTS = (1 << 0) | (1 << 9) | (1 << 15);
 
 export { NO_REPLY, splitMessage };
 
-// Everything a Looped Discord agent needs, nothing more:
-// VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY
+/**
+ * Permission bitfield the invite URL requests:
+ * VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY.
+ */
 export const INVITE_PERMISSIONS = (1 << 10) | (1 << 11) | (1 << 16);
 
 /** The OAuth invite URL for a bot application — so nobody computes permission bitfields by hand. */
@@ -47,9 +49,11 @@ export interface DiscordMessage {
   mentions?: { id: string }[];
 }
 
+/** Message filters shared by {@linkcode shouldHandle} and {@linkcode DiscordTriggerOptions}. */
 export interface DiscordFilterOptions {
   /** Channel names or ids to listen in; empty/undefined = all channels. */
   channels?: string[];
+  /** Only handle messages that @-mention the bot. */
   requireMention?: boolean;
   /** Only handle messages from these authors (user ids or usernames); empty/undefined = anyone. */
   fromUsers?: string[];
@@ -79,7 +83,9 @@ export function shouldHandle(
   return true;
 }
 
+/** Options for {@linkcode DiscordTrigger}. */
 export interface DiscordTriggerOptions extends DiscordFilterOptions {
+  /** Discord bot token. */
   token: string;
   /** Post replies into this channel id instead of the source channel. */
   replyChannel?: string;
@@ -87,7 +93,12 @@ export interface DiscordTriggerOptions extends DiscordFilterOptions {
   allowSilence?: boolean;
 }
 
+/**
+ * Listens to the Discord gateway and wakes the agent on matching messages,
+ * replying in the source channel (or a configured reply channel).
+ */
 export class DiscordTrigger implements Trigger {
+  /** Trigger name, used as the event's `trigger` field. */
   readonly name = "discord";
   #opts: DiscordTriggerOptions;
   #ws?: WebSocket;
@@ -97,6 +108,7 @@ export class DiscordTrigger implements Trigger {
   #channelNames = new Map<string, string | undefined>();
   #reconnectDelayMs = 1_000;
 
+  /** Create the trigger; nothing connects until {@linkcode start}. */
   constructor(opts: DiscordTriggerOptions) {
     this.#opts = opts;
   }
@@ -163,6 +175,7 @@ export class DiscordTrigger implements Trigger {
     }
   }
 
+  /** Connect to the gateway; matching messages emit events and get replies. */
   async start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
     const res = await this.#api("/gateway/bot");
     if (!res.ok) {
@@ -236,6 +249,7 @@ export class DiscordTrigger implements Trigger {
     ws.onerror = () => ws.close();
   }
 
+  /** Close the gateway connection and stop reconnecting. */
   stop(): Promise<void> {
     this.#stopped = true;
     clearInterval(this.#heartbeat);

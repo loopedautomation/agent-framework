@@ -8,7 +8,7 @@ import { z } from "zod";
 // yaml-language-server modeline. The schema IS the config documentation;
 // don't let the two drift.
 
-export const ModelConfigSchema = z.strictObject({
+const ModelConfigSchema = z.strictObject({
   provider: z.enum(["openai-compatible", "anthropic"]).describe(
     "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy.",
   ),
@@ -27,7 +27,7 @@ export const ModelConfigSchema = z.strictObject({
   ),
 }).describe("Which model runs this agent, and how to reach it.");
 
-export const DiscordTriggerSchema = z.strictObject({
+const DiscordTriggerSchema = z.strictObject({
   type: z.literal("discord"),
   channels: z.array(z.string().min(1)).optional().describe(
     "Channel names or ids to listen in; omit for all channels the bot can see.",
@@ -47,7 +47,7 @@ export const DiscordTriggerSchema = z.strictObject({
   ),
 }).describe("Listen to Discord messages via the gateway; replies go in-channel by default.");
 
-export const SlackTriggerSchema = z.strictObject({
+const SlackTriggerSchema = z.strictObject({
   type: z.literal("slack"),
   channels: z.array(z.string().min(1)).optional().describe(
     "Channel names or ids to listen in; omit for all channels the bot is in.",
@@ -74,7 +74,7 @@ export const SlackTriggerSchema = z.strictObject({
   "Listen to Slack messages via Socket Mode (no public endpoint); replies go in-thread by default.",
 );
 
-export const TelegramTriggerSchema = z.strictObject({
+const TelegramTriggerSchema = z.strictObject({
   type: z.literal("telegram"),
   chats: z.array(z.string().min(1)).optional().describe(
     "Chat ids, group titles, or public @usernames to listen in; omit for all chats the bot sees.",
@@ -98,7 +98,7 @@ export const TelegramTriggerSchema = z.strictObject({
   "Listen to Telegram messages via Bot API long-polling (no public endpoint); replies go in-chat by default.",
 );
 
-export const WebhookTriggerSchema = z.strictObject({
+const WebhookTriggerSchema = z.strictObject({
   type: z.literal("webhook"),
   path: z.string().startsWith("/").default("/").describe("HTTP path to serve."),
   port: z.number().int().min(1).max(65535).default(8080).describe("Port to listen on."),
@@ -109,13 +109,13 @@ export const WebhookTriggerSchema = z.strictObject({
   "HTTP trigger: POST {path} with authorization: Bearer <token> and JSON body {input, conversation_id?}; responds with the run result.",
 );
 
-export const CronTriggerSchema = z.strictObject({
+const CronTriggerSchema = z.strictObject({
   type: z.literal("cron"),
   schedule: z.string().min(1).describe('Cron expression, e.g. "0 9 * * 1" for Mondays 09:00.'),
   prompt: z.string().min(1).describe("What to tell the agent each tick."),
 }).describe("Fire the agent on a schedule with a fixed prompt.");
 
-export const TriggerSchema = z.discriminatedUnion("type", [
+const TriggerSchema = z.discriminatedUnion("type", [
   DiscordTriggerSchema,
   SlackTriggerSchema,
   TelegramTriggerSchema,
@@ -123,7 +123,7 @@ export const TriggerSchema = z.discriminatedUnion("type", [
   CronTriggerSchema,
 ]).describe("An event source that wakes the agent.");
 
-export const McpServerSchema = z
+const McpServerSchema = z
   .strictObject({
     name: z.string().min(1).describe(
       "Server name; its tools appear namespaced as mcp__<name>__<tool>.",
@@ -144,7 +144,7 @@ export const McpServerSchema = z
   })
   .describe("A Model Context Protocol server providing tools to the agent.");
 
-export const PermissionsSchema = z.strictObject({
+const PermissionsSchema = z.strictObject({
   net: z.array(z.string().min(1)).optional().describe(
     "Hosts http_request may reach; *.example.com matches subdomains (not the apex).",
   ),
@@ -157,19 +157,19 @@ export const PermissionsSchema = z.strictObject({
   "Deny-by-default allowlists. Omitting this block means the agent can touch nothing; denials are surfaced to the model as tool results.",
 );
 
-export const MemoryConfigSchema = z.strictObject({
+const MemoryConfigSchema = z.strictObject({
   scope: z.enum(["thread", "none"]).default("none").describe(
     "thread: conversation history persists per conversation key (chat channel or thread, webhook conversation_id). none: every run starts fresh.",
   ),
 }).describe("What the agent remembers between events.");
 
-export const LimitsSchema = z.strictObject({
+const LimitsSchema = z.strictObject({
   max_steps: z.number().int().positive().default(20).describe(
     "Inner-loop iterations (LLM calls) before the run ends with error_max_steps.",
   ),
 }).describe("Per-run budgets — the dead-man's switches for unattended operation.");
 
-export const AgentConfigSchema = z.strictObject({
+const agentConfigSchema = z.strictObject({
   handle: z
     .string()
     .regex(
@@ -215,20 +215,219 @@ export const AgentConfigSchema = z.strictObject({
   "A Looped AF agent: one job, one file. https://github.com/loopedautomation/agent-framework",
 );
 
-export type AgentConfig = z.infer<typeof AgentConfigSchema>;
-export type ModelConfig = z.infer<typeof ModelConfigSchema>;
+// The exported types below are written out by hand so the public API carries
+// explicit types (JSR's no-slow-types rule; z.infer of a schema is not one).
+// The _sync checks at the bottom of this file fail to compile if a type
+// drifts from its schema, so the two cannot diverge silently.
+
+/** The `model` block of an agent config: which model runs the agent, and how to reach it. */
+export interface ModelConfig {
+  /** LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM and compatible proxies. */
+  provider: "openai-compatible" | "anthropic";
+  /** Model identifier, e.g. gpt-5.4-mini or claude-sonnet-5. */
+  id: string;
+  /** Model for cheap internal calls. Defaults to the main model. */
+  small?: string;
+  /** Endpoint override for openai-compatible providers. */
+  base_url?: string;
+  /** Name of the env var holding the API key. */
+  api_key_env?: string;
+  /** Model ids to fall back to when the primary fails. */
+  fallbacks?: string[];
+}
+
+/** A Discord trigger: listen to messages via the gateway. */
+export interface DiscordTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "discord";
+  /** Channel names or ids to listen in; omit for all channels the bot can see. */
+  channels?: string[];
+  /** Only respond when the bot is @-mentioned. */
+  require_mention?: boolean;
+  /** Env var holding the Discord bot token. */
+  token_env: string;
+  /** Only handle messages from these authors (user ids or usernames). */
+  from_users?: string[];
+  /** Channel id to post replies into instead of the source channel. */
+  reply_channel?: string;
+  /** Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
+  allow_silence: boolean;
+}
+
+/** A Slack trigger: listen to messages via Socket Mode. */
+export interface SlackTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "slack";
+  /** Channel names or ids to listen in; omit for all channels the bot is in. */
+  channels?: string[];
+  /** Only respond when the bot is @-mentioned. DMs always address the bot. */
+  require_mention?: boolean;
+  /** Env var holding the bot token (xoxb-…). */
+  token_env: string;
+  /** Env var holding the app-level token (xapp-…) for Socket Mode. */
+  app_token_env: string;
+  /** Only handle messages from these Slack user ids (U…). */
+  from_users?: string[];
+  /** Channel id to post replies into instead of the source thread. */
+  reply_channel?: string;
+  /** Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
+  allow_silence: boolean;
+}
+
+/** A Telegram trigger: listen to messages via Bot API long-polling. */
+export interface TelegramTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "telegram";
+  /** Chat ids, group titles, or public @usernames to listen in. */
+  chats?: string[];
+  /** Only respond when the bot is @-mentioned. Private chats always address the bot. */
+  require_mention?: boolean;
+  /** Env var holding the bot token from @BotFather. */
+  token_env: string;
+  /** Only handle messages from these authors (user ids or usernames). */
+  from_users?: string[];
+  /** Chat id to post replies into instead of the source chat. */
+  reply_chat?: string;
+  /** Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
+  allow_silence: boolean;
+}
+
+/** A webhook trigger: POST {path} with a bearer token and JSON body {input, conversation_id?}. */
+export interface WebhookTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "webhook";
+  /** HTTP path to serve. */
+  path: string;
+  /** Port to listen on. */
+  port: number;
+  /** Env var holding the bearer token callers must present. */
+  token_env: string;
+}
+
+/** A cron trigger: fire the agent on a schedule with a fixed prompt. */
+export interface CronTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "cron";
+  /** Cron expression, e.g. "0 9 * * 1" for Mondays 09:00. */
+  schedule: string;
+  /** What to tell the agent each tick. */
+  prompt: string;
+}
+
+/** An event source that wakes the agent, discriminated on `type`. */
+export type TriggerConfig =
+  | DiscordTriggerConfig
+  | SlackTriggerConfig
+  | TelegramTriggerConfig
+  | WebhookTriggerConfig
+  | CronTriggerConfig;
+
+/** A Model Context Protocol server providing tools to the agent. */
+export interface McpServerConfig {
+  /** Server name; its tools appear namespaced as mcp__<name>__<tool>. */
+  name: string;
+  /** stdio server: argv to launch it. Exactly one of `command` or `url`. */
+  command?: string[];
+  /** HTTP server: the endpoint URL. Exactly one of `command` or `url`. */
+  url?: string;
+  /** Env vars passed to the server; values may be ${VAR} references. */
+  env?: Record<string, string>;
+  /** Expose only these tools. */
+  include?: string[];
+}
+
+/** Deny-by-default allowlists. Omitting a list means the agent can touch nothing on that axis. */
+export interface Permissions {
+  /** Hosts http_request may reach; *.example.com matches subdomains. */
+  net?: string[];
+  /** Executables run_bash may spawn, matched by basename. */
+  run?: string[];
+  /** Readable path prefixes. */
+  read?: string[];
+  /** Writable path prefixes. */
+  write?: string[];
+}
+
+/** What the agent remembers between events. */
+export interface MemoryConfig {
+  /** thread: conversation history persists per conversation key. none: every run starts fresh. */
+  scope: "thread" | "none";
+}
+
+/** Per-run budgets. */
+export interface LimitsConfig {
+  /** Inner-loop iterations (LLM calls) before the run ends with error_max_steps. */
+  max_steps: number;
+}
+
+/** A parsed and validated agent.yaml, with defaults applied. */
+export interface AgentConfig {
+  /** The operator's handle for this agent (compose service, logs, CLI, session keys). */
+  handle: string;
+  /** One line: what job this agent does. */
+  description: string;
+  /** Which model runs this agent, and how to reach it. */
+  model: ModelConfig;
+  /** The agent's job description; becomes the model's system prompt. */
+  purpose: string;
+  /** Event sources that wake the agent. */
+  triggers?: TriggerConfig[];
+  /** Paths to skill markdown files, relative to this config. */
+  skills?: string[];
+  /** Tool sources beyond the natives and skills. */
+  tools?: {
+    /** MCP servers to connect at startup. */
+    mcp?: McpServerConfig[];
+    /** Paths to custom TypeScript tool modules. Not yet implemented. */
+    custom?: string[];
+    /** Tool search: defer MCP tool schemas out of context behind a search_tools tool. */
+    search: "auto" | "on" | "off";
+  };
+  /** Deny-by-default permission allowlists. */
+  permissions?: Permissions;
+  /** Env for tools and MCP servers; values may be ${VAR} references. */
+  env?: Record<string, string>;
+  /** What the agent remembers between events. */
+  memory?: MemoryConfig;
+  /** Per-run budgets. */
+  limits: LimitsConfig;
+}
+
+/**
+ * Zod schema for agent.yaml. Unknown keys are hard errors everywhere: in a
+ * config-driven framework a typo that silently no-ops is a security bug.
+ */
+export const AgentConfigSchema: AgentConfigValidator = agentConfigSchema;
+
+/**
+ * The validation surface of {@linkcode AgentConfigSchema}. Documented as an
+ * interface so the public API stays free of Zod's internal types.
+ */
+export interface AgentConfigValidator {
+  /** Validate unknown data as an AgentConfig; throws on failure. */
+  parse(data: unknown): AgentConfig;
+  /** Validate without throwing; mirrors Zod's safeParse. */
+  safeParse(
+    data: unknown,
+  ): { success: true; data: AgentConfig } | { success: false; error: Error };
+}
 
 /** The env var each provider reads its API key from when api_key_env is omitted. */
 export const DEFAULT_API_KEY_ENV: Record<ModelConfig["provider"], string> = {
   "openai-compatible": "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
 };
-export type TriggerConfig = z.infer<typeof TriggerSchema>;
-export type Permissions = z.infer<typeof PermissionsSchema>;
+
+// Compile-time drift guards: each fails if the hand-written type and the
+// schema's inferred type stop being mutually assignable.
+type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const _agentConfigInSync: MutuallyAssignable<AgentConfig, z.infer<typeof agentConfigSchema>> = true;
+const _triggerConfigInSync: MutuallyAssignable<TriggerConfig, z.infer<typeof TriggerSchema>> = true;
+const _permissionsInSync: MutuallyAssignable<Permissions, z.infer<typeof PermissionsSchema>> = true;
 
 /** The published JSON Schema for agent.yaml (editor completion, validation). */
 export function agentConfigJsonSchema(): Record<string, unknown> {
-  return z.toJSONSchema(AgentConfigSchema, { io: "input" }) as Record<
+  return z.toJSONSchema(agentConfigSchema, { io: "input" }) as Record<
     string,
     unknown
   >;

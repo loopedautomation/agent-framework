@@ -37,7 +37,9 @@ function truncate(text: string): string {
     : text;
 }
 
+/** Options for {@linkcode createRunBashTool}. */
 export interface RunBashOptions {
+  /** Engine that decides which executables may run. */
   permissions: PermissionEngine;
   /**
    * The complete subprocess environment — only what the config granted,
@@ -45,10 +47,13 @@ export interface RunBashOptions {
    * see secrets the agent.yaml didn't give it.
    */
   env: Record<string, string>;
+  /** Working directory for the command. */
   cwd?: string;
+  /** Kill the command after this long. Defaults to 60s. */
   timeoutMs?: number;
 }
 
+/** Build the run_bash native tool: executes allowlisted commands via bash -c. */
 export function createRunBashTool(opts: RunBashOptions): NativeTool {
   const timeoutMs = opts.timeoutMs ?? 60_000;
   return defineTool({
