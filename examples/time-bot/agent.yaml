@@ -10,9 +10,6 @@ description: Answers questions, and knows what time it is.
 model:
   provider: openai-compatible
   id: gpt-5.4-mini
-  pricing: # optional — set your model's real prices to see cost per run
-    input_per_mtok: 0.15
-    output_per_mtok: 0.60
 
 purpose: |
   You are a concise assistant. When asked about the current date or time,

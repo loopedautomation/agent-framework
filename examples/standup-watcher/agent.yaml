@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A Slack observer: it watches the standup channel and only speaks when
+# it has something to say. allow_silence is the key line; the purpose
+# tells the agent how to stay quiet.
+#
+#   export OPENAI_API_KEY=... SLACK_BOT_TOKEN=... SLACK_APP_TOKEN=...
+#   af run examples/standup-watcher/agent.yaml
+#
+handle: standup-watcher
+description: Watches the standup channel and nudges updates that are missing a plan or blockers.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+
+purpose: |
+  You read standup updates in the standup channel. A good update says
+  what was done, what is next and whether anything is blocking. If an
+  update is missing one of those, reply in the thread with one short,
+  friendly question asking for the missing part. If the update already
+  covers all three, or the message isn't a standup update, reply with
+  exactly __NO_REPLY__.
+
+triggers:
+  - type: slack
+    channels: ["standup"]
+    allow_silence: true
+    # from_users: ["U012ABCDEF"]   # only watch these teammates
+    # reply_channel: "C0REVIEW"    # report elsewhere instead of in-thread
+
+memory:
+  scope: thread
+
+limits:
+  max_steps: 5

@@ -9,9 +9,6 @@ model:
   id: gpt-5.4-mini
   small: gpt-5.4-mini
   api_key_env: OPENAI_API_KEY
-  pricing: # example numbers — set your model's real prices (used to enforce limits.max_cost)
-    input_per_mtok: 0.15
-    output_per_mtok: 0.60
 
 purpose: |
   You manage GitHub issues for the team's repository. When someone
@@ -40,4 +37,3 @@ memory:
 
 limits:
   max_steps: 10
-  max_cost: 0.10

@@ -4,9 +4,9 @@
 #
 # Run from a framework checkout (it drives the af CLI via deno):
 #   export OPENAI_API_KEY=... DISCORD_BOT_TOKEN=...
-#   mkdir -p agents && deno task af run examples/agent-builder/agent.yaml
+#   mkdir -p agents && deno task af run examples/agent-zero/agent.yaml
 #
-handle: agent-builder
+handle: agent-zero
 description: Turns a description of an agent into a scaffolded, validated Looped agent project.
 
 model:

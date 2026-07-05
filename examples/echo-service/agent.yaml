@@ -19,9 +19,6 @@ description: Runs safe echo commands on request over a webhook.
 model:
   provider: openai-compatible
   id: gpt-5.4-mini
-  pricing: # example numbers — set your model's real prices
-    input_per_mtok: 0.15
-    output_per_mtok: 0.60
 
 purpose: |
   You run shell commands when asked, using the run_bash tool, and report

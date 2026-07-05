@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A Telegram bot with one small capability: it can reach wttr.in and
+# nothing else. The fastest example to get running (about 2 minutes,
+# via @BotFather):
+#   export OPENAI_API_KEY=... TELEGRAM_BOT_TOKEN=...
+#   af run examples/weather-bot/agent.yaml
+#
+handle: weather-bot
+description: Answers weather questions in Telegram using wttr.in.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+
+purpose: |
+  You answer weather questions. Fetch the current conditions or forecast
+  from wttr.in with the http_request tool (e.g. GET
+  https://wttr.in/Cape+Town?format=j1 for JSON) and reply with a short,
+  plain-language summary. If a message isn't about the weather, say
+  briefly that weather is all you do.
+
+triggers:
+  - type: telegram
+
+permissions:
+  net: [wttr.in]
+
+memory:
+  scope: thread
+
+limits:
+  max_steps: 10
