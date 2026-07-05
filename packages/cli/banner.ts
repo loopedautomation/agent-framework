@@ -17,11 +17,7 @@ export function printBirthBanner(handle: string, name: string) {
   for (let i = 0; i < lines.length; i++) {
     console.log(`%c${lines[i]}`, `color: ${LOOP_GRADIENT[i % LOOP_GRADIENT.length]}`);
   }
-  console.log(
-    `\n   %cone job · one file · it’s hired%c                      looped.sh\n`,
-    "color: gray; font-style: italic",
-    "color: gray",
-  );
+  console.log();
   console.log(
     `   ✦ first boot — %c${handle}%c has chosen a name: %c${name}%c\n`,
     "color: gray",
