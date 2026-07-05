@@ -56,3 +56,19 @@ volumes:
 Each tick runs the agent with `prompt` as input. Results are logged and recorded in the [run history](docker-run.md#persistence-the-data-volume) — a configurable result sink is planned; until then, when the result needs to go somewhere, have the agent deliver it itself through an allowlisted API or CLI ([Permissions](permissions.md)).
 
 Every run reports its status, steps and tokens, and [`limits`](agent-file.md#limits) cap what an unattended schedule can spend.
+
+## Multiple triggers
+
+`triggers:` is a list, and an agent can declare as many as it needs, including two of the same type. A daily prompt and a weekly prompt can live side by side:
+
+```yaml
+triggers:
+  - type: cron
+    schedule: "0 9 * * *"        # every day 09:00
+    prompt: Post a summary of yesterday's open issues.
+  - type: cron
+    schedule: "0 9 * * 1"        # every Monday 09:00
+    prompt: Post a summary of the past week.
+```
+
+This also works across types: the same agent can listen on Discord, serve a webhook and run a schedule at the same time. Whatever wakes it, the same purpose, permissions and run history apply, and conversation keys stay per source, so a Discord thread and a webhook caller never share memory.

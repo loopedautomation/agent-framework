@@ -33,7 +33,7 @@ permissions:
 
 Published at **[docs.looped.sh/agent-framework](https://docs.looped.sh/agent-framework)**, authored in [`docs/`](docs/):
 
-[Quick start](docs/quick-start.md) · [The agent file](docs/agent-file.md) · [Triggers](docs/triggers.md) · [Skills](docs/skills.md) · [Tools](docs/tools.md) · [Permissions](docs/permissions.md) · [Deployment](docs/deployment.md) · [CLI](docs/cli.md)
+[Quick start](docs/quick-start.mdx) · [The agent file](docs/agent-file.md) · [Triggers](docs/triggers.md) · [Skills](docs/skills.md) · [Tools](docs/tools.md) · [Permissions](docs/permissions.md) · [Deployment](docs/deployment.md) · [CLI](docs/cli.md)
 
 Or start from a complete, runnable agent: the [examples](examples/) go from a minimal REPL bot to the Discord → GitHub [issue-bot](examples/issue-bot/) (`docker compose up`) and the [agent-zero](examples/agent-zero/) — the agent that builds agents.
 
