@@ -40,7 +40,25 @@ CREATE TABLE IF NOT EXISTS identity (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS memories (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
+
+/** One remembered fact, as written to the memories table. */
+export interface MemoryRecord {
+  /** The key the agent chose to file this fact under. */
+  key: string;
+  /** The fact itself. */
+  value: string;
+  /** ISO timestamp of first write. */
+  createdAt: string;
+  /** ISO timestamp of the most recent write. */
+  updatedAt: string;
+}
 
 /** One completed run, as written to the runs table. */
 export interface RunRecord {
@@ -185,5 +203,49 @@ export class Store {
         "INSERT INTO identity (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
       )
       .run(key, value);
+  }
+
+  /**
+   * Persist a memory, overwriting any previous value under the same key.
+   * This is the agent's cross-conversation, cross-restart memory (M37) —
+   * distinct from thread history, which lives in sessions/messages.
+   */
+  rememberMemory(key: string, value: string) {
+    this.#db
+      .prepare(
+        `INSERT INTO memories (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      )
+      .run(key, value);
+  }
+
+  /** Recall one memory by key. */
+  recallMemory(key: string): MemoryRecord | undefined {
+    const row = this.#db
+      .prepare("SELECT key, value, created_at, updated_at FROM memories WHERE key = ?")
+      .get(key) as
+        | { key: string; value: string; created_at: string; updated_at: string }
+        | undefined;
+    if (!row) return undefined;
+    return { key: row.key, value: row.value, createdAt: row.created_at, updatedAt: row.updated_at };
+  }
+
+  /** All memories, most recently updated first. */
+  listMemories(): MemoryRecord[] {
+    const rows = this.#db
+      .prepare("SELECT key, value, created_at, updated_at FROM memories ORDER BY updated_at DESC")
+      .all() as { key: string; value: string; created_at: string; updated_at: string }[];
+    return rows.map((r) => ({
+      key: r.key,
+      value: r.value,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+  }
+
+  /** Delete a memory; returns true if a row was removed. */
+  forgetMemory(key: string): boolean {
+    const result = this.#db.prepare("DELETE FROM memories WHERE key = ?").run(key);
+    return result.changes > 0;
   }
 }

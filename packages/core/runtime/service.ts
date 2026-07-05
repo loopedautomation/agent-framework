@@ -12,6 +12,7 @@ import { runAgent, type RunResult } from "../loop/loop.ts";
 import { Store } from "../store/store.ts";
 import { type AgentIdentity, ensureIdentity, identityNote } from "./identity.ts";
 import { createSkillTool, loadSkills, type Skill, skillsPromptSection } from "../skills/skills.ts";
+import { createMemoryTools, type MemoryEvent, memoryPromptSection } from "../tools/memory.ts";
 import { connectMcpServers, type McpConnections } from "../tools/mcp.ts";
 import { SEARCH_AUTO_THRESHOLD, ToolRegistry } from "../tools/registry.ts";
 
@@ -88,9 +89,15 @@ export class AgentService {
    * Tools follow the permissions (minimalism: a tool the agent can't use
    * doesn't exist for it — no dead schemas burning a small model's context).
    */
-  #buildTools(engine: PermissionEngine): () => NativeTool[] {
+  #buildTools(
+    engine: PermissionEngine,
+    onMemoryEvent: (event: MemoryEvent) => void,
+  ): () => NativeTool[] {
     const always: NativeTool[] = [currentTimeTool, ...this.#extraTools];
     if (this.#skills?.length) always.push(createSkillTool(this.#skills));
+    if (this.config.memory?.persistent) {
+      always.push(...createMemoryTools(this.store, onMemoryEvent));
+    }
     if (this.config.permissions?.run?.length) {
       always.push(createRunBashTool({ permissions: engine, env: this.#env }));
     }
@@ -139,20 +146,23 @@ export class AgentService {
     const engine = new PermissionEngine(this.config.permissions, (e) => {
       decisions.push(e.decision);
     });
+    const memoryEvents: MemoryEvent[] = [];
 
     const useSessions = this.config.memory?.scope === "thread" && event.conversationKey;
     const sessionId = useSessions ? this.store.sessionFor(event.conversationKey!) : undefined;
     const history = sessionId !== undefined ? this.store.loadMessages(sessionId) : [];
+    const memories = this.config.memory?.persistent ? this.store.listMemories() : [];
 
     const result = await runAgent({
       config: {
         ...this.config,
         purpose: this.config.purpose +
           skillsPromptSection(this.#skills ?? []) +
+          memoryPromptSection(memories) +
           identityNote(this.config, identity.name),
       },
       provider: this.#provider,
-      tools: this.#buildTools(engine),
+      tools: this.#buildTools(engine, (e) => memoryEvents.push(e)),
       input: event.input,
       history,
     });
@@ -170,6 +180,9 @@ export class AgentService {
     });
     for (const decision of decisions) {
       this.store.recordAudit({ runId, kind: "permission", detail: decision });
+    }
+    for (const memoryEvent of memoryEvents) {
+      this.store.recordAudit({ runId, kind: "memory", detail: memoryEvent });
     }
     return result;
   }

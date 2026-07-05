@@ -431,6 +431,11 @@
             "thread",
             "none"
           ]
+        },
+        "persistent": {
+          "default": false,
+          "description": "Give the agent remember/recall/list_memories/forget tools backed by its own SQLite file — facts and preferences that survive across conversation keys and restarts, not just one thread's history.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
