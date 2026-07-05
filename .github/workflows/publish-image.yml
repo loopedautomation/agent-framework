@@ -1,5 +1,11 @@
 name: Publish base image
 
+# Two lanes, mirroring JSR's immutability:
+#   push to main    → :latest and :<sha> (moving tags, track main)
+#   release publish → :X.Y.Z, :X.Y, :X — built once from the tagged commit,
+#                     never rebuilt, exactly like the JSR packages published
+#                     from the same release event. The CLI pins its default
+#                     image to :X.Y.Z (packages/cli/docker.ts).
 on:
   push:
     branches: [main]
@@ -9,6 +15,8 @@ on:
       - deno.json
       - deno.lock
       - .github/workflows/publish-image.yml
+  release:
+    types: [published]
   workflow_dispatch:
 
 jobs:
@@ -19,10 +27,22 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-      # The CLI's default image tag is pinned to its VERSION (packages/cli/docker.ts),
-      # so every build must also push that tag or a released CLI has nothing to pull.
-      - id: version
-        run: echo "version=$(grep -o 'VERSION = "[^"]*"' packages/core/mod.ts | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+      - id: tags
+        run: |
+          IMAGE=ghcr.io/loopedautomation/agent
+          if [[ "$GITHUB_EVENT_NAME" == "release" ]]; then
+            V="${GITHUB_REF_NAME#v}"
+            SRC=$(grep -o 'VERSION = "[^"]*"' packages/core/mod.ts | cut -d'"' -f2)
+            # The released CLI pulls :$SRC by default — a mismatched tag would
+            # publish a CLI whose image doesn't exist. Fail before pushing anything.
+            if [[ "$V" != "$SRC" ]]; then
+              echo "release tag $V != VERSION $SRC in packages/core/mod.ts" >&2
+              exit 1
+            fi
+            echo "tags=$IMAGE:$V,$IMAGE:${V%.*},$IMAGE:${V%%.*}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=$IMAGE:latest,$IMAGE:$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          fi
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -36,10 +56,7 @@ jobs:
           file: images/agent/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ghcr.io/loopedautomation/agent:latest
-            ghcr.io/loopedautomation/agent:${{ steps.version.outputs.version }}
-            ghcr.io/loopedautomation/agent:${{ github.sha }}
+          tags: ${{ steps.tags.outputs.tags }}
           # Multi-arch pushes produce an OCI index; GHCR reads the package
           # description from the index annotation, not the per-arch labels.
           annotations: |
