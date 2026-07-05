@@ -1,52 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import type { Message, Usage } from "../providers/types.ts";
 import type { RunStatus } from "../loop/loop.ts";
-
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS sessions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  conversation_key TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE IF NOT EXISTS messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id INTEGER NOT NULL REFERENCES sessions(id),
-  seq INTEGER NOT NULL,
-  message_json TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (session_id, seq)
-);
-CREATE TABLE IF NOT EXISTS runs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id INTEGER REFERENCES sessions(id),
-  trigger TEXT NOT NULL,
-  input TEXT NOT NULL,
-  status TEXT NOT NULL,
-  reply TEXT NOT NULL,
-  steps INTEGER NOT NULL,
-  input_tokens INTEGER NOT NULL,
-  output_tokens INTEGER NOT NULL,
-  started_at TEXT NOT NULL,
-  finished_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE IF NOT EXISTS audit (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  run_id INTEGER REFERENCES runs(id),
-  kind TEXT NOT NULL,
-  detail_json TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE IF NOT EXISTS identity (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS memories (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-`;
+import { migrate } from "./migrations.ts";
 
 /** One remembered fact, as written to the memories table. */
 export interface MemoryRecord {
@@ -97,11 +52,11 @@ export interface AuditRecord {
 export class Store {
   #db: DatabaseSync;
 
-  /** Open (or create) the SQLite database at `path` and apply the schema. */
+  /** Open (or create) the SQLite database at `path` and apply pending migrations. */
   constructor(path: string) {
     this.#db = new DatabaseSync(path);
     this.#db.exec("PRAGMA journal_mode = WAL;");
-    this.#db.exec(SCHEMA);
+    migrate(this.#db);
   }
 
   /** Close the underlying database. */
