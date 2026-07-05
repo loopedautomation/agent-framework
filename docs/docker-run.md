@@ -19,7 +19,7 @@ af run agent.yaml      # interactive: REPL without triggers, service with
 
 ## The base image
 
-We publish the base image to GitHub Packages as **`ghcr.io/loopedautomation/agent`**. It's public, built for amd64 and arm64, and CI rebuilds it on every framework change. An agent is the YAML mounted onto that image, and every `af` command expands to a plain `docker run` against it — the [CLI page shows the exact expansion](cli.md#under-the-hood), and `af up --dry-run agent.yaml` prints it for your agent, ready for a systemd unit or a runbook.
+We publish the base image to GitHub Packages as **`ghcr.io/loopedautomation/agent`**. It's public, built for amd64 and arm64, and rebuilt on every release: each version gets its own immutable tag, and `:latest` always points at the newest release. An agent is the YAML mounted onto that image, and every `af` command expands to a plain `docker run` against it — the [CLI page shows the exact expansion](cli.md#under-the-hood), and `af up --dry-run agent.yaml` prints it for your agent, ready for a systemd unit or a runbook.
 
 If you'd rather build the image yourself, run `docker build -f images/agent/Dockerfile -t ghcr.io/loopedautomation/agent:latest .` from the repo root.
 
@@ -51,7 +51,7 @@ docker build -t my-agent .
 af up -d --image my-agent agent.yaml
 ```
 
-[`examples/issue-bot`](https://github.com/loopedautomation/agent-framework/tree/main/examples/issue-bot) is the complete pattern, with the Dockerfile, the compose.yaml and an `.env.example`, deployed with [Docker compose](docker-compose.md).
+[`examples/gh-issues-cli`](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-cli) is the complete pattern, with the Dockerfile, the compose.yaml and an `.env.example`, deployed with [Docker compose](docker-compose.md).
 
 ## What the base image gives you
 

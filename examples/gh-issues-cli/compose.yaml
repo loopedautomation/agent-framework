@@ -3,13 +3,13 @@
 # .env next to this file (see .env.example):
 #   OPENAI_API_KEY, DISCORD_BOT_TOKEN, GITHUB_TOKEN
 services:
-  issue-bot:
+  gh-issues-cli:
     build:
       context: ../..
-      dockerfile: examples/issue-bot/Dockerfile
+      dockerfile: examples/gh-issues-cli/Dockerfile
     env_file: .env
     volumes:
-      - issue-bot-data:/data
+      - gh-issues-cli-data:/data
     ports:
       # Status surface: curl localhost:9090/healthz
       # If host port 9090 is taken, change only the left side (e.g. "127.0.0.1:9091:9090").
@@ -20,4 +20,4 @@ services:
       - /tmp
 
 volumes:
-  issue-bot-data:
+  gh-issues-cli-data:

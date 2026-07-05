@@ -38,5 +38,5 @@ A skill stays out of the model's context until it's needed. The system prompt ca
 
 The [`skills/`](https://github.com/loopedautomation/agent-framework/tree/main/skills) directory holds the skills maintained with the framework:
 
-- [`gh-issues`](https://github.com/loopedautomation/agent-framework/blob/main/skills/gh-issues.md) - create and manage GitHub issues with the `gh` CLI. The [issue-bot example](https://github.com/loopedautomation/agent-framework/tree/main/examples/issue-bot) uses it.
+- [`gh-issues`](https://github.com/loopedautomation/agent-framework/blob/main/skills/gh-issues.md) - create and manage GitHub issues with the `gh` CLI. The [gh-issues-cli example](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-cli) uses it.
 - [`looped-authoring`](https://github.com/loopedautomation/agent-framework/blob/main/skills/looped-authoring.md) - scaffold and validate Looped agents with the `af` CLI. The [agent-zero example](https://github.com/loopedautomation/agent-framework/tree/main/examples/agent-zero), the agent that builds agents, uses it.

@@ -42,6 +42,8 @@ tools:
 - Each server sees only its own `env:` block (values may be `${VAR}` references); the agent's own environment stays private.
 - Results are truncated at 8k chars; servers connect at startup and close on shutdown.
 
+The [gh-issues-mcp example](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-mcp) is a complete deployment of this block: the Dockerfile installs the GitHub MCP server binary and the agent file exposes five of its tools. Its sibling [gh-issues-cli](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-cli) does the same job with the `gh` CLI and a skill, so the two read as a side-by-side comparison.
+
 ## Tool search
 
 `include:` keeps context lean by hand; tool search does the same thing automatically. When the total toolset grows past 10, MCP tool schemas stay out of context entirely. The model gets a single `search_tools` schema, and it activates the tools the task needs while the run is underway:

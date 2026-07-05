@@ -1,6 +1,6 @@
-# Deploying issue-bot
+# Deploying gh-issues-cli
 
-Goal: a Discord bot that turns messages in `#issues` into GitHub issues and replies with the link. Budget ~30 minutes; no framework knowledge needed.
+Goal: a Discord bot that turns messages in `#issues` into GitHub issues and replies with the link. Budget ~30 minutes; no framework knowledge needed. Here the agent works through the `gh` CLI and a [skill](../../skills/gh-issues.md); the sibling [`gh-issues-mcp`](../gh-issues-mcp/) does the same job through the GitHub MCP server.
 
 ## What you need before starting
 
@@ -11,10 +11,10 @@ Goal: a Discord bot that turns messages in `#issues` into GitHub issues and repl
 
 ## 1. Create the Discord bot (~10 min)
 
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) → **New Application** → name it (e.g. `issue-bot`).
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) → **New Application** → name it (e.g. `gh-issues-cli`).
 2. **Bot** tab → under *Privileged Gateway Intents*, enable **Message Content Intent**. ⚠️ This is the step everyone misses — without it the bot receives empty messages and silently does nothing.
 3. **Bot** tab → *Reset Token* → copy the token. This is `DISCORD_BOT_TOKEN`.
-4. Invite the bot: if you have the repo + Deno, `DISCORD_BOT_TOKEN=... deno task af discord-invite examples/issue-bot/agent.yaml` prints the ready-made invite URL. Otherwise use **OAuth2 → URL Generator**: scope `bot`; permissions **View Channels**, **Send Messages**, **Read Message History**. Open the URL and invite the bot to the team server.
+4. Invite the bot: if you have the repo + Deno, `DISCORD_BOT_TOKEN=... deno task af discord-invite examples/gh-issues-cli/agent.yaml` prints the ready-made invite URL. Otherwise use **OAuth2 → URL Generator**: scope `bot`; permissions **View Channels**, **Send Messages**, **Read Message History**. Open the URL and invite the bot to the team server.
 5. Make sure a `#issues` channel exists and the bot can see it.
 
 ## 2. Create the GitHub token (~5 min)
@@ -64,4 +64,4 @@ You should get a reply with a GitHub issue link within seconds. Check the issue 
 | `error_provider (auth)` in replies | Bad `OPENAI_API_KEY` |
 | Want to see what it's been doing | `curl -s localhost:9090/runs` (from the deploy machine) |
 
-The agent's memory, run history, and audit log live in the `issue-bot-data` Docker volume — deleting that volume gives it a fresh memory (and it will choose a new name for itself).
+The agent's memory, run history, and audit log live in the `gh-issues-cli-data` Docker volume — deleting that volume gives it a fresh memory (and it will choose a new name for itself).

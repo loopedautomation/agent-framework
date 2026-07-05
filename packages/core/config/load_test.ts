@@ -164,10 +164,24 @@ purpose: test
   assertEquals(collectEnvRefs(openrouter), ["OPENROUTER_API_KEY"]);
 });
 
-Deno.test("the shipped issue-bot example is a valid agent definition", async () => {
-  const path = new URL("../../../examples/issue-bot/agent.yaml", import.meta.url);
-  const config = parseAgentConfig(await Deno.readTextFile(path), "examples/issue-bot/agent.yaml");
-  assertEquals(config.handle, "issue-bot");
+Deno.test("the shipped gh-issues-cli example is a valid agent definition", async () => {
+  const path = new URL("../../../examples/gh-issues-cli/agent.yaml", import.meta.url);
+  const config = parseAgentConfig(
+    await Deno.readTextFile(path),
+    "examples/gh-issues-cli/agent.yaml",
+  );
+  assertEquals(config.handle, "gh-issues-cli");
+  assertEquals(collectEnvRefs(config), ["GITHUB_TOKEN", "OPENAI_API_KEY"]);
+});
+
+Deno.test("the shipped gh-issues-mcp example is a valid agent definition", async () => {
+  const path = new URL("../../../examples/gh-issues-mcp/agent.yaml", import.meta.url);
+  const config = parseAgentConfig(
+    await Deno.readTextFile(path),
+    "examples/gh-issues-mcp/agent.yaml",
+  );
+  assertEquals(config.handle, "gh-issues-mcp");
+  assertEquals(config.tools?.mcp?.[0].name, "github");
   assertEquals(collectEnvRefs(config), ["GITHUB_TOKEN", "OPENAI_API_KEY"]);
 });
 

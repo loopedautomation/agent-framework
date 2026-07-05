@@ -2,7 +2,7 @@
 # the agent. One layer adds the one binary this agent needs.
 #
 # Build from the repo root (compose.yaml does this for you):
-#   docker build -f examples/issue-bot/Dockerfile -t issue-bot .
+#   docker build -f examples/gh-issues-cli/Dockerfile -t gh-issues-cli .
 FROM ghcr.io/loopedautomation/agent:latest
 
 USER root
@@ -11,4 +11,4 @@ USER looped
 
 # Self-contained artifact: config + skills baked in, deploy anywhere.
 COPY --chown=looped:looped skills/gh-issues.md /skills/gh-issues.md
-COPY --chown=looped:looped examples/issue-bot/agent.yaml /agent/agent.yaml
+COPY --chown=looped:looped examples/gh-issues-cli/agent.yaml /agent/agent.yaml
