@@ -82,8 +82,9 @@ curl -s 127.0.0.1:55031/healthz | jq   # the addr af ps printed
 Each agent owns one SQLite file: `/data/<handle>.db` in the container, or wherever `AF_DATA_DIR` points (locally it defaults to `.looped/`). It holds:
 
 - **sessions/messages** - the conversation history per conversation key (when `memory.scope: thread`)
+- **memories** - facts the agent chose to remember, keyed by name, visible across every conversation key (when `memory.persistent: true`) — see [Memory](memory.md)
 - **runs** - every run, with its trigger, input, status, steps, tokens and timestamps
-- **audit** - every permission decision, allowed and denied
+- **audit** - every permission decision, allowed and denied, plus every memory write and delete
 - **identity** - the name the agent chose on first boot
 
 This means the agent's full history sits in one file you can query: everything the agent did, including the actions its permissions denied. Persist the volume; with a fresh one the agent starts over and names itself again.

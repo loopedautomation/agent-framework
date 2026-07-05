@@ -65,3 +65,18 @@ Deno.test("identity persists (the agent's self-chosen name lives here)", () => {
   assertEquals(store.getIdentity("name"), "Ada II");
   store.close();
 });
+
+Deno.test("memories persist across keys, independent of session history", () => {
+  const store = tempStore();
+  assertEquals(store.recallMemory("favorite_color"), undefined);
+  store.rememberMemory("favorite_color", "blue");
+  assertEquals(store.recallMemory("favorite_color")?.value, "blue");
+  store.rememberMemory("favorite_color", "green");
+  assertEquals(store.recallMemory("favorite_color")?.value, "green");
+  store.rememberMemory("timezone", "UTC");
+  assertEquals(store.listMemories().length, 2);
+  assert(store.forgetMemory("timezone"));
+  assertEquals(store.forgetMemory("timezone"), false);
+  assertEquals(store.listMemories().length, 1);
+  store.close();
+});

@@ -78,10 +78,11 @@ The full model story — dialects, keys, local endpoints, retries — is [Models
 
 ```yaml
 memory:
-  scope: thread   # default: none
+  scope: thread       # default: none
+  persistent: true    # default: false
 ```
 
-`none` (the default) starts every run fresh. `thread` persists conversation history per conversation key — the chat channel or thread (Discord, Slack, Telegram), the webhook caller's `conversation_id`, or the REPL session — so follow-ups work ("make it weekly instead"). History lives in the agent's own SQLite file, nowhere else.
+`none` (the default) starts every run fresh. `thread` persists conversation history per conversation key — the chat channel or thread (Discord, Slack, Telegram), the webhook caller's `conversation_id`, or the REPL session — so follow-ups work ("make it weekly instead"). `persistent: true` gives the agent `remember`/`recall`/`list_memories`/`forget` tools — facts that survive across conversation keys and container restarts, not just one thread's transcript. Both live in the agent's own SQLite file, nowhere else, and compose freely. The full story, including what the model sees in its system prompt and how it's audited, is in [Memory](memory.md).
 
 ## Limits
 
@@ -115,6 +116,7 @@ The `env:` block grants environment variables to tools and MCP servers — and o
 - **`skills:`** — markdown files that teach the agent how to use something well; capability stays with the config. → [Skills](skills.md)
 - **`tools:`** — capability beyond the natives: MCP servers, and tool search to keep their schemas out of context. → [Tools](tools.md)
 - **`permissions:`** — deny-by-default allowlists for hosts, executables, and paths. Omit the block and the agent can touch nothing. → [Permissions](permissions.md)
+- **`memory:`** — conversation history (`scope`) and facts that survive across conversations and restarts (`persistent`). → [Memory](memory.md)
 
 ## Validating
 

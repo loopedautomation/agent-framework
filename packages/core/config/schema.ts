@@ -161,6 +161,10 @@ const MemoryConfigSchema = z.strictObject({
   scope: z.enum(["thread", "none"]).default("none").describe(
     "thread: conversation history persists per conversation key (chat channel or thread, webhook conversation_id). none: every run starts fresh.",
   ),
+  persistent: z.boolean().default(false).describe(
+    "Give the agent remember/recall/list_memories/forget tools backed by its own SQLite file — " +
+      "facts and preferences that survive across conversation keys and restarts, not just one thread's history.",
+  ),
 }).describe("What the agent remembers between events.");
 
 const LimitsSchema = z.strictObject({
@@ -352,6 +356,8 @@ export interface Permissions {
 export interface MemoryConfig {
   /** thread: conversation history persists per conversation key. none: every run starts fresh. */
   scope: "thread" | "none";
+  /** Give the agent remember/recall/list_memories/forget tools, backed by its own SQLite file. */
+  persistent: boolean;
 }
 
 /** Per-run budgets. */
