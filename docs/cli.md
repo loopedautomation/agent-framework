@@ -9,7 +9,7 @@ description: "Every af command: init, run, up, ps, down, validate, flags, schema
 deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker -n af jsr:@looped/af
 ```
 
-The CLI is a docker frontend: agents always execute in the published container, never on your machine. Pointing `af` at an agent file starts the container with the config mounted, the data volume attached and the env file passed — the same commands the [Docker run](docker-run.md) page teaches by hand. Config paths default to `./agent.yaml`.
+The CLI orchestrates Docker under the hood: agents always execute in the published container, never on your machine. Pointing `af` at an agent file starts the container with the config mounted, the data volume attached and the env file passed. Config paths default to `./agent.yaml`.
 
 ```
 af init [name]            Scaffold a new agent project (agent, secrets, deployment)
@@ -23,6 +23,26 @@ af schema                 Print the agent.yaml JSON Schema
 af discord-invite <agent.yaml>
                           Print the bot's OAuth invite URL (no bitfield math)
 ```
+
+## Under the hood
+
+Every `af` command that runs an agent expands to a plain `docker run` on the [published base image](docker-run.md) — no daemon of its own, no state outside Docker. `af up -d agent.yaml` is exactly this:
+
+```sh
+docker run -d --restart unless-stopped \
+  --name af-agent \
+  --label af.agent=agent \
+  -v ./agent.yaml:/agent/agent.yaml:ro \
+  --env-file .env \
+  -v agent-data:/data \
+  -p 127.0.0.1:0:9090 \
+  --read-only --tmpfs /tmp \
+  ghcr.io/loopedautomation/agent:latest
+```
+
+That's the config and any `skills:` mounted read-only, the `<handle>-data` volume so identity survives restarts, the `.env` next to the agent file, the [status surface](docker-run.md#the-status-surface) on an ephemeral loopback port so fleets never collide, and a read-only root filesystem. `af ps` and `af down` find containers by the `af.agent` label. Because it's all plain Docker, everything you know still works: `docker logs af-<handle>`, `docker stats`, restart policies, volume backups.
+
+`--dry-run` on `run`/`up` prints the exact command for your agent instead of executing it — useful for pasting into a systemd unit or a runbook.
 
 ## af init
 

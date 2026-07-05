@@ -1,6 +1,6 @@
 ---
 title: "Docker run"
-description: "Run an agent with a single docker run: the published base image, custom images, the status surface and the data volume."
+description: "Run an agent in a container with one command: the published base image, custom images, the status surface and the data volume."
 ---
 
 One agent runs in one container, and the container is the unit of deployment, isolation and scaling. An agent behaves the same on a single machine as it does in a fleet. To run several agents together, see [Docker compose](docker-compose.md).
@@ -17,20 +17,9 @@ af run agent.yaml      # interactive: REPL without triggers, service with
 
 `af up` mounts the config and any skills read-only, attaches the `<handle>-data` volume, passes the `.env` sitting next to the agent file, publishes the status surface on an ephemeral loopback port, and runs the container read-only. `af up --dry-run` prints the exact command instead of running it.
 
-## What it expands to
+## The base image
 
-We publish the base image to GitHub Packages as **`ghcr.io/loopedautomation/agent`**. It's public, built for amd64 and arm64, and CI rebuilds it on every framework change. An agent is the YAML mounted onto that image — `af up -d` is this command:
-
-```sh
-docker run -d --restart unless-stopped \
-  --name af-agent \
-  -v ./agent.yaml:/agent/agent.yaml:ro \
-  --env-file .env \
-  -v agent-data:/data \
-  -p 127.0.0.1:0:9090 \
-  --read-only --tmpfs /tmp \
-  ghcr.io/loopedautomation/agent:latest
-```
+We publish the base image to GitHub Packages as **`ghcr.io/loopedautomation/agent`**. It's public, built for amd64 and arm64, and CI rebuilds it on every framework change. An agent is the YAML mounted onto that image, and every `af` command expands to a plain `docker run` against it — the [CLI page shows the exact expansion](cli.md#under-the-hood), and `af up --dry-run agent.yaml` prints it for your agent, ready for a systemd unit or a runbook.
 
 If you'd rather build the image yourself, run `docker build -f images/agent/Dockerfile -t ghcr.io/loopedautomation/agent:latest .` from the repo root.
 
@@ -55,6 +44,13 @@ COPY --chown=looped:looped skills/gh-issues.md /skills/gh-issues.md
 COPY --chown=looped:looped agent.yaml /agent/agent.yaml
 ```
 
+Build it and point the CLI at it:
+
+```sh
+docker build -t my-agent .
+af up -d --image my-agent agent.yaml
+```
+
 [`examples/issue-bot`](https://github.com/loopedautomation/agent-framework/tree/main/examples/issue-bot) is the complete pattern, with the Dockerfile, the compose.yaml and an `.env.example`, deployed with [Docker compose](docker-compose.md).
 
 ## What the base image gives you
@@ -72,11 +68,14 @@ Every service agent exposes:
 - `GET /healthz` - liveness and identity (handle, chosen name, model, triggers, uptime). Unauthenticated.
 - `GET /runs` and `GET /audit` - the run history and the permission decisions. Loopback-only unless `AF_STATUS_TOKEN` is set, and then they take bearer-token access.
 
+`af ps` shows each agent's status address — `af up` publishes port 9090 on an ephemeral loopback port so agents never collide:
+
 ```sh
-curl -s localhost:9090/healthz | jq
+af ps                                # HANDLE · STATE · STATUS · STATUS ADDR
+curl -s 127.0.0.1:55031/healthz | jq   # the addr af ps printed
 ```
 
-`AF_STATUS_HOST` and `AF_STATUS_PORT` override the bind. The base image sets the host to `0.0.0.0`, so publish the port loopback-only, the way the compose examples do.
+`AF_STATUS_HOST` and `AF_STATUS_PORT` override the bind. The base image sets the host to `0.0.0.0`, so publish the port loopback-only, the way `af up` and the compose examples do.
 
 ## Persistence: the data volume
 
@@ -91,4 +90,4 @@ This means the agent's full history sits in one file you can query: everything t
 
 ## Secrets
 
-`--env-file .env` is the simple path. The config references secrets as `${VAR}`, the env file supplies the values, and a missing reference fails at startup. Compose `secrets:` files resolve the same way; see [Docker compose](docker-compose.md#secrets). Secrets are injected into tools server side and never enter the model's context ([Permissions](permissions.md#secrets)).
+A `.env` file next to the agent file is the simple path — `af up` passes it automatically (`--env-file` points elsewhere), and warns about any `${VAR}` the config references that the file doesn't supply. A missing reference fails at startup. Compose `secrets:` files resolve the same way; see [Docker compose](docker-compose.md#secrets). Secrets are injected into tools server side and never enter the model's context ([Permissions](permissions.md#secrets)).
