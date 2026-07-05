@@ -16,4 +16,4 @@ af validate         # check the file and report which env vars it references
 af run              # run it in Docker; a REPL without triggers, a service with them
 ```
 
-`af up -d` starts one or more agents in the background, `af ps` lists them and `af down` stops them. The full command reference lives at [docs.looped.sh/agent-framework/cli](https://docs.looped.sh/agent-framework/cli).
+`af up -d` starts one or more agents in the background, `af ps` lists them and `af down` stops them. Run `af update` to reinstall the CLI at the latest published version. The full command reference lives at [docs.looped.sh/agent-framework/cli](https://docs.looped.sh/agent-framework/cli).

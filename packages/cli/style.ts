@@ -5,10 +5,10 @@
 /** The Looped loop: cyan → violet. The banner paints with it; log prefixes cycle it. */
 export const LOOP_GRADIENT = ["#22d3ee", "#38bdf8", "#60a5fa", "#818cf8", "#a78bfa", "#c084fc"];
 
-export const ACCENT = LOOP_GRADIENT[0]; // Looped cyan
-const OK = "#34d399";
-const WARN = "#fbbf24";
-const ERR = "#f87171";
+export const ACCENT = "#685EF6"; // Looped primary purple
+const OK = "#37946A";
+const WARN = "#ED9B00";
+const ERR = "#D02E1F";
 
 function detectColor(): boolean {
   try {
