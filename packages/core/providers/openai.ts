@@ -42,7 +42,9 @@ function toWireMessages(system: string | undefined, messages: Message[]): WireMe
       case "assistant":
         wire.push({
           role: "assistant",
-          content: m.content || null,
+          // "" rather than null: the OpenAI API accepts either on tool-call
+          // turns, but stricter compatible providers reject null.
+          content: m.content || "",
           tool_calls: m.toolCalls?.map((tc) => ({
             id: tc.id,
             type: "function",

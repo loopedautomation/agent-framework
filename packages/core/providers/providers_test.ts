@@ -47,6 +47,31 @@ Deno.test("openai adapter: maps request and parses tool calls", async () => {
   assertEquals(sent.tools[0].function.name, "echo");
 });
 
+Deno.test("openai adapter: tool-call turns are replayed with string content, never null", async () => {
+  const f = fakeFetch(200, {
+    choices: [{ finish_reason: "stop", message: { content: "done" } }],
+    usage: { prompt_tokens: 1, completion_tokens: 1 },
+  });
+  const provider = new OpenAICompatibleProvider({ apiKey: "k", fetch: f });
+  await provider.complete({
+    model: "gpt-5.4-mini",
+    messages: [
+      { role: "user", content: "hello" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "call_1", name: "echo", arguments: '{"message":"hi"}' }],
+      },
+      { role: "tool", content: "hi", toolCallId: "call_1" },
+    ],
+  });
+
+  const sent = await f.calls[0].json();
+  const assistant = sent.messages[1];
+  assertEquals(assistant.content, "");
+  assertEquals(assistant.tool_calls[0].id, "call_1");
+});
+
 Deno.test("openai adapter: 401 maps to a non-retryable auth error", async () => {
   const provider = new OpenAICompatibleProvider({
     apiKey: "bad",
