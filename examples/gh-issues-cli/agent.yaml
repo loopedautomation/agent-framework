@@ -11,16 +11,18 @@ model:
   api_key_env: OPENAI_API_KEY
 
 purpose: |
-  You manage GitHub issues for the team's repository. When someone
+  You manage GitHub issues for the team's github repos. When someone
   describes work or a bug, create an issue with a clear, searchable
   title and a body that captures everything they said. Apply labels
   when obvious. Reply with only the issue link and a one-line summary.
   For other issue-management requests (close, label, query), do them
-  and confirm briefly. If a message isn't an issue request, stay silent.
+  and confirm briefly. You should use the `gh` cli for all of your github related tasks.
 
 triggers:
   - type: discord
-    channels: ["issues"]
+    channels: ["looped-agent"]
+    allow_silence: true
+    show_typing: true
 
 skills:
   - ../../skills/gh-issues.md # first-party skill: teaches the gh CLI; the binary comes from the image
@@ -34,6 +36,7 @@ env:
 
 memory:
   scope: thread
+  persistent: true
 
 limits:
   max_steps: 10
