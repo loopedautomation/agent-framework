@@ -15,6 +15,34 @@ Deno.test("extractExecutables: pipes, chains, env prefixes, and rejections", () 
   assertEquals(extractExecutables("   ").ok, false);
 });
 
+Deno.test("extractExecutables: separators and newlines inside quotes are literal text", () => {
+  const multiline = extractExecutables(
+    'gh issue create --title "Export fails" --body "## Steps\n1. Export a file\n2. It breaks && restarts; then hangs"',
+  );
+  assert(multiline.ok);
+  assertEquals(multiline.executables, ["gh"]);
+
+  const single = extractExecutables("echo 'a | b ; c\nd'");
+  assert(single.ok);
+  assertEquals(single.executables, ["echo"]);
+
+  const escaped = extractExecutables("echo a\\;b ; ls");
+  assert(escaped.ok);
+  assertEquals(escaped.executables, ["echo", "ls"]);
+
+  const assignment = extractExecutables('FOO="a b" gh issue list');
+  assert(assignment.ok);
+  assertEquals(assignment.executables, ["gh"]);
+
+  // Substitution stays live inside double quotes; single quotes make it literal.
+  assertEquals(extractExecutables('echo "$(whoami)"').ok, false);
+  const literal = extractExecutables("echo '$(whoami)'");
+  assert(literal.ok);
+  assertEquals(literal.executables, ["echo"]);
+
+  assertEquals(extractExecutables('echo "unterminated').ok, false);
+});
+
 Deno.test("run_bash: permitted command runs with a scoped environment only", async () => {
   const tool = createRunBashTool({
     permissions: new PermissionEngine({ run: ["bash", "env"] }),

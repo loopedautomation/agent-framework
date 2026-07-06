@@ -39,8 +39,7 @@ gh issue list --state all --search "csv export fails"
 ```sh
 gh issue create \
   --title "CSV export fails on files over 10MB" \
-  --body "$(cat <<'BODY'
-## What happened
+  --body "## What happened
 Everything the reporter said, kept verbatim where possible.
 
 ## Steps to reproduce
@@ -48,11 +47,13 @@ Everything the reporter said, kept verbatim where possible.
 
 ## Context
 - Reported by: <who asked, if known>
-- Priority: <only if the reporter stated one>
-BODY
-)" \
+- Priority: <only if the reporter stated one>" \
   --label bug
 ```
+
+Write multi-line bodies as a plain double-quoted string with real newlines, as
+above. Command substitution (`$(…)`, backticks) and heredocs are not available
+in this shell. Escape any literal `"` in the body as `\"`.
 
 Quality bar:
 
