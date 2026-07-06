@@ -458,7 +458,7 @@
       "properties": {
         "max_steps": {
           "default": 20,
-          "description": "Inner-loop iterations (LLM calls) before the run ends with error_max_steps.",
+          "description": "Tool-calling iterations (LLM calls) per run. On hitting the cap the agent gets one final tool-less call to summarize its progress, then the run ends with error_max_steps.",
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991

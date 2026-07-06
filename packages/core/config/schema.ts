@@ -177,7 +177,8 @@ const MemoryConfigSchema = z.strictObject({
 
 const LimitsSchema = z.strictObject({
   max_steps: z.number().int().positive().default(20).describe(
-    "Inner-loop iterations (LLM calls) before the run ends with error_max_steps.",
+    "Tool-calling iterations (LLM calls) per run. On hitting the cap the agent gets one final " +
+      "tool-less call to summarize its progress, then the run ends with error_max_steps.",
   ),
 }).describe("Per-run budgets — the dead-man's switches for unattended operation.");
 
@@ -374,7 +375,10 @@ export interface MemoryConfig {
 
 /** Per-run budgets. */
 export interface LimitsConfig {
-  /** Inner-loop iterations (LLM calls) before the run ends with error_max_steps. */
+  /**
+   * Tool-calling iterations (LLM calls) per run. On hitting the cap the agent gets one final
+   * tool-less call to summarize its progress, then the run ends with error_max_steps.
+   */
   max_steps: number;
 }
 
