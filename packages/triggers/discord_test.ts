@@ -50,7 +50,9 @@ Deno.test("shouldHandle: DMs skip the channel filter and the mention gate", () =
   // from_users still applies in DMs
   assert(!shouldHandle(dm, BOT_ID, undefined, { fromUsers: ["someone-else"] }));
   // and the bot's own DMs are still ignored
-  assert(!shouldHandle(msg({ guild_id: undefined, author: { id: BOT_ID } }), BOT_ID, undefined, {}));
+  assert(
+    !shouldHandle(msg({ guild_id: undefined, author: { id: BOT_ID } }), BOT_ID, undefined, {}),
+  );
 });
 
 Deno.test("shouldHandle: from_users matches by id or username, drops everyone else", () => {
