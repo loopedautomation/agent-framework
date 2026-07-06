@@ -6,13 +6,29 @@ import type { NativeTool } from "../tools/types.ts";
 /** How a run ended: cleanly, out of steps, or on a provider failure. */
 export type RunStatus = "ok" | "error_max_steps" | "error_provider";
 
+/**
+ * Injected as the final user turn of the wrap-up call when a run exhausts
+ * `limits.max_steps` with the model still calling tools. The prompt itself is
+ * request-only and never persisted; the summary it produces is.
+ */
+export const MAX_STEPS_WRAPUP_PROMPT =
+  `You have reached the maximum number of steps for this run. Tools are no longer available; reply with plain text only.
+
+Your reply must:
+- state that the step limit was reached
+- summarize what you have done so far
+- list anything that remains unfinished
+- say what should happen next
+
+Do not attempt any further tool calls.`;
+
 /** What one run produced. */
 export interface RunResult {
   /** How the run ended. */
   status: RunStatus;
   /** The agent's final text (or a description of why the run ended). */
   reply: string;
-  /** Inner-loop iterations consumed (LLM calls). */
+  /** LLM calls consumed, including the wrap-up call after a capped run. */
   steps: number;
   /** Token usage summed over the run's LLM calls. */
   usage: Usage;
@@ -98,6 +114,26 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     }
   }
 
+  // Budget exhausted with the model still calling tools. Spend one extra
+  // tool-less call so the run ends with the model's own account of where it
+  // got to; downstream (chat replies, the runs table) sees that instead of a
+  // canned string. The prompt stays out of the persisted transcript.
+  steps++;
+  try {
+    const wrapup = await provider.complete({
+      model: config.model.id,
+      system: config.purpose,
+      messages: [...messages, { role: "user", content: MAX_STEPS_WRAPUP_PROMPT }],
+    });
+    usage.inputTokens += wrapup.usage.inputTokens;
+    usage.outputTokens += wrapup.usage.outputTokens;
+    if (wrapup.content) {
+      messages.push({ role: "assistant", content: wrapup.content });
+      return finish("error_max_steps", wrapup.content);
+    }
+  } catch (err) {
+    if (!(err instanceof ProviderError)) throw err;
+  }
   return finish(
     "error_max_steps",
     `run ended after ${config.limits.max_steps} steps without a final answer`,
