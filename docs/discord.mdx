@@ -60,6 +60,20 @@ volumes:
 </Tab>
 </Tabs>
 
+## Options
+
+Every key is optional; the defaults give you a bot that listens everywhere it's invited and answers everyone.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `channels` | all channels | Channel names or ids to listen in. DMs skip this filter. |
+| `require_mention` | `false` | Only respond when the bot is @-mentioned. A DM always addresses the bot, so it passes. |
+| `from_users` | anyone | Only handle messages from these authors (user ids or usernames). The filter runs before the model is called, so everyone else's messages cost no tokens. |
+| `token_env` | `DISCORD_BOT_TOKEN` | The env var holding the bot token. |
+| `reply_channel` | the source channel | Channel id to post replies into. Out-of-channel replies quote the triggering message and link back to it. |
+| `allow_silence` | `false` | Post nothing when the agent replies with exactly `__NO_REPLY__`, or with nothing at all. Tell the agent about the sentinel in `purpose`. |
+| `show_typing` | `false` | Show the typing indicator in the source channel while a run is in flight. |
+
 ## Setup
 
 Setting up a Discord bot takes about 15 minutes:
