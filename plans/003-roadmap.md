@@ -56,7 +56,7 @@ CLI polish (`af init/dev/run`), structured run traces, a third agent from the co
 - Hosted platform (Plan 5 — after the agency validates the ops)
 - Programmatic `defineAgent()` config
 - External secret providers (Vault/SOPS/1Password)
-- More triggers: Slack, email, queues
+- More triggers: queues (Slack has shipped; email is planned in Plan 7)
 - Eval harness (`af test`) for cheap-model verification
 
 ## Open questions
