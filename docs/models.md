@@ -1,24 +1,24 @@
 ---
 title: "Models"
-description: "The two provider dialects, API keys, local models, and retry behavior."
+description: "The provider dialects, API keys, subscription auth, local models, and retry behavior."
 ---
 
-Every agent names its model in the required `model:` block; there is no fleet-wide default. The `provider` field is a **dialect**: two dialects cover effectively every hosted and local endpoint, and swapping providers is a one-line change. The short version lives in [Agent Config](agent-file.md#model); this page covers the details.
+Every agent names its model in the required `model:` block; there is no fleet-wide default. The `provider` field is a **dialect**: three dialects cover effectively every hosted and local endpoint, and swapping providers is a one-line change. The short version lives in [Agent Config](agent-file.md#model); this page covers the details.
 
 ```yaml
 model:
-  provider: openai-compatible   # or: anthropic
+  provider: openai-compatible   # or: anthropic, codex
   id: gpt-5.4-mini
 ```
 
-## The two dialects
+## The three dialects
 
-| | `openai-compatible` | `anthropic` |
-| --- | --- | --- |
-| Speaks to | OpenAI, Ollama, vLLM, LiteLLM, OpenRouter — anything serving the chat-completions API | The native Anthropic Messages API |
-| Default endpoint | `https://api.openai.com/v1` | `https://api.anthropic.com` |
-| Default key env var | `OPENAI_API_KEY` | `ANTHROPIC_API_KEY` |
-| `base_url` | Any compatible endpoint — this is how local models work | Anthropic-compatible proxies |
+| | `openai-compatible` | `anthropic` | `codex` |
+| --- | --- | --- | --- |
+| Speaks to | OpenAI, Ollama, vLLM, LiteLLM, OpenRouter — anything serving the chat-completions API | The native Anthropic Messages API | The ChatGPT Codex backend |
+| Default endpoint | `https://api.openai.com/v1` | `https://api.anthropic.com` | `https://chatgpt.com/backend-api/codex` |
+| Auth | `OPENAI_API_KEY` | `ANTHROPIC_API_KEY` | `codex login` credentials (no key) |
+| `base_url` | Any compatible endpoint — this is how local models work | Anthropic-compatible proxies | Rarely needed |
 
 `id` is the plain model identifier the endpoint expects — `gpt-5.4-mini`, `claude-sonnet-5`, `llama3.1`. There is no combined `provider/model` string syntax; the two fields stay separate, which is what makes `base_url` proxies transparent.
 
@@ -41,7 +41,32 @@ A missing key fails at startup, before any event is handled:
 missing API key: set OPENAI_API_KEY (or point model.api_key_env at the right env var)
 ```
 
-The one exception: `openai-compatible` with an explicit `base_url` needs no key, because local models usually don't have one.
+Two exceptions: `openai-compatible` with an explicit `base_url` needs no key, because local models usually don't have one; and the `codex` provider authenticates with subscription credentials, covered next.
+
+## Codex subscription
+
+```yaml
+model:
+  provider: codex
+  id: gpt-5-codex
+```
+
+The `codex` provider runs your agents on an OpenAI Codex (ChatGPT Plus, Pro or Team) subscription. There is no API key. The runtime signs requests with the OAuth credentials the [Codex CLI](https://github.com/openai/codex) writes to `~/.codex/auth.json` when you run `codex login`. When the access token nears expiry the runtime refreshes it and writes the new tokens back to the file, so the CLI and your agents keep working from the same login. If your credentials live somewhere else, set `CODEX_HOME`.
+
+When the agent runs in a container, mount the credential directory into the runtime user's home:
+
+```yaml
+volumes:
+  - ~/.codex:/home/looped/.codex   # `codex login` credentials
+```
+
+`af init --provider codex` scaffolds this shape. A read-only mount also works; the refreshed token then lives only in process memory and gets refreshed again on the next start.
+
+Where mounting a file is awkward (Coolify, a PaaS with env-only config), you can instead paste the contents of `auth.json` into a `CODEX_AUTH_JSON` env var and skip the mount. The trade-off is that an env var never gets the rotated refresh token written back, so a long-lived deployment can eventually stop refreshing; when the logs show auth errors, run `codex login` again and re-paste. The file mount is the more durable option.
+
+On a ChatGPT Business or Enterprise workspace there is a cleaner credential: [Codex access tokens](https://developers.openai.com/codex/enterprise/access-tokens), the machine tokens admins mint in the workspace console for automation. Put one in `CODEX_ACCESS_TOKEN` and the runtime uses it directly; it wins over `CODEX_AUTH_JSON` and the credential file when more than one is set. These tokens are made for servers: scoped to a workspace identity, revocable one at a time, with an expiry you choose at creation. When one expires, runs fail with auth errors until you mint a replacement.
+
+Two things to know. Usage counts against your subscription's rate limits, and those limits are shared with your own Codex sessions on the same account. And the backend serves the Codex model family (`gpt-5-codex`, `gpt-5`); for other OpenAI models, use `openai-compatible` with an API key.
 
 ## Local models
 

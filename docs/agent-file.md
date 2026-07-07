@@ -58,7 +58,7 @@ You don't choose the agent's display name. On first boot the agent names itself 
 
 ```yaml
 model:
-  provider: openai-compatible   # or: anthropic
+  provider: openai-compatible   # or: anthropic, codex
   id: gpt-5.4-mini
   # base_url: http://localhost:11434/v1   # any compatible endpoint, e.g. Ollama
   # api_key_env: OPENAI_API_KEY           # names the env var; the key stays out of config
@@ -66,7 +66,7 @@ model:
   # fallbacks: [gpt-5.4]                  # tried in order when the primary fails
 ```
 
-- **`provider`** is a dialect: `openai-compatible` covers OpenAI, Ollama, vLLM, and anything speaking that API; `anthropic` is the native Anthropic API. Swapping providers is one config line — no provider is load-bearing.
+- **`provider`** is a dialect: `openai-compatible` covers OpenAI, Ollama, vLLM, and anything speaking that API; `anthropic` is the native Anthropic API; `codex` runs on an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login`, with no API key involved. Swapping providers is one config line — no provider is load-bearing.
 - **`base_url`** points `openai-compatible` at any endpoint. Local models need no key.
 - **`api_key_env`** names the env var holding the key; the key itself stays out of the config. Defaults to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider.
 - **`small`** is the model for cheap internal calls (the naming ritual, summaries). Defaults to the main `id` — set it to something tiny and these calls round to free.
