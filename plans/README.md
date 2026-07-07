@@ -17,6 +17,7 @@ This directory is the source of truth for what Looped AF is and where it's going
 | 8 | [008-multi-agent.md](008-multi-agent.md) | Composition via `agent_call` and the A2A surface |
 | 9 | [009-evals.md](009-evals.md) | The eval harness: `af test`, mocked tools, the model-graded judge |
 | 10 | [010-slash-commands.md](010-slash-commands.md) | Operator commands across every chat surface |
+| 11 | [011-footprint.md](011-footprint.md) | A smaller image and a smaller resident set: compile, distroless, memory caps |
 
 ## How to read and amend these
 
