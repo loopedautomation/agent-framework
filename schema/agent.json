@@ -265,6 +265,71 @@
             "description": "HTTP trigger: POST {path} with authorization: Bearer <token> and JSON body {input, conversation_id?}; responds with the run result."
           },
           {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "email"
+                  },
+                  "transport": {
+                    "type": "string",
+                    "const": "resend",
+                    "description": "How mail arrives. resend is the pushed transport: Resend receives mail for your domain and POSTs each message here as a signed webhook."
+                  },
+                  "path": {
+                    "default": "/email",
+                    "description": "HTTP path the provider POSTs inbound-mail webhooks to.",
+                    "type": "string",
+                    "pattern": "^\\/.*"
+                  },
+                  "port": {
+                    "default": 8080,
+                    "description": "Port to listen on.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  },
+                  "signing_secret_env": {
+                    "default": "RESEND_WEBHOOK_SECRET",
+                    "description": "Env var holding the webhook signing secret (whsec_…). Every request is verified before parsing; unsigned POSTs get a 401.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "api_key_env": {
+                    "default": "RESEND_API_KEY",
+                    "description": "Env var holding the Resend API key — fetches message bodies and sends replies.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "from_addresses": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Senders the agent handles: exact addresses or *@domain patterns. Required — an email address is open to the whole internet. [\"*\"] accepts anyone, stated in the file that defines the agent's reach."
+                  },
+                  "allow_silence": {
+                    "default": false,
+                    "description": "Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type",
+                  "transport",
+                  "from_addresses"
+                ],
+                "additionalProperties": false,
+                "description": "Wake on inbound email delivered by Resend's email.received webhook; replies go back out through the Resend API in the same thread."
+              }
+            ],
+            "description": "Wake on inbound email. transport picks how mail arrives; resend (pushed webhooks) is the only transport so far — IMAP and the hosted providers are planned."
+          },
+          {
             "type": "object",
             "properties": {
               "type": {

@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A personal email + calendar assistant (docs/email-assistant.mdx is the
+# walkthrough). Mail you forward to its address wakes it; two cron schedules
+# give it a sense of time; curl + a skill give it the calendar and a way to
+# send mail on its own.
+#
+# Before running, replace the two addresses below with your own.
+handle: mail-assistant
+description: Watches forwarded mail, reminds about meetings and keeps a spam list.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+
+purpose: |
+  You are Ratul's personal email and calendar assistant. His address is
+  ratul@example.com. Your own sending address is assistant@agents.example.com.
+  Mail he forwards to you arrives through the email trigger; cron ticks
+  tell you to check the calendar. Send every email with the skill's curl
+  call and keep each message under five lines.
+
+  On forwarded mail:
+  - First recall the spam_list memory. If the original sender is on it,
+    reply with exactly __NO_REPLY__ and do nothing else.
+  - If the mail says "spam: <address>" or "unspam: <address>", update the
+    spam_list memory accordingly and confirm in one line.
+  - If the mail is important (a deadline, an invoice, a request from a
+    person expecting an answer), email him a heads-up with subject prefix
+    [heads-up]: what it needs and by when.
+  - Otherwise reply with exactly __NO_REPLY__.
+
+  On "Reminder tick":
+  - Read the calendar for events starting in the next 45 minutes.
+  - For each, recall reminded:<event UID>. If it is not set, email him a
+    one-line reminder ("Standup in 30 minutes") and remember
+    reminded:<event UID> with today's date as the value.
+
+  On "Morning tick":
+  - Email him today's schedule and anything from yesterday's mail that
+    still seems to be waiting on him.
+  - Forget any reminded:<...> memories from before today.
+
+triggers:
+  - type: email
+    transport: resend
+    # Forwarded mail keeps the original sender's From header, so the
+    # allowlist is open on purpose; the spam-list memory, the forwarding
+    # filters and limits below are the gate instead (docs/email-assistant.mdx).
+    from_addresses: ["*"]
+    allow_silence: true
+  - type: cron
+    schedule: "*/15 7-18 * * 1-5" # weekdays, working hours, every 15 min
+    prompt: Reminder tick. Check the calendar and send any due meeting reminders.
+  - type: cron
+    schedule: "30 7 * * 1-5" # weekdays 07:30
+    prompt: Morning tick. Send the daily briefing.
+
+skills:
+  - mail-and-calendar.md # teaches the two curl calls; curl comes from the image
+
+permissions:
+  run: [curl, grep]
+
+env:
+  RESEND_API_KEY: ${RESEND_API_KEY} # reference — resolved at runtime, scoped to run_bash
+  CALENDAR_ICS_URL: ${CALENDAR_ICS_URL}
+
+memory:
+  scope: thread
+  persistent: true # the spam list and reminder dedupe live here
+
+limits:
+  max_steps: 12

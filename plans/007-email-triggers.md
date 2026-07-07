@@ -2,7 +2,7 @@
 
 An email address is the one inbox every business already has. Invoices land there, support requests land there, statements and notices from providers land there. If incoming mail can wake an agent, a whole class of back-office jobs collapses into one agent file: watch the mailbox, act on what arrives and maybe reply. This plan covers how mail becomes a trigger.
 
-Status: design; implementation has not started. The roadmap (Plan 3) has carried "email" on its later list since the beginning; this plan makes it concrete.
+Status: phase 1 (the pushed Resend transport) is implemented — `packages/triggers/email.ts`, `docs/email.mdx` and the `examples/mail-assistant` deployment. The pulled transports (IMAP, Gmail, Outlook) remain design. The roadmap (Plan 3) has carried "email" on its later list since the beginning; this plan makes it concrete.
 
 ## The trigger wakes the agent; tools do the rest
 
@@ -27,7 +27,7 @@ triggers:
     path: /email                        # served by the trigger's HTTP listener
     signing_secret_env: RESEND_WEBHOOK_SECRET
     api_key_env: RESEND_API_KEY         # used to send replies
-    from_addresses: ["ratul@looped.sh", "amin@looped.sh"]
+    from_addresses: ["ratul@example.com", "amin@example.com"]
     allow_silence: true
 ```
 
@@ -38,12 +38,12 @@ triggers:
   - type: email
     transport: imap
     host: imap.fastmail.com
-    username: agent@looped.sh
+    username: agent@example.com
     password_env: IMAP_PASSWORD
     smtp_host: smtp.fastmail.com        # replies go out over SMTP
     folder: INBOX
     poll_seconds: 60
-    from_addresses: ["happy@looped.sh", "gwinyai@looped.sh"]
+    from_addresses: ["happy@example.com", "gwinyai@example.com"]
 ```
 
 Credentials follow the house rule: config names an environment variable, `triggersFromConfig` resolves it at startup and a missing variable fails the boot, ahead of the first message.
@@ -64,7 +64,7 @@ The chat triggers inherit a boundary from their platform: only people in the ser
 
 So the filtering rules are stricter than the chat triggers' optional `from_users`:
 
-- **`from_addresses` is required.** Exact addresses or domain patterns (`*@looped.sh`). An operator who genuinely wants an open mailbox writes `from_addresses: ["*"]` and has thereby said so in the file that defines the agent's blast radius. The check is a pure `shouldHandle` function with its own test file, applied before the model is ever called, like the Discord one.
+- **`from_addresses` is required.** Exact addresses or domain patterns (`*@example.com`). An operator who genuinely wants an open mailbox writes `from_addresses: ["*"]` and has thereby said so in the file that defines the agent's blast radius. The check is a pure `shouldHandle` function with its own test file, applied before the model is ever called, like the Discord one.
 - **Signatures are verified on the pushed transport.** The provider signs each webhook; the trigger verifies before parsing, with the same timing-safe comparison the webhook trigger uses. An unsigned POST to the endpoint is a 401 and no event.
 - **Auto-generated mail is dropped.** Messages carrying `Auto-Submitted` or bulk/list `Precedence` headers, and anything from the agent's own sending address, are skipped. An agent that replies to an out-of-office reply to its own reply is a mail loop, and this is the standard defense.
 
