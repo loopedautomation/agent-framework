@@ -78,6 +78,15 @@ export {
   type AgentServiceOptions,
   type Trigger,
 } from "./runtime/service.ts";
+export {
+  type CaseResult,
+  type EvalCase,
+  type EvalCheck,
+  type EvalFile,
+  type EvalRunOptions,
+  parseEvalFile,
+  runEvalCases,
+} from "./eval/eval.ts";
 
 /** The @looped/core package version. */
 export const VERSION = "0.5.0";

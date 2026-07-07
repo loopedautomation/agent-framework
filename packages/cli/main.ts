@@ -36,6 +36,7 @@ import {
 } from "./docker_commands.ts";
 import { init } from "./init_command.ts";
 import { runLocal, validate } from "./local.ts";
+import { test } from "./test_command.ts";
 import { accent, dim, table } from "./style.ts";
 import { update } from "./update_command.ts";
 
@@ -51,6 +52,7 @@ function usage(): string {
     ["af ps", "List af containers"],
     ["af down [target...]", "Stop and remove af containers (files or handles; none = all)"],
     ["af validate [agent.yaml]", "Validate an agent definition"],
+    ["af test [agent.yaml]", "Run the agent's test cases (real model, mocked tools)"],
     ["af flags [agent.yaml]", "Print compiled Deno permission flags"],
     ["af schema", "Print the agent.yaml JSON Schema"],
     ["af discord-invite [agent.yaml]", "Print the bot's OAuth invite URL (no bitfield math)"],
@@ -103,6 +105,9 @@ async function main() {
       }
       case "validate":
         await validate(arg ?? DEFAULT_CONFIG);
+        break;
+      case "test":
+        await test(arg ?? DEFAULT_CONFIG);
         break;
       case "flags": {
         const config = await resolveAgentConfig(arg ?? DEFAULT_CONFIG);

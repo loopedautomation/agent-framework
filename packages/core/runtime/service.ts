@@ -55,6 +55,12 @@ export interface AgentServiceOptions {
   baseDir?: string;
   /** Extra tools beyond the natives. */
   extraTools?: NativeTool[];
+  /** Injectable store; `af test` passes an in-memory one so /data stays untouched. */
+  store?: Store;
+  /** Skip the naming ritual with a fixed identity (eval runs shouldn't spend a call on it). */
+  identity?: AgentIdentity;
+  /** Applied to every tool before the run sees it; `af test` swaps execute for mocks. */
+  wrapTool?: (tool: NativeTool) => NativeTool;
 }
 
 /**
@@ -75,6 +81,7 @@ export class AgentService {
   #baseDir: string;
   #skills?: Skill[];
   #mcp?: McpConnections;
+  #wrapTool: (tool: NativeTool) => NativeTool;
 
   /** Resolves env references, opens the store, and builds the provider. */
   constructor(opts: AgentServiceOptions) {
@@ -85,9 +92,15 @@ export class AgentService {
     this.#env = resolveEnv(opts.config.env);
     this.#extraTools = opts.extraTools ?? [];
     this.#baseDir = opts.baseDir ?? Deno.cwd();
-    const dataDir = opts.dataDir ?? Deno.env.get("AF_DATA_DIR") ?? ".looped";
-    Deno.mkdirSync(dataDir, { recursive: true });
-    this.store = new Store(`${dataDir}/${opts.config.handle}.db`);
+    this.#identity = opts.identity;
+    this.#wrapTool = opts.wrapTool ?? ((tool) => tool);
+    if (opts.store) {
+      this.store = opts.store;
+    } else {
+      const dataDir = opts.dataDir ?? Deno.env.get("AF_DATA_DIR") ?? ".looped";
+      Deno.mkdirSync(dataDir, { recursive: true });
+      this.store = new Store(`${dataDir}/${opts.config.handle}.db`);
+    }
   }
 
   /**
@@ -116,17 +129,18 @@ export class AgentService {
     // Natives and skills stay in context (small, framework-owned); MCP tools
     // defer behind search_tools when the toolset gets big (tools.search).
     // Every MCP call is reported for the run's audit trail.
-    const mcp = withMcpAudit(this.#mcp?.tools ?? [], onMcpCall);
+    const wrapped = always.map(this.#wrapTool);
+    const mcp = withMcpAudit(this.#mcp?.tools ?? [], onMcpCall).map(this.#wrapTool);
     const mode = this.config.tools?.search ?? "auto";
     const defer = mcp.length > 0 && (
       mode === "on" ||
       (mode === "auto" && always.length + mcp.length > SEARCH_AUTO_THRESHOLD)
     );
     if (!defer) {
-      const all = [...always, ...mcp];
+      const all = [...wrapped, ...mcp];
       return () => all;
     }
-    const registry = new ToolRegistry(always, mcp);
+    const registry = new ToolRegistry(wrapped, mcp);
     return () => registry.active();
   }
 

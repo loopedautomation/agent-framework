@@ -1,0 +1,16 @@
+# Test cases for gh-issues-cli, run with `af test examples/gh-issues-cli/agent.yaml`.
+# The model call is real; run_bash is mocked so no issue is ever opened.
+cases:
+  - name: creates an issue from a bug report
+    input: "the export button 500s when the report has no rows"
+    mocks:
+      run_bash: "https://github.com/loopedautomation/looped/issues/42"
+    checks:
+      - status: ok
+      - tool_called: run_bash
+      - reply_contains: "issues/42"
+
+  - name: ignores chatter
+    input: "lunch anyone?"
+    checks:
+      - tool_not_called: run_bash

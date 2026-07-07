@@ -2,7 +2,7 @@
 
 The framework bets on cheap models (Plan 0, principle 9): a well-scoped agent on a mini model, made reliable by a narrow job, a small toolset and lean context. That bet gets placed again every time someone edits a purpose line, swaps the model or rewrites a skill, and today the only way to know it still pays off is to poke the agent by hand. `af test` is the check: a set of cases next to the agent file that say what the agent is supposed to do, runnable in CI, cheap enough to run on every change.
 
-Status: design; implementation has not started. Plan 1 named it ("typed task I/O + `af test`") and the roadmap carries it on the later list.
+Status: phase 1 shipped — the runner (`packages/core/eval/`), deterministic checks, mocks, discovery and the `af test` command. The judge and `--runs` are still open. Plan 1 named it ("typed task I/O + `af test`") and the roadmap carries it on the later list.
 
 ## A test is cases in YAML, beside the agent
 
