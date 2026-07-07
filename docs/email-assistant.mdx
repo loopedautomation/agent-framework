@@ -1,0 +1,93 @@
+---
+title: "Email assistant"
+description: "Build a personal assistant that watches your mail, reads your calendar, reminds you about meetings and keeps a spam list."
+---
+
+The assistant most people actually want is a mundane one: something that watches the inbox, knows the calendar, sends a nudge before a meeting and deals with the mail that doesn't deserve your attention. This guide builds that agent out of pieces the framework already has. There is no assistant feature to turn on; the [email trigger](email.mdx), [cron](cron.mdx), a skill with `curl` and [persistent memory](memory.md) compose into one.
+
+The finished agent is in the repo as the [mail-assistant example](https://github.com/loopedautomation/agent-framework/tree/main/examples/mail-assistant), so you can read this page as the reasoning and that directory as the result.
+
+## The shape of the agent
+
+Two kinds of events wake it, and one skill lets it act:
+
+- The **email trigger** delivers the mail you choose to route to it. This is how it reacts to important messages and how you give it instructions ("spam: newsletter@vendor.com") by emailing it.
+- Two **cron schedules** give it a sense of time: a tick every 15 minutes during working hours to check for upcoming meetings, and a morning tick for a daily briefing.
+- A **skill** teaches it two `curl` calls: sending email through the Resend API and reading your calendar's ICS feed. Sending email is also how it reaches you, since a cron tick has no reply channel of its own.
+- **Persistent memory** holds the spam list and remembers which meetings it has already reminded you about.
+
+The credentials stay out of the model's sight the whole way: `RESEND_API_KEY` and `CALENDAR_ICS_URL` live in the container environment, `run_bash` passes them to `curl`, and the agent writes `$RESEND_API_KEY` without ever seeing the value.
+
+## Getting your mail in front of it
+
+The agent gets its own address, say `assistant@agents.example.com`, set up through Resend as described on the [email trigger page](email.mdx#setup). Your own mail reaches it through forwarding filters in your mail provider: a Gmail filter that forwards anything from your accountant, anything with "invoice" in the subject, or anything from a sender you've starred. You decide what the agent sees, message by message, in the mail client you already use. Nothing else leaves your inbox.
+
+One consequence to understand: forwarded mail keeps the original sender's `From` header, so the trigger sees the world's addresses and `from_addresses` can't act as a tight allowlist here. The example sets it to `["*"]` and says so in a comment. That is a real widening, and three things stand in for the fence: your provider's own spam filtering runs before anything is forwarded, your filters only forward what matches, and the agent checks its spam list before doing anything else. [`limits`](agent-file.md#limits) caps what a run can spend if junk gets through anyway.
+
+When the IMAP and Gmail transports land (they're planned, this page will be amended), the agent will be able to watch a mailbox directly and the forwarding step goes away.
+
+## Calendar access without OAuth
+
+Google Calendar, Fastmail and most other providers publish each calendar at a **secret ICS address**: a URL that returns the whole calendar as an iCal text file, readable by anyone who has the link. In Google Calendar it's under Settings → your calendar → "Secret address in iCal format".
+
+That URL is all the calendar access a reminder agent needs. It goes into the environment as `CALENDAR_ICS_URL`, and the skill teaches the agent to fetch it with `curl` and filter it with `grep` down to the day's events, because a busy calendar's feed is far larger than a tool result should be. Read-only, no OAuth dance, no MCP server, revocable at any time by resetting the URL in your calendar settings.
+
+The cost of this shortcut is that the agent can only read. If you want it to create events or respond to invites, that's the point to reach for a calendar MCP server ([Tools](tools.md)) and the OAuth setup that comes with it. For reminders and briefings, the feed is enough.
+
+## Meeting reminders
+
+The reminder loop is a cron tick plus a memory convention:
+
+```yaml
+triggers:
+  - type: cron
+    schedule: "*/15 7-18 * * 1-5"   # weekdays, working hours
+    prompt: Reminder tick. Check the calendar and send any due meeting reminders.
+```
+
+On each tick the agent reads the feed, looks for events starting in the next 45 minutes, and for each one checks persistent memory for a `reminded:<event UID>` key. If the key is missing, it emails you a one-liner ("Standup in 30 minutes") and remembers the key; if it's there, it stays silent. The memory check is what makes a 15-minute tick safe - a meeting gets one reminder, however many ticks see it coming. The morning tick clears out the previous day's `reminded:` keys so they don't accumulate.
+
+Reminder precision is the tick interval: with `*/15`, a reminder arrives up to 15 minutes later than the ideal moment. Tighten the schedule if that bothers you; each tick is a model call, so the interval is also a cost dial.
+
+## Acting on important mail
+
+What "important" means is written in the `purpose`, in plain language. The example's version:
+
+```yaml
+purpose: |
+  ...
+  On forwarded mail:
+  - First recall the spam_list memory. If the original sender is on it,
+    reply with exactly __NO_REPLY__ and do nothing else.
+  - If the mail is important (a deadline, an invoice, a request from a
+    person expecting an answer), email me a short heads-up with what it
+    needs and by when.
+  - Otherwise reply with exactly __NO_REPLY__.
+```
+
+`allow_silence: true` on the trigger makes the `__NO_REPLY__` sentinel real: most forwarded mail should produce no email at all, and the run still lands in the [run history](docker-run.md#persistence-the-data-volume) so you can see what the agent decided and why.
+
+This is also where you'd extend the agent toward doing rather than summarizing - the same purpose can tell it to file invoices somewhere via an allowlisted CLI, or to draft a reply for your review. Every capability it needs has to come through [permissions](permissions.md) or a declared tool, so the agent file stays a complete description of what your assistant can reach.
+
+## The spam list
+
+The spam list is one persistent-memory key, `spam_list`, holding a comma-separated set of addresses. The agent consults it before acting on any forwarded mail, and you edit it by emailing the agent:
+
+> spam: newsletter@vendor.com
+
+> unspam: alerts@bank.example.com
+
+The agent updates the memory and confirms in one line. Because persistent memory survives restarts and is visible from every conversation, the list works no matter which thread the instruction arrived in, and `list_memories` shows you the current state whenever you ask. Every update also lands in the [audit trail](docker-run.md#persistence-the-data-volume) as a `memory` event.
+
+This list keeps the *agent* from spending attention on a sender. It can't unsubscribe you or stop the mail arriving in your own inbox - for that, tighten the forwarding filters at the source.
+
+## What this design accepts
+
+Worth naming plainly:
+
+- **Every forwarded message is a model call.** The forwarding filters are your cost control; forward selectively.
+- **The calendar is read-only** through the ICS feed, and the secret URL grants whoever holds it a full view of that calendar. Treat it like a password; rotate it from calendar settings if it leaks.
+- **Attachments don't reach the agent yet** - it sees filenames and sizes only ([email trigger](email.mdx#what-the-agent-sees-and-how-it-answers)).
+- **The agent only sees what you route to it.** It can't search your mailbox history or notice a message you didn't forward. Watching the mailbox itself is what the planned pulled transports are for.
+
+Ready to build it? Start from the [example directory](https://github.com/loopedautomation/agent-framework/tree/main/examples/mail-assistant) - the README there walks through the Resend setup, the Gmail filters and the calendar URL step by step.

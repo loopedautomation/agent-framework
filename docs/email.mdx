@@ -1,0 +1,111 @@
+---
+title: "Email"
+description: "Wake the agent on inbound email via Resend webhooks; replies go back out as ordinary email in the same thread."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+An email address is the one inbox every business already has. Invoices land there, support requests land there, statements from providers land there. The `email` trigger lets incoming mail wake an agent: each qualifying message becomes a run, and the agent's answer goes back out as a reply in the same thread.
+
+```yaml
+triggers:
+  - type: email
+    transport: resend
+    from_addresses: ["ratul@example.com", "*@example.com"]  # required
+    # path: /email                            (default)
+    # port: 8080                              (default)
+    # signing_secret_env: RESEND_WEBHOOK_SECRET (default)
+    # api_key_env: RESEND_API_KEY             (default)
+    # allow_silence: true                     # a reply of exactly __NO_REPLY__ sends nothing
+```
+
+`transport` says how mail arrives. So far there is one: `resend`, the pushed transport, where [Resend](https://resend.com) receives mail for your domain and POSTs each message to the agent as a signed webhook. Pulled transports that watch an existing mailbox (IMAP, Gmail, Outlook) are planned; until they land, the way to get your own mail in front of an agent is to route it here with forwarding rules (see [Give an agent its own address](#give-an-agent-its-own-address)).
+
+## Setup
+
+You need a domain (or a subdomain like `agents.example.com`) whose inbound mail you're willing to point at Resend, and a public HTTPS endpoint for the agent. Unlike the chat triggers, which connect outward, a webhook has to be reachable from the internet, so put the agent behind your reverse proxy or a tunnel.
+
+1. In Resend, add your domain and set up [receiving](https://resend.com/docs/dashboard/receiving/introduction): the MX records they give you route the domain's inbound mail to them.
+2. Create a webhook for the `email.received` event, pointed at your agent's URL (e.g. `https://agents.example.com/email`). Copy the signing secret (`whsec_…`) into `RESEND_WEBHOOK_SECRET`.
+3. Create an API key with sending access and put it in `RESEND_API_KEY`. The trigger uses it to fetch message bodies and to send replies.
+4. List who may write to the agent in `from_addresses`, and start it.
+
+Both env vars resolve at startup, and a missing one fails the boot right there, before the first message.
+
+<Tabs items={['agent.yaml', 'compose.yaml']}>
+<Tab value="agent.yaml">
+
+```yaml
+triggers:
+  - type: email
+    transport: resend
+    from_addresses: ["*@example.com"]
+```
+
+</Tab>
+<Tab value="compose.yaml">
+
+```yaml
+configs:
+  agent-yaml:
+    content: |
+      handle: invoice-inbox
+      description: Files invoices that arrive at invoices@example.com.
+      model:
+        provider: openai-compatible
+        id: gpt-5.4-mini
+      purpose: |
+        Mail arriving here is an invoice or it isn't. If it is, extract
+        the vendor, amount, currency and due date, and record them.
+        Reply with a one-line confirmation. If it isn't an invoice,
+        reply with exactly __NO_REPLY__.
+      triggers:
+        - type: email
+          transport: resend
+          from_addresses: ["*@example.com"]
+          allow_silence: true
+
+services:
+  invoice-inbox:
+    image: ghcr.io/loopedautomation/agent:latest
+    configs:
+      - source: agent-yaml
+        target: /agent/agent.yaml
+    env_file: .env   # RESEND_WEBHOOK_SECRET, RESEND_API_KEY, model API key
+    ports:
+      - "8080:8080"  # put a TLS-terminating proxy in front
+    volumes:
+      - invoice-inbox-data:/data
+    restart: unless-stopped
+volumes:
+  invoice-inbox-data:
+```
+
+</Tab>
+</Tabs>
+
+## What the agent sees, and how it answers
+
+Resend's webhook carries the message metadata; the trigger fetches the body through the Resend API and renders the whole thing into plain text: from, to, subject, date and the body. Plain-text bodies pass through as they are. HTML-only mail gets a naive tag-strip, which is fine for correspondence and will mangle the occasional newsletter. Attachments are listed by filename and size and are otherwise dropped for now; delivering their contents needs a story about writable paths and size caps first.
+
+Replies are ordinary email sends through the same API. They go out from the address the mail arrived on, back to the sender (or the Reply-To if one is set), with `In-Reply-To` and `References` pointing at the original so mail clients thread them correctly, and the conventional `Re:` on the subject.
+
+Conversations are keyed by the thread's root `Message-ID`, so with `memory.scope: thread` ([Memory](memory.md)) an ongoing correspondence loads its history the same way a Discord thread does. Mail without threading headers falls back to subject plus sender.
+
+One mechanical difference from the [webhook trigger](webhook.mdx): the HTTP response doesn't carry the run result. The trigger acknowledges the webhook immediately and runs the agent afterwards, because Resend retries slow endpoints and a retried webhook would mean a duplicate run. The reply email is the delivery channel; the run also lands in the [run history](docker-run.md#persistence-the-data-volume) as always.
+
+## An email address is an open channel
+
+The chat triggers inherit a boundary from their platform: only people in your server or workspace can speak to the agent. An email address has no such fence. Anyone on the internet can write to it, which makes inbound mail the framework's widest prompt-injection surface, and every unfiltered message costs tokens besides. So the filtering here is stricter than the chat triggers' optional `from_users`:
+
+- **`from_addresses` is required.** Exact addresses or `*@domain` patterns (the domain itself; subdomains don't match). If you genuinely want an open mailbox, write `from_addresses: ["*"]`, and the file that defines the agent's permissions now also says its inbox is open. The check runs on the webhook metadata, before the body is fetched and before the model is called.
+- **Every request's signature is verified.** Resend signs each webhook (via [Svix](https://docs.svix.com/receiving/verifying-payloads/how)); the trigger checks the signature with a timing-safe comparison before parsing anything. An unsigned POST to the endpoint is a 401 and no event.
+- **Auto-generated mail is dropped.** Messages carrying `Auto-Submitted` or bulk/list `Precedence` headers are skipped, and so is anything from the agent's own address. An agent that replies to an out-of-office reply to its own reply is a mail loop, and this is the standard defense.
+
+One honest caveat: a `From` header is an assertion. Resend checks SPF and DKIM on inbound mail, but you should read `from_addresses` as access control for honest senders plus a cost gate. The defense against a crafted message that gets through is the same as everywhere else in the framework: the [permissions](permissions.md) block bounds what a fooled agent can actually do.
+
+`allow_silence` matters more here than on any chat trigger. An agent that files invoices into accounting software should answer nothing at all; instruct it in `purpose` to reply with exactly `__NO_REPLY__` and the trigger sends no email.
+
+## Give an agent its own address
+
+The setup above shines when the agent owns an address outright: point `invoices@example.com` at Resend, route it to the agent, done. It also covers your personal mail without waiting for the IMAP transport: a Gmail or Fastmail filter that forwards matching messages ("from my accountant", "subject contains invoice") to the agent's address puts exactly the mail you choose in front of it, and nothing else. The [mail-assistant example](https://github.com/loopedautomation/agent-framework/tree/main/examples/mail-assistant) is a complete deployment of that pattern, and the [email assistant guide](email-assistant.mdx) walks through the rest: calendar access, meeting reminders and a spam list the agent maintains itself.

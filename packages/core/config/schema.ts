@@ -115,6 +115,37 @@ const WebhookTriggerSchema = z.strictObject({
   "HTTP trigger: POST {path} with authorization: Bearer <token> and JSON body {input, conversation_id?}; responds with the run result.",
 );
 
+const ResendEmailTriggerSchema = z.strictObject({
+  type: z.literal("email"),
+  transport: z.literal("resend").describe(
+    "How mail arrives. resend is the pushed transport: Resend receives mail for your domain and POSTs each message here as a signed webhook.",
+  ),
+  path: z.string().startsWith("/").default("/email").describe(
+    "HTTP path the provider POSTs inbound-mail webhooks to.",
+  ),
+  port: z.number().int().min(1).max(65535).default(8080).describe("Port to listen on."),
+  signing_secret_env: z.string().min(1).default("RESEND_WEBHOOK_SECRET").describe(
+    "Env var holding the webhook signing secret (whsec_…). Every request is verified before parsing; unsigned POSTs get a 401.",
+  ),
+  api_key_env: z.string().min(1).default("RESEND_API_KEY").describe(
+    "Env var holding the Resend API key — fetches message bodies and sends replies.",
+  ),
+  from_addresses: z.array(z.string().min(1)).min(1).describe(
+    'Senders the agent handles: exact addresses or *@domain patterns. Required — an email address is open to the whole internet. ["*"] accepts anyone, stated in the file that defines the agent\'s reach.',
+  ),
+  allow_silence: z.boolean().default(false).describe(
+    "Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+  ),
+}).describe(
+  "Wake on inbound email delivered by Resend's email.received webhook; replies go back out through the Resend API in the same thread.",
+);
+
+const EmailTriggerSchema = z.discriminatedUnion("transport", [
+  ResendEmailTriggerSchema,
+]).describe(
+  "Wake on inbound email. transport picks how mail arrives; resend (pushed webhooks) is the only transport so far — IMAP and the hosted providers are planned.",
+);
+
 const CronTriggerSchema = z.strictObject({
   type: z.literal("cron"),
   schedule: z.string().min(1).describe('Cron expression, e.g. "0 9 * * 1" for Mondays 09:00.'),
@@ -126,6 +157,7 @@ const TriggerSchema = z.discriminatedUnion("type", [
   SlackTriggerSchema,
   TelegramTriggerSchema,
   WebhookTriggerSchema,
+  EmailTriggerSchema,
   CronTriggerSchema,
 ]).describe("An event source that wakes the agent.");
 
@@ -323,6 +355,29 @@ export interface WebhookTriggerConfig {
   token_env: string;
 }
 
+/** An email trigger on the Resend pushed transport: signed inbound-mail webhooks wake the agent. */
+export interface ResendEmailTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "email";
+  /** Discriminant for EmailTriggerConfig: how mail arrives. */
+  transport: "resend";
+  /** HTTP path the provider POSTs inbound-mail webhooks to. */
+  path: string;
+  /** Port to listen on. */
+  port: number;
+  /** Env var holding the webhook signing secret (whsec_…). */
+  signing_secret_env: string;
+  /** Env var holding the Resend API key — fetches message bodies and sends replies. */
+  api_key_env: string;
+  /** Senders the agent handles: exact addresses, `*@domain` patterns, or `*` for anyone. */
+  from_addresses: string[];
+  /** Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
+  allow_silence: boolean;
+}
+
+/** An email trigger, discriminated on `transport`; resend is the only transport so far. */
+export type EmailTriggerConfig = ResendEmailTriggerConfig;
+
 /** A cron trigger: fire the agent on a schedule with a fixed prompt. */
 export interface CronTriggerConfig {
   /** Discriminant for TriggerConfig. */
@@ -339,6 +394,7 @@ export type TriggerConfig =
   | SlackTriggerConfig
   | TelegramTriggerConfig
   | WebhookTriggerConfig
+  | EmailTriggerConfig
   | CronTriggerConfig;
 
 /** A Model Context Protocol server providing tools to the agent. */

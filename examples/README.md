@@ -9,3 +9,4 @@ Complete, runnable agents. Each one is a copy-paste starting point that demonstr
 - [`gh-issues-cli`](gh-issues-cli/) - the flagship: Discord to GitHub issues. A skill teaching the `gh` CLI, scoped permissions and secrets, a custom Dockerfile and a compose file, deployed with `docker compose up`.
 - [`gh-issues-mcp`](gh-issues-mcp/) - the same agent with its GitHub tools coming from the official GitHub MCP server. Read it next to `gh-issues-cli` to compare the two ways of giving an agent a capability.
 - [`agent-zero`](agent-zero/) - the agent that builds agents: describe an agent in one Discord message, receive a scaffolded, validated project. It drives `af init` rather than hand-writing boilerplate.
+- [`mail-assistant`](mail-assistant/) - a personal email + calendar assistant: forwarded mail wakes it (email trigger via Resend), cron ticks make it check the calendar's ICS feed, it emails you meeting reminders and keeps a spam list in persistent memory.
