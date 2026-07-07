@@ -51,13 +51,13 @@ CLI polish (`af init/dev/run`), structured run traces, a third agent from the co
 ## Later (unscheduled, needs its own plan when ready)
 
 - **Looped Chat on Looped AF** — replace the chat agent in app.looped.sh with a Looped AF agent (`chat` trigger, per-user sessions, internal-API tools). The framework's first production dogfood in a paying-user SaaS; Plan 6 candidate (see Plan 5).
-- Multi-agent composition (`agent_call`) and A2A trigger
+- Multi-agent composition (`agent_call`) and A2A trigger (planned in Plan 8)
 - Agent hub / control plane UI (Plan 5 — post-fleet)
 - Hosted platform (Plan 5 — after the agency validates the ops)
 - Programmatic `defineAgent()` config
 - External secret providers (Vault/SOPS/1Password)
 - More triggers: queues (Slack has shipped; email is planned in Plan 7)
-- Eval harness (`af test`) for cheap-model verification
+- Eval harness (`af test`) for cheap-model verification (planned in Plan 9)
 
 ## Open questions
 
