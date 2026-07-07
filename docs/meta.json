@@ -22,7 +22,10 @@
     "tools",
     "permissions",
     "memory",
-    "---Models---",
-    "models"
+    "---Providers---",
+    "models",
+    "openai",
+    "anthropic",
+    "codex"
   ]
 }
