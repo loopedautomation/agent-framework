@@ -4,7 +4,7 @@ Send an agent ten instructions, one Discord message at a time, while each run ta
 
 The unchosen behaviour also hides a real bug. `saveMessages` persists a session by deleting its rows and rewriting the full transcript. Two runs on the same `conversationKey` at once both load the same history, run independently and rewrite the session on completion, so the last writer erases the other run's messages. The ten-instructions scenario on Discord does this today: later messages race earlier ones, each run is blind to what the previous one did, and the session history ends up missing runs. This plan decides the concurrency model on purpose and fixes that along the way.
 
-Status: design; implementation has not started.
+Status: phase 1 (correctness) implemented — the per-conversation FIFO, `limits.concurrent_runs`, `limits.queue_depth` with the refusal reply, cron overrun protection via a serial lane, `busy_timeout`, and Telegram's poll loop dispatching without awaiting so the service owns ordering. Phases 2 and 3 have not started.
 
 ## The model: conversations are the unit of order
 
@@ -24,7 +24,7 @@ Every queue in the framework's philosophy needs a dead-man's switch, and this on
 - **Depth.** A conversation's queue holds `limits.queue_depth` events (default 10). Past that, the event is rejected and the trigger delivers a short built-in refusal through the normal reply path, so the sender learns immediately instead of discovering an hour later that message eleven evaporated. Every rejection is an audit row.
 - **Visibility.** A queued event is not silent: chat triggers keep their existing acknowledgement behaviour going (Discord's typing indicator already loops during runs and extends naturally to waiting), and `/status` (Plan 10) grows a line for runs in flight and queued events. A `/cancel` built-in that clears the current conversation's queue, and eventually aborts the in-flight run via an `AbortController` threaded through `runAgent`, is the steering mechanism, phased below.
 
-The queue is in-memory, and we say so honestly: a container restart drops queued events. Telegram redelivers unacknowledged updates on reconnect, so it is approximately at-least-once already; Discord and webhooks do not redeliver. The runs table records everything that started, so what was lost is knowable. Whether queued events deserve a durable inbox table in SQLite is an open question rather than v1 scope, because it drags in dedup keys and replay semantics that the single-box deployment mostly does not need.
+The queue is in-memory, and we say so honestly: a container restart drops queued events. Telegram acknowledges a batch on its next poll, so on restart it redelivers only updates it had not yet handed over; Discord and webhooks do not redeliver at all. The runs table records everything that started, so what was lost is knowable. Whether queued events deserve a durable inbox table in SQLite is an open question rather than v1 scope, because it drags in dedup keys and replay semantics that the single-box deployment mostly does not need.
 
 ## Scaling a single agent
 

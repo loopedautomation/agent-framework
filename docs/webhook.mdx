@@ -69,6 +69,8 @@ curl -s localhost:8080 \
 
 The response is the run result: `{"status": "ok", "reply": "...", "steps": 2}`. Pass the same `conversation_id` to continue a conversation (with `memory.scope: thread` — [Memory](agent-file.md#memory)); omit it for one-shot runs.
 
+Requests sharing a `conversation_id` run one at a time, in arrival order. When a conversation already has [`limits.queue_depth`](agent-file.md#limits) requests waiting, the next one comes back as a 429 with `"status": "rejected"`, so the caller knows to back off and retry.
+
 `token_env` is required — an unauthenticated endpoint contradicts deny-by-default. The token resolves at startup, and a missing env var fails right there, before the endpoint ever accepts a call.
 
 Every call lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps and tokens.

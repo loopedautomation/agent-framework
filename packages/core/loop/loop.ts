@@ -3,8 +3,12 @@ import type { Message, Provider, Usage } from "../providers/types.ts";
 import { ProviderError } from "../providers/types.ts";
 import type { NativeTool } from "../tools/types.ts";
 
-/** How a run ended: cleanly, out of steps, or on a provider failure. */
-export type RunStatus = "ok" | "error_max_steps" | "error_provider";
+/**
+ * How a run ended: cleanly, out of steps, or on a provider failure.
+ * `rejected` means no run happened — the event was refused at the queue
+ * (its conversation already held too much waiting work).
+ */
+export type RunStatus = "ok" | "error_max_steps" | "error_provider" | "rejected";
 
 /**
  * Injected as the final user turn of the wrap-up call when a run exhausts

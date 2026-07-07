@@ -56,6 +56,9 @@ export class Store {
   constructor(path: string) {
     this.#db = new DatabaseSync(path);
     this.#db.exec("PRAGMA journal_mode = WAL;");
+    // Parallel runs across conversations mean concurrent writers on one
+    // file; wait for the lock instead of failing with SQLITE_BUSY.
+    this.#db.exec("PRAGMA busy_timeout = 5000;");
     migrate(this.#db);
   }
 

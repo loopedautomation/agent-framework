@@ -773,7 +773,9 @@
     },
     "limits": {
       "default": {
-        "max_steps": 20
+        "max_steps": 20,
+        "concurrent_runs": 4,
+        "queue_depth": 10
       },
       "type": "object",
       "properties": {
@@ -782,6 +784,20 @@
           "description": "Tool-calling iterations (LLM calls) per run. On hitting the cap the agent gets one final tool-less call to summarize its progress, then the run ends with error_max_steps.",
           "type": "integer",
           "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "concurrent_runs": {
+          "default": 4,
+          "description": "Parallel runs across conversations. Within one conversation runs are always serial and ordered, so each run sees what earlier messages did; this caps how many conversations run at once. 1 serializes the whole agent.",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "queue_depth": {
+          "default": 10,
+          "description": "Events that may wait per conversation while a run is in flight. An event past the cap is refused immediately with a short reply, and every refusal lands in the audit trail.",
+          "type": "integer",
+          "minimum": 0,
           "maximum": 9007199254740991
         }
       },

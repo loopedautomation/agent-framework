@@ -162,8 +162,8 @@ triggers:
   );
 });
 
-Deno.test("cron trigger fires with its configured prompt", async () => {
-  const events: string[] = [];
+Deno.test("cron trigger fires with its configured prompt on a stable serial lane", async () => {
+  const events: { input: string; serialKey?: string }[] = [];
   const results: string[] = [];
   const trigger = new CronTrigger({
     schedule: "* * * * * *", // every second
@@ -171,7 +171,7 @@ Deno.test("cron trigger fires with its configured prompt", async () => {
     onResult: (r) => results.push(r.status),
   });
   await trigger.start((event) => {
-    events.push(event.input);
+    events.push({ input: event.input, serialKey: event.serialKey });
     return Promise.resolve({
       status: "ok" as const,
       reply: "done",
@@ -180,9 +180,86 @@ Deno.test("cron trigger fires with its configured prompt", async () => {
       messages: [],
     });
   });
-  await new Promise((r) => setTimeout(r, 1500));
+  await new Promise((r) => setTimeout(r, 2500));
   await trigger.stop();
-  assert(events.length >= 1);
-  assertEquals(events[0], "do the daily thing");
+  assert(events.length >= 2);
+  assertEquals(events[0].input, "do the daily thing");
   assertEquals(results[0], "ok");
+  // The serial lane is what lets the service keep a schedule from
+  // overlapping itself: every firing carries the same key.
+  assert(events[0].serialKey?.startsWith("cron:* * * * * *#"));
+  assertEquals(events[0].serialKey, events[1].serialKey);
+});
+
+Deno.test("webhook: an event past the conversation's queue returns 429 with the refusal", async () => {
+  const config = parseAgentConfig(`
+handle: busy-bot
+description: queue refusal test agent
+model:
+  provider: openai-compatible
+  id: test-model
+purpose: test
+memory:
+  scope: thread
+limits:
+  queue_depth: 0
+`);
+  // A provider the test releases by hand, so the first run stays in flight
+  // while the second request arrives.
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  let calls = 0;
+  const provider: Provider = {
+    id: "gated",
+    async complete(_req: CompletionRequest): Promise<Completion> {
+      calls++;
+      await gate;
+      return {
+        content: "done",
+        toolCalls: [],
+        stopReason: "end",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    },
+  };
+  const dataDir = await Deno.makeTempDir();
+  const service = new AgentService({ config, provider, dataDir });
+  service.store.setIdentity("name", "Tester"); // skip the naming ritual
+  let port = 0;
+  const trigger = new WebhookTrigger({
+    path: "/",
+    port: 0,
+    token: "s3cret",
+    onListen: (addr) => (port = addr.port),
+  });
+  await service.start([trigger]);
+  const post = (input: string) =>
+    fetch(`http://127.0.0.1:${port}/`, {
+      method: "POST",
+      headers: { authorization: "Bearer s3cret", "content-type": "application/json" },
+      body: JSON.stringify({ input, conversation_id: "same" }),
+    });
+
+  const first = post("one"); // stays in flight on the gated provider
+  const deadline = Date.now() + 5_000;
+  while (calls === 0) {
+    if (Date.now() > deadline) throw new Error("timed out waiting for the first run");
+    await new Promise((r) => setTimeout(r, 5));
+  }
+
+  const refused = await post("two");
+  assertEquals(refused.status, 429);
+  const refusedBody = await refused.json();
+  assertEquals(refusedBody.status, "rejected");
+  assert(refusedBody.reply.includes("queue is full"));
+
+  release();
+  const ok = await first;
+  assertEquals(ok.status, 200);
+  await ok.body?.cancel();
+
+  // Exactly one run happened; the refusal is an audit row.
+  assertEquals(service.store.recentRuns().length, 1);
+  assertEquals(service.store.recentAudit().filter((a) => a.kind === "queue").length, 1);
+  await service.stop();
 });

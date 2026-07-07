@@ -16,7 +16,20 @@ Deno.test("parses a minimal config and applies defaults", () => {
   assertEquals(config.handle, "test-bot");
   assertEquals(config.model.provider, "openai-compatible");
   assertEquals(config.limits.max_steps, 20);
+  assertEquals(config.limits.concurrent_runs, 4);
+  assertEquals(config.limits.queue_depth, 10);
   assertEquals(config.permissions, undefined); // deny-by-default: nothing granted
+});
+
+Deno.test("limits: concurrency fields parse, keep sibling defaults, and reject zero runs", () => {
+  const config = parseAgentConfig(MINIMAL + "limits:\n  concurrent_runs: 1\n  queue_depth: 0\n");
+  assertEquals(config.limits.concurrent_runs, 1); // whole-agent serialization
+  assertEquals(config.limits.queue_depth, 0); // refuse anything while busy
+  assertEquals(config.limits.max_steps, 20);
+  assertThrows(
+    () => parseAgentConfig(MINIMAL + "limits:\n  concurrent_runs: 0\n"),
+    ConfigError,
+  );
 });
 
 Deno.test("parses the full MVP-shaped config", () => {
