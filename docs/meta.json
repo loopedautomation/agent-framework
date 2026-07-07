@@ -25,6 +25,7 @@
     "tools",
     "permissions",
     "memory",
+    "testing",
     "---Providers---",
     "models",
     "openai",
