@@ -110,7 +110,7 @@ Deny by default. Declared once, enforced always, **never prompted**:
 
 ### Multi-agent (later)
 
-Composition over orchestration: an agent exposed *as a tool* to another agent (`agent_call`), or reachable via A2A. No graphs, no planners, no shared scratchpads. Sketch only; no v1 commitment.
+Composition over orchestration: an agent exposed *as a tool* to another agent (`agent_call`), or reachable via A2A. No graphs, no planners, no shared scratchpads. Now planned properly in Plan 8.
 
 ## Config
 
