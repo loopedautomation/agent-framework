@@ -57,6 +57,8 @@ Each tick runs the agent with `prompt` as input. Results are logged and recorded
 
 Every run reports its status, steps and tokens, and [`limits`](agent-file.md#limits) cap what an unattended schedule can spend.
 
+A schedule never overlaps itself. If a tick fires while the previous run is still going, the new firing waits for it to finish, and at most one firing waits; anything past that is skipped with `status: rejected`. A 6am summary that runs long produces a single catch-up run, and the skipped ticks stay visible in the audit trail.
+
 ## Multiple triggers
 
 `triggers:` is a list, and an agent can declare as many as it needs, including two of the same type. A daily prompt and a weekly prompt can live side by side:

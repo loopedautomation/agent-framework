@@ -76,11 +76,13 @@ export class WebhookTrigger implements Trigger {
           ? `webhook:${body.conversation_id}`
           : undefined,
       });
+      // 429 marks a queue refusal — the caller can back off and retry.
+      const httpStatus = result.status === "ok" ? 200 : result.status === "rejected" ? 429 : 500;
       return Response.json({
         status: result.status,
         reply: result.reply,
         steps: result.steps,
-      }, { status: result.status === "ok" ? 200 : 500 });
+      }, { status: httpStatus });
     });
     return Promise.resolve();
   }

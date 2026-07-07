@@ -192,13 +192,19 @@ export class TelegramTrigger implements Trigger {
           offset = update.update_id + 1;
           const msg = update.message;
           if (!msg || !shouldHandle(msg, botUsername, this.#opts)) continue;
-          const result = await emit({
+          // Dispatch without awaiting: ordering within a chat is the
+          // service's job (per-conversation FIFO), and holding the poll
+          // loop here would make one long run block every other chat.
+          emit({
             id: String(update.update_id),
             trigger: this.name,
             input: stripCommandMention(msg.text!, botUsername),
             conversationKey: `telegram:${msg.chat.id}`,
-          });
-          await this.#reply(msg, result);
+          })
+            .then((result) => this.#reply(msg, result))
+            .catch((err) => {
+              console.error(`telegram: run failed: ${(err as Error).message}`);
+            });
         }
       } catch (err) {
         if (this.#stopped) return;

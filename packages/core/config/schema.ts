@@ -351,6 +351,15 @@ const LimitsSchema = z.strictObject({
     "Tool-calling iterations (LLM calls) per run. On hitting the cap the agent gets one final " +
       "tool-less call to summarize its progress, then the run ends with error_max_steps.",
   ),
+  concurrent_runs: z.number().int().positive().default(4).describe(
+    "Parallel runs across conversations. Within one conversation runs are always serial and " +
+      "ordered, so each run sees what earlier messages did; this caps how many conversations " +
+      "run at once. 1 serializes the whole agent.",
+  ),
+  queue_depth: z.number().int().nonnegative().default(10).describe(
+    "Events that may wait per conversation while a run is in flight. An event past the cap is " +
+      "refused immediately with a short reply, and every refusal lands in the audit trail.",
+  ),
 }).describe("Per-run budgets — the dead-man's switches for unattended operation.");
 
 const agentConfigSchema = z.strictObject({
@@ -395,7 +404,7 @@ const agentConfigSchema = z.strictObject({
     "Env for tools and MCP servers. Values may be ${VAR} references, resolved at startup (env var, then /run/secrets/<VAR>) and scoped per tool.",
   ),
   memory: MemoryConfigSchema.optional(),
-  limits: LimitsSchema.default({ max_steps: 20 }),
+  limits: LimitsSchema.default({ max_steps: 20, concurrent_runs: 4, queue_depth: 10 }),
 }).describe(
   "A Looped AF agent: one job, one file. https://github.com/loopedautomation/agent-framework",
 );
@@ -667,6 +676,16 @@ export interface LimitsConfig {
    * tool-less call to summarize its progress, then the run ends with error_max_steps.
    */
   max_steps: number;
+  /**
+   * Parallel runs across conversations. Within one conversation runs are always serial and
+   * ordered; this caps how many conversations run at once. 1 serializes the whole agent.
+   */
+  concurrent_runs: number;
+  /**
+   * Events that may wait per conversation while a run is in flight. An event past the cap is
+   * refused immediately with a short reply, and every refusal lands in the audit trail.
+   */
+  queue_depth: number;
 }
 
 /** A parsed and validated agent.yaml, with defaults applied. */

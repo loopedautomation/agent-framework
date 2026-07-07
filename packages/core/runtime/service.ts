@@ -28,6 +28,7 @@ import {
   type ParsedCommand,
   substituteArgs,
 } from "./commands.ts";
+import { QueueFullError, RunScheduler } from "./scheduler.ts";
 
 /** An event from the outside world, normalized by a trigger. */
 export interface AgentEvent {
@@ -39,6 +40,13 @@ export interface AgentEvent {
   input: string;
   /** Session identity (e.g. a thread id). Absent → the run has no history. */
   conversationKey?: string;
+  /**
+   * Serialization lane for events with no conversation: events sharing a
+   * serialKey run one at a time in arrival order, with at most one waiting —
+   * further events are refused while both slots are full. Cron uses this so
+   * a schedule never overlaps itself. Ignored when conversationKey is set.
+   */
+  serialKey?: string;
 }
 
 /** Per-call options for {@linkcode AgentService.handle}. */
@@ -109,6 +117,7 @@ export class AgentService {
   #mcp?: McpConnections;
   #wrapTool: (tool: NativeTool) => NativeTool;
   #startedAtMs = Date.now();
+  #scheduler: RunScheduler;
 
   /** Resolves env references, opens the store, and builds the provider. */
   constructor(opts: AgentServiceOptions) {
@@ -128,6 +137,10 @@ export class AgentService {
       Deno.mkdirSync(dataDir, { recursive: true });
       this.store = new Store(`${dataDir}/${opts.config.handle}.db`);
     }
+    this.#scheduler = new RunScheduler({
+      concurrentRuns: opts.config.limits.concurrent_runs,
+      queueDepth: opts.config.limits.queue_depth,
+    });
   }
 
   /**
@@ -232,8 +245,47 @@ export class AgentService {
     };
   }
 
-  /** Handle one event end to end: context → inner loop → persist + audit. */
+  /**
+   * Handle one event: enqueue, then run end to end. Events sharing a
+   * conversationKey (or serialKey) run serially in arrival order, so each
+   * run sees what its predecessors persisted; across keys, runs are parallel
+   * up to `limits.concurrent_runs`. An event past a full queue is refused
+   * immediately — the trigger delivers the refusal through its normal reply
+   * path, and the refusal lands in the audit trail.
+   */
   async handle(event: AgentEvent, opts?: HandleOptions): Promise<RunResult> {
+    const lane = event.conversationKey ?? event.serialKey;
+    // Conversations queue up to limits.queue_depth events; serial lanes hold
+    // at most one waiting event (cron's no-overlap promise).
+    const queueDepth = event.conversationKey ? this.config.limits.queue_depth : 1;
+    try {
+      return await this.#scheduler.submit(lane, () => this.#run(event, opts), { queueDepth });
+    } catch (err) {
+      if (err instanceof QueueFullError) return this.#refuse(event, lane!, err);
+      throw err;
+    }
+  }
+
+  /** The queue-full refusal: an immediate reply plus an audit row, no run. */
+  #refuse(event: AgentEvent, lane: string, err: QueueFullError): RunResult {
+    this.store.recordAudit({
+      kind: "queue",
+      detail: { eventId: event.id, trigger: event.trigger, lane, held: err.held },
+    });
+    const reply = event.conversationKey
+      ? "This conversation's queue is full — try again once the current work finishes."
+      : "Skipped: an earlier firing is still running and one is already waiting.";
+    return {
+      status: "rejected",
+      reply,
+      steps: 0,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      messages: [],
+    };
+  }
+
+  /** Run one event end to end: context → inner loop → persist + audit. */
+  async #run(event: AgentEvent, opts?: HandleOptions): Promise<RunResult> {
     const identity = await this.init();
     const startedAt = new Date().toISOString();
 
