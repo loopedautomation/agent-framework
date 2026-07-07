@@ -19,6 +19,7 @@ This directory is the source of truth for what Looped AF is and where it's going
 | 10 | [010-slash-commands.md](010-slash-commands.md) | Operator commands across every chat surface |
 | 11 | [011-footprint.md](011-footprint.md) | A smaller image and a smaller resident set: compile, distroless, memory caps |
 | 12 | [012-channels.md](012-channels.md) | Triggers become channels: two-way, named, with routed replies |
+| 13 | [013-concurrency.md](013-concurrency.md) | Ordering, queues and the scaling story for a single agent |
 
 ## How to read and amend these
 
