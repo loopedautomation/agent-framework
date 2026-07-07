@@ -325,9 +325,232 @@
                 ],
                 "additionalProperties": false,
                 "description": "Wake on inbound email delivered by Resend's email.received webhook; replies go back out through the Resend API in the same thread."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "email"
+                  },
+                  "transport": {
+                    "type": "string",
+                    "const": "imap",
+                    "description": "How mail arrives. imap is the pulled transport for an existing mailbox: the trigger polls the folder for unseen messages and replies over SMTP."
+                  },
+                  "host": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "IMAP server host, e.g. imap.fastmail.com."
+                  },
+                  "port": {
+                    "default": 993,
+                    "description": "IMAP port (implicit TLS).",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  },
+                  "username": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Mailbox login — also the address replies are sent from."
+                  },
+                  "password_env": {
+                    "default": "IMAP_PASSWORD",
+                    "description": "Env var holding the mailbox password (an app password where the provider requires one).",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "smtp_host": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "SMTP server for replies, e.g. smtp.fastmail.com."
+                  },
+                  "smtp_port": {
+                    "default": 465,
+                    "description": "SMTP port (implicit TLS).",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  },
+                  "folder": {
+                    "default": "INBOX",
+                    "description": "Folder to watch. The unseen flag is the cursor — handled and dropped messages are marked seen — so give the agent a folder it owns.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "poll_seconds": {
+                    "default": 60,
+                    "description": "Seconds between polls.",
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 9007199254740991
+                  },
+                  "from_addresses": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Senders the agent handles: exact addresses or *@domain patterns. Required. [\"*\"] accepts anyone."
+                  },
+                  "allow_silence": {
+                    "default": false,
+                    "description": "Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type",
+                  "transport",
+                  "host",
+                  "username",
+                  "smtp_host",
+                  "from_addresses"
+                ],
+                "additionalProperties": false,
+                "description": "Wake on unseen messages in an IMAP mailbox; replies go out over SMTP in the same thread."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "email"
+                  },
+                  "transport": {
+                    "type": "string",
+                    "const": "gmail",
+                    "description": "How mail arrives. gmail polls the Gmail API for unread messages in a label, authenticated by an OAuth refresh token."
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "OAuth client id of your Google Cloud project's Desktop-app client."
+                  },
+                  "client_secret_env": {
+                    "default": "GMAIL_CLIENT_SECRET",
+                    "description": "Env var holding the OAuth client secret.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "refresh_token_env": {
+                    "default": "GMAIL_REFRESH_TOKEN",
+                    "description": "Env var holding the refresh token from the one-time consent flow (docs/email.mdx documents it).",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "default": "INBOX",
+                    "description": "Gmail label to watch. The unread state is the cursor — handled and dropped messages are marked read — so route mail here with Gmail filters and let the agent own the label.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "poll_seconds": {
+                    "default": 60,
+                    "description": "Seconds between polls.",
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 9007199254740991
+                  },
+                  "from_addresses": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Senders the agent handles: exact addresses or *@domain patterns. Required. [\"*\"] accepts anyone."
+                  },
+                  "allow_silence": {
+                    "default": false,
+                    "description": "Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type",
+                  "transport",
+                  "client_id",
+                  "from_addresses"
+                ],
+                "additionalProperties": false,
+                "description": "Wake on unread Gmail messages in a label via the Gmail API; replies land in the same Gmail thread."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "email"
+                  },
+                  "transport": {
+                    "type": "string",
+                    "const": "outlook",
+                    "description": "How mail arrives. outlook polls Microsoft Graph for unread messages in a folder, authenticated by an OAuth refresh token."
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Client id of your Entra app registration."
+                  },
+                  "client_secret_env": {
+                    "description": "Env var holding the client secret — confidential clients only. Public (device-code) clients omit this.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "refresh_token_env": {
+                    "default": "OUTLOOK_REFRESH_TOKEN",
+                    "description": "Env var holding the refresh token from the one-time device-code flow (docs/email.mdx documents it).",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tenant": {
+                    "default": "common",
+                    "description": "Entra tenant: \"common\", \"consumers\", \"organizations\" or a tenant id.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "folder": {
+                    "default": "inbox",
+                    "description": "Mail folder to watch: a well-known name (inbox) or a folder id. The unread state is the cursor — handled and dropped messages are marked read.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "poll_seconds": {
+                    "default": 60,
+                    "description": "Seconds between polls.",
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 9007199254740991
+                  },
+                  "from_addresses": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Senders the agent handles: exact addresses or *@domain patterns. Required. [\"*\"] accepts anyone."
+                  },
+                  "allow_silence": {
+                    "default": false,
+                    "description": "Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type",
+                  "transport",
+                  "client_id",
+                  "from_addresses"
+                ],
+                "additionalProperties": false,
+                "description": "Wake on unread Outlook messages in a folder via Microsoft Graph; replies land in the same conversation."
               }
             ],
-            "description": "Wake on inbound email. transport picks how mail arrives; resend (pushed webhooks) is the only transport so far — IMAP and the hosted providers are planned."
+            "description": "Wake on inbound email. transport picks how mail arrives: resend (pushed webhooks for the agent's own address), or imap / gmail / outlook (poll an existing mailbox)."
           },
           {
             "type": "object",

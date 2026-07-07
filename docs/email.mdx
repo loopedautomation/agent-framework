@@ -1,6 +1,6 @@
 ---
 title: "Email"
-description: "Wake the agent on inbound email via Resend webhooks; replies go back out as ordinary email in the same thread."
+description: "Wake the agent on inbound email, pushed by Resend webhooks or pulled from a mailbox over IMAP, Gmail or Outlook; replies go back out in the same thread."
 ---
 
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
@@ -19,9 +19,9 @@ triggers:
     # allow_silence: true                     # a reply of exactly __NO_REPLY__ sends nothing
 ```
 
-`transport` says how mail arrives. So far there is one: `resend`, the pushed transport, where [Resend](https://resend.com) receives mail for your domain and POSTs each message to the agent as a signed webhook. Pulled transports that watch an existing mailbox (IMAP, Gmail, Outlook) are planned; until they land, the way to get your own mail in front of an agent is to route it here with forwarding rules (see [Give an agent its own address](#give-an-agent-its-own-address)).
+`transport` says how mail arrives, and there are two shapes. `resend` is the pushed transport: [Resend](https://resend.com) receives mail for your domain and POSTs each message to the agent as a signed webhook. The other three are pulled transports that watch a mailbox that already exists: `imap` for anything self-hosted or app-password friendly, and `gmail` / `outlook` for the two big hosted providers via their APIs ([Watching a mailbox](#watching-a-mailbox-the-pulled-transports)). Use `resend` to give an agent its own address; use a pulled transport to put an agent on mail you already receive.
 
-## Setup
+## Setting up the Resend transport
 
 You need a domain (or a subdomain like `agents.example.com`) whose inbound mail you're willing to point at Resend, and a public HTTPS endpoint for the agent. Unlike the chat triggers, which connect outward, a webhook has to be reachable from the internet, so put the agent behind your reverse proxy or a tunnel.
 
@@ -94,6 +94,107 @@ Conversations are keyed by the thread's root `Message-ID`, so with `memory.scope
 
 One mechanical difference from the [webhook trigger](webhook.mdx): the HTTP response doesn't carry the run result. The trigger acknowledges the webhook immediately and runs the agent afterwards, because Resend retries slow endpoints and a retried webhook would mean a duplicate run. The reply email is the delivery channel; the run also lands in the [run history](docker-run.md#persistence-the-data-volume) as always.
 
+## Watching a mailbox: the pulled transports
+
+The pulled transports sign into a mailbox and poll it. No public endpoint, no MX records - the trigger connects outward like the chat triggers do, checks for new mail on an interval and backs off on errors. All three share the same mechanics: the sender and auto-mail filters run before the model is called, the rendered input and threading are the same as above, and credentials resolve at startup so a bad password or expired token fails the boot.
+
+**The mailbox is the cursor.** The trigger fetches what the mailbox marks unseen (IMAP) or unread (Gmail, Outlook) and clears that mark when it's done - after the run for handled messages, immediately for dropped ones, since an unread message it will never act on would otherwise be refetched every poll. A restarted container picks up where it left off with no local state, and a crash between the run and the mark costs one duplicate run. The consequence to plan around: the agent shares read-state with any human in the same mailbox, and whoever opens a message first wins. Give the agent a folder or label it owns, with mail routed in by your own filters.
+
+### IMAP
+
+```yaml
+triggers:
+  - type: email
+    transport: imap
+    host: imap.fastmail.com
+    username: agent@example.com
+    # password_env: IMAP_PASSWORD  (default)
+    smtp_host: smtp.fastmail.com   # replies go out over SMTP
+    # port: 993 / smtp_port: 465   (defaults, implicit TLS)
+    # folder: INBOX                (default)
+    # poll_seconds: 60             (default)
+    from_addresses: ["happy@example.com", "gwinyai@example.com"]
+```
+
+This covers any provider that still issues passwords: self-hosted mail, Fastmail app passwords, and Gmail through an app password (requires 2-step verification on the account). Replies go out over SMTP from `username`, threaded with `In-Reply-To` and `References`. Outlook is the exception - Microsoft requires OAuth even for IMAP, so use the `outlook` transport instead.
+
+The MIME parsing here is deliberately small: plain and HTML bodies, base64 and quoted-printable, RFC 2047 subjects. Ordinary correspondence parses fine; an exotic newsletter may render roughly.
+
+### Gmail
+
+```yaml
+triggers:
+  - type: email
+    transport: gmail
+    client_id: 1234-abc.apps.googleusercontent.com
+    # client_secret_env: GMAIL_CLIENT_SECRET   (default)
+    # refresh_token_env: GMAIL_REFRESH_TOKEN   (default)
+    label: agent                               # default: INBOX
+    from_addresses: ["*@example.com"]
+```
+
+Polls the Gmail API for unread messages in `label` and replies into the same Gmail thread. Point `label` at a label your Gmail filters populate, and the agent owns that label's read-state without touching the rest of your inbox.
+
+The container has no browser, so the refresh token is minted once on your machine:
+
+1. In [Google Cloud Console](https://console.cloud.google.com), create a project, enable the Gmail API, and create an OAuth client of type **Desktop app**. Note the client id and secret. On the consent screen, publish the app (an app left in "Testing" issues refresh tokens that expire after seven days).
+2. Open this URL in a browser (your client id substituted) and approve access:
+
+   ```
+   https://accounts.google.com/o/oauth2/v2/auth?client_id=CLIENT_ID&redirect_uri=http://localhost:8085&response_type=code&scope=https://www.googleapis.com/auth/gmail.modify&access_type=offline&prompt=consent
+   ```
+
+3. The browser ends up on a `localhost:8085` page that fails to load - that's expected, nothing is listening. Copy the `code` parameter out of the address bar.
+4. Exchange it:
+
+   ```sh
+   curl -s https://oauth2.googleapis.com/token \
+     -d client_id=CLIENT_ID -d client_secret=CLIENT_SECRET \
+     -d code=THE_CODE -d grant_type=authorization_code \
+     -d redirect_uri=http://localhost:8085
+   ```
+
+   The response's `refresh_token` goes into `GMAIL_REFRESH_TOKEN`. Google's refresh tokens don't rotate, so this is a one-time step per mailbox.
+
+### Outlook
+
+```yaml
+triggers:
+  - type: email
+    transport: outlook
+    client_id: 11111111-2222-3333-4444-555555555555
+    # tenant: common                             (default)
+    # refresh_token_env: OUTLOOK_REFRESH_TOKEN   (default)
+    # client_secret_env: only for confidential clients
+    # folder: inbox                              (default)
+    from_addresses: ["*@example.com"]
+```
+
+Polls Microsoft Graph for unread messages in `folder` and replies through Graph's reply endpoint, which threads and quotes for you. The one-time token comes from the device-code flow, which suits a public client with no secret:
+
+1. In [Microsoft Entra](https://entra.microsoft.com), register an app. Pick the account types you need (`common` covers work and personal), skip the redirect URI, and under Authentication enable **Allow public client flows**. Add the delegated Graph permissions `Mail.ReadWrite`, `Mail.Send` and `offline_access`.
+2. Start the device flow:
+
+   ```sh
+   curl -s https://login.microsoftonline.com/common/oauth2/v2.0/devicecode \
+     -d client_id=CLIENT_ID \
+     -d scope="https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send offline_access"
+   ```
+
+   Visit the `verification_uri` it returns and enter the `user_code`.
+3. Then collect the token:
+
+   ```sh
+   curl -s https://login.microsoftonline.com/common/oauth2/v2.0/token \
+     -d client_id=CLIENT_ID \
+     -d grant_type=urn:ietf:params:oauth:grant-type:device_code \
+     -d device_code=THE_DEVICE_CODE
+   ```
+
+   The `refresh_token` goes into `OUTLOOK_REFRESH_TOKEN`.
+
+One Microsoft-specific caveat: Graph rotates refresh tokens, and the trigger keeps the newest one in memory while it runs. The env var holds the original, so after a long outage (roughly 90 days unused) the token expires and you run the device-code flow again.
+
 ## An email address is an open channel
 
 The chat triggers inherit a boundary from their platform: only people in your server or workspace can speak to the agent. An email address has no such fence. Anyone on the internet can write to it, which makes inbound mail the framework's widest prompt-injection surface, and every unfiltered message costs tokens besides. So the filtering here is stricter than the chat triggers' optional `from_users`:
@@ -108,4 +209,4 @@ One honest caveat: a `From` header is an assertion. Resend checks SPF and DKIM o
 
 ## Give an agent its own address
 
-The setup above shines when the agent owns an address outright: point `invoices@example.com` at Resend, route it to the agent, done. It also covers your personal mail without waiting for the IMAP transport: a Gmail or Fastmail filter that forwards matching messages ("from my accountant", "subject contains invoice") to the agent's address puts exactly the mail you choose in front of it, and nothing else. The [mail-assistant example](https://github.com/loopedautomation/agent-framework/tree/main/examples/mail-assistant) is a complete deployment of that pattern, and the [email assistant guide](email-assistant.mdx) walks through the rest: calendar access, meeting reminders and a spam list the agent maintains itself.
+The Resend transport shines when the agent owns an address outright: point `invoices@example.com` at Resend, route it to the agent, done. It also works for personal mail you'd rather keep at arm's length: a Gmail or Fastmail filter that forwards matching messages ("from my accountant", "subject contains invoice") to the agent's address puts exactly the mail you choose in front of it, and the agent's read-state never touches your own mailbox. The pulled transports remove the forwarding step when you're comfortable letting the agent mark mail read in a folder or label of its own. The [mail-assistant example](https://github.com/loopedautomation/agent-framework/tree/main/examples/mail-assistant) is a complete deployment of the forwarding pattern, and the [email assistant guide](email-assistant.mdx) walks through the rest: calendar access, meeting reminders and a spam list the agent maintains itself.

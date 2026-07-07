@@ -140,10 +140,103 @@ const ResendEmailTriggerSchema = z.strictObject({
   "Wake on inbound email delivered by Resend's email.received webhook; replies go back out through the Resend API in the same thread.",
 );
 
+const ImapEmailTriggerSchema = z.strictObject({
+  type: z.literal("email"),
+  transport: z.literal("imap").describe(
+    "How mail arrives. imap is the pulled transport for an existing mailbox: the trigger polls the folder for unseen messages and replies over SMTP.",
+  ),
+  host: z.string().min(1).describe("IMAP server host, e.g. imap.fastmail.com."),
+  port: z.number().int().min(1).max(65535).default(993).describe(
+    "IMAP port (implicit TLS).",
+  ),
+  username: z.string().min(1).describe(
+    "Mailbox login — also the address replies are sent from.",
+  ),
+  password_env: z.string().min(1).default("IMAP_PASSWORD").describe(
+    "Env var holding the mailbox password (an app password where the provider requires one).",
+  ),
+  smtp_host: z.string().min(1).describe("SMTP server for replies, e.g. smtp.fastmail.com."),
+  smtp_port: z.number().int().min(1).max(65535).default(465).describe(
+    "SMTP port (implicit TLS).",
+  ),
+  folder: z.string().min(1).default("INBOX").describe(
+    "Folder to watch. The unseen flag is the cursor — handled and dropped messages are marked seen — so give the agent a folder it owns.",
+  ),
+  poll_seconds: z.number().int().min(5).default(60).describe("Seconds between polls."),
+  from_addresses: z.array(z.string().min(1)).min(1).describe(
+    'Senders the agent handles: exact addresses or *@domain patterns. Required. ["*"] accepts anyone.',
+  ),
+  allow_silence: z.boolean().default(false).describe(
+    "Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+  ),
+}).describe(
+  "Wake on unseen messages in an IMAP mailbox; replies go out over SMTP in the same thread.",
+);
+
+const GmailEmailTriggerSchema = z.strictObject({
+  type: z.literal("email"),
+  transport: z.literal("gmail").describe(
+    "How mail arrives. gmail polls the Gmail API for unread messages in a label, authenticated by an OAuth refresh token.",
+  ),
+  client_id: z.string().min(1).describe(
+    "OAuth client id of your Google Cloud project's Desktop-app client.",
+  ),
+  client_secret_env: z.string().min(1).default("GMAIL_CLIENT_SECRET").describe(
+    "Env var holding the OAuth client secret.",
+  ),
+  refresh_token_env: z.string().min(1).default("GMAIL_REFRESH_TOKEN").describe(
+    "Env var holding the refresh token from the one-time consent flow (docs/email.mdx documents it).",
+  ),
+  label: z.string().min(1).default("INBOX").describe(
+    "Gmail label to watch. The unread state is the cursor — handled and dropped messages are marked read — so route mail here with Gmail filters and let the agent own the label.",
+  ),
+  poll_seconds: z.number().int().min(5).default(60).describe("Seconds between polls."),
+  from_addresses: z.array(z.string().min(1)).min(1).describe(
+    'Senders the agent handles: exact addresses or *@domain patterns. Required. ["*"] accepts anyone.',
+  ),
+  allow_silence: z.boolean().default(false).describe(
+    "Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+  ),
+}).describe(
+  "Wake on unread Gmail messages in a label via the Gmail API; replies land in the same Gmail thread.",
+);
+
+const OutlookEmailTriggerSchema = z.strictObject({
+  type: z.literal("email"),
+  transport: z.literal("outlook").describe(
+    "How mail arrives. outlook polls Microsoft Graph for unread messages in a folder, authenticated by an OAuth refresh token.",
+  ),
+  client_id: z.string().min(1).describe("Client id of your Entra app registration."),
+  client_secret_env: z.string().min(1).optional().describe(
+    "Env var holding the client secret — confidential clients only. Public (device-code) clients omit this.",
+  ),
+  refresh_token_env: z.string().min(1).default("OUTLOOK_REFRESH_TOKEN").describe(
+    "Env var holding the refresh token from the one-time device-code flow (docs/email.mdx documents it).",
+  ),
+  tenant: z.string().min(1).default("common").describe(
+    'Entra tenant: "common", "consumers", "organizations" or a tenant id.',
+  ),
+  folder: z.string().min(1).default("inbox").describe(
+    "Mail folder to watch: a well-known name (inbox) or a folder id. The unread state is the cursor — handled and dropped messages are marked read.",
+  ),
+  poll_seconds: z.number().int().min(5).default(60).describe("Seconds between polls."),
+  from_addresses: z.array(z.string().min(1)).min(1).describe(
+    'Senders the agent handles: exact addresses or *@domain patterns. Required. ["*"] accepts anyone.',
+  ),
+  allow_silence: z.boolean().default(false).describe(
+    "Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+  ),
+}).describe(
+  "Wake on unread Outlook messages in a folder via Microsoft Graph; replies land in the same conversation.",
+);
+
 const EmailTriggerSchema = z.discriminatedUnion("transport", [
   ResendEmailTriggerSchema,
+  ImapEmailTriggerSchema,
+  GmailEmailTriggerSchema,
+  OutlookEmailTriggerSchema,
 ]).describe(
-  "Wake on inbound email. transport picks how mail arrives; resend (pushed webhooks) is the only transport so far — IMAP and the hosted providers are planned.",
+  "Wake on inbound email. transport picks how mail arrives: resend (pushed webhooks for the agent's own address), or imap / gmail / outlook (poll an existing mailbox).",
 );
 
 const CronTriggerSchema = z.strictObject({
@@ -375,8 +468,86 @@ export interface ResendEmailTriggerConfig {
   allow_silence: boolean;
 }
 
-/** An email trigger, discriminated on `transport`; resend is the only transport so far. */
-export type EmailTriggerConfig = ResendEmailTriggerConfig;
+/** An email trigger on the IMAP pulled transport: poll an existing mailbox, reply over SMTP. */
+export interface ImapEmailTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "email";
+  /** Discriminant for EmailTriggerConfig: how mail arrives. */
+  transport: "imap";
+  /** IMAP server host. */
+  host: string;
+  /** IMAP port (implicit TLS). */
+  port: number;
+  /** Mailbox login — also the address replies are sent from. */
+  username: string;
+  /** Env var holding the mailbox password. */
+  password_env: string;
+  /** SMTP server for replies. */
+  smtp_host: string;
+  /** SMTP port (implicit TLS). */
+  smtp_port: number;
+  /** Folder to watch; the unseen flag is the cursor. */
+  folder: string;
+  /** Seconds between polls. */
+  poll_seconds: number;
+  /** Senders the agent handles: exact addresses, `*@domain` patterns, or `*` for anyone. */
+  from_addresses: string[];
+  /** Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
+  allow_silence: boolean;
+}
+
+/** An email trigger polling the Gmail API for unread messages in a label. */
+export interface GmailEmailTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "email";
+  /** Discriminant for EmailTriggerConfig: how mail arrives. */
+  transport: "gmail";
+  /** OAuth client id of the Google Cloud Desktop-app client. */
+  client_id: string;
+  /** Env var holding the OAuth client secret. */
+  client_secret_env: string;
+  /** Env var holding the refresh token from the one-time consent flow. */
+  refresh_token_env: string;
+  /** Gmail label to watch; the unread state is the cursor. */
+  label: string;
+  /** Seconds between polls. */
+  poll_seconds: number;
+  /** Senders the agent handles: exact addresses, `*@domain` patterns, or `*` for anyone. */
+  from_addresses: string[];
+  /** Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
+  allow_silence: boolean;
+}
+
+/** An email trigger polling Microsoft Graph for unread messages in a folder. */
+export interface OutlookEmailTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "email";
+  /** Discriminant for EmailTriggerConfig: how mail arrives. */
+  transport: "outlook";
+  /** Client id of the Entra app registration. */
+  client_id: string;
+  /** Env var holding the client secret — confidential clients only. */
+  client_secret_env?: string;
+  /** Env var holding the refresh token from the one-time device-code flow. */
+  refresh_token_env: string;
+  /** Entra tenant: "common", "consumers", "organizations" or a tenant id. */
+  tenant: string;
+  /** Mail folder to watch; the unread state is the cursor. */
+  folder: string;
+  /** Seconds between polls. */
+  poll_seconds: number;
+  /** Senders the agent handles: exact addresses, `*@domain` patterns, or `*` for anyone. */
+  from_addresses: string[];
+  /** Send nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
+  allow_silence: boolean;
+}
+
+/** An email trigger, discriminated on `transport`. */
+export type EmailTriggerConfig =
+  | ResendEmailTriggerConfig
+  | ImapEmailTriggerConfig
+  | GmailEmailTriggerConfig
+  | OutlookEmailTriggerConfig;
 
 /** A cron trigger: fire the agent on a schedule with a fixed prompt. */
 export interface CronTriggerConfig {

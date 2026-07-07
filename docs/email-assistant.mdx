@@ -20,11 +20,11 @@ The credentials stay out of the model's sight the whole way: `RESEND_API_KEY` an
 
 ## Getting your mail in front of it
 
-The agent gets its own address, say `assistant@agents.example.com`, set up through Resend as described on the [email trigger page](email.mdx#setup). Your own mail reaches it through forwarding filters in your mail provider: a Gmail filter that forwards anything from your accountant, anything with "invoice" in the subject, or anything from a sender you've starred. You decide what the agent sees, message by message, in the mail client you already use. Nothing else leaves your inbox.
+The agent gets its own address, say `assistant@agents.example.com`, set up through Resend as described on the [email trigger page](email.mdx#setting-up-the-resend-transport). Your own mail reaches it through forwarding filters in your mail provider: a Gmail filter that forwards anything from your accountant, anything with "invoice" in the subject, or anything from a sender you've starred. You decide what the agent sees, message by message, in the mail client you already use. Nothing else leaves your inbox.
 
 One consequence to understand: forwarded mail keeps the original sender's `From` header, so the trigger sees the world's addresses and `from_addresses` can't act as a tight allowlist here. The example sets it to `["*"]` and says so in a comment. That is a real widening, and three things stand in for the fence: your provider's own spam filtering runs before anything is forwarded, your filters only forward what matches, and the agent checks its spam list before doing anything else. [`limits`](agent-file.md#limits) caps what a run can spend if junk gets through anyway.
 
-When the IMAP and Gmail transports land (they're planned, this page will be amended), the agent will be able to watch a mailbox directly and the forwarding step goes away.
+There is a second way in: the [pulled transports](email.mdx#watching-a-mailbox-the-pulled-transports) let the agent watch a mailbox directly - the `gmail` transport polling a label your filters populate, `imap` for anywhere an app password works, `outlook` via Graph. That removes the forwarding hop and gives back a tight `from_addresses` allowlist, at the cost of the agent marking mail read in the label it watches. This example stays on forwarding for two reasons: the agent's read-state never touches your mailbox, and it needs the Resend key anyway to send you reminders. If you'd rather the agent sit inside your Gmail, swap the email trigger for a `gmail` one and keep the rest of the file as it is.
 
 ## Calendar access without OAuth
 
@@ -88,6 +88,6 @@ Worth naming plainly:
 - **Every forwarded message is a model call.** The forwarding filters are your cost control; forward selectively.
 - **The calendar is read-only** through the ICS feed, and the secret URL grants whoever holds it a full view of that calendar. Treat it like a password; rotate it from calendar settings if it leaks.
 - **Attachments don't reach the agent yet** - it sees filenames and sizes only ([email trigger](email.mdx#what-the-agent-sees-and-how-it-answers)).
-- **The agent only sees what you route to it.** It can't search your mailbox history or notice a message you didn't forward. Watching the mailbox itself is what the planned pulled transports are for.
+- **The agent only sees what you route to it.** It can't search your mailbox history or notice a message you didn't forward. A [pulled transport](email.mdx#watching-a-mailbox-the-pulled-transports) trades that isolation for direct mailbox access when you want it.
 
 Ready to build it? Start from the [example directory](https://github.com/loopedautomation/agent-framework/tree/main/examples/mail-assistant) - the README there walks through the Resend setup, the Gmail filters and the calendar URL step by step.

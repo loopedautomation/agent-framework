@@ -2,7 +2,7 @@
 
 An email address is the one inbox every business already has. Invoices land there, support requests land there, statements and notices from providers land there. If incoming mail can wake an agent, a whole class of back-office jobs collapses into one agent file: watch the mailbox, act on what arrives and maybe reply. This plan covers how mail becomes a trigger.
 
-Status: phase 1 (the pushed Resend transport) is implemented — `packages/triggers/email.ts`, `docs/email.mdx` and the `examples/mail-assistant` deployment. The pulled transports (IMAP, Gmail, Outlook) remain design. The roadmap (Plan 3) has carried "email" on its later list since the beginning; this plan makes it concrete.
+Status: all three phases are implemented. Phase 1 (the pushed Resend transport) is `packages/triggers/email.ts` with `docs/email.mdx` and the `examples/mail-assistant` deployment; phase 2 (IMAP) is `email_imap.ts` plus the minimal MIME parser in `mime.ts`; phase 3 (Gmail and Outlook) is `email_gmail.ts` and `email_outlook.ts`. The roadmap (Plan 3) has carried "email" on its later list since the beginning; this plan makes it concrete.
 
 ## The trigger wakes the agent; tools do the rest
 
@@ -74,25 +74,26 @@ One honest caveat: a `From` header is an assertion. The pushed providers check S
 
 Both providers have spent years closing password access to mailboxes. Where an app password can still be issued, the IMAP transport covers the account with no new code, and that is the documented first answer for Gmail. Outlook requires OAuth even for IMAP, so it waits for the OAuth story.
 
-That story is a `gmail` and an `outlook` transport polling the respective APIs, authenticated by a refresh token: `client_id`, `client_secret_env` and `refresh_token_env` in config, access tokens minted at startup and renewed in the loop. The container has no browser, so acquiring that refresh token happens outside the agent, either a documented one-time flow or an `af` helper command (open question). The push channels both providers offer (Gmail's Pub/Sub notifications, Graph change subscriptions) need public endpoints and subscription upkeep; polling is cheap at the scale of a mailbox, so push is deferred until someone actually needs the latency.
+That story is a `gmail` and an `outlook` transport polling the respective APIs, authenticated by a refresh token: `client_id`, `client_secret_env` and `refresh_token_env` in config, access tokens minted at startup and renewed in the loop. Both shipped in phase 3. The container has no browser, so acquiring that refresh token happens outside the agent; the decided answer is a documented one-time flow in `docs/email.mdx` (a copy-the-code consent URL for Google, the device-code flow for Microsoft), with an `af email auth` helper still possible later as a convenience. One asymmetry surfaced in implementation: Microsoft rotates refresh tokens, so the trigger keeps the newest one in memory and a long outage means running the device-code flow again; Google's don't rotate. The push channels both providers offer (Gmail's Pub/Sub notifications, Graph change subscriptions) need public endpoints and subscription upkeep; polling is cheap at the scale of a mailbox, so push is deferred until someone actually needs the latency.
 
 ## The polled cursor can live in the mailbox
 
-The IMAP transport's simplest correctness story: fetch messages the mailbox marks unseen, run the agent, mark them seen. The mailbox itself is the cursor, so a restarted container picks up where it left off with no local state. Two costs come with that. A crash between the run and the flag write means one duplicate run after restart. And the agent now shares read-state with any human using the same mailbox; whoever opens the message first wins. The documented recommendation is a dedicated address or a dedicated folder the agent owns, with mail routed in by the operator's own filters. The alternative, persisting a UID cursor in SQLite, would be the first time a trigger touches the store, and whether to open that door is an open question rather than a quiet side effect.
+The IMAP transport's simplest correctness story, and the one implemented: fetch messages the mailbox marks unseen, run the agent, mark them seen. The Gmail and Outlook transports use the same shape with the unread state. The mailbox itself is the cursor, so a restarted container picks up where it left off with no local state. Two costs come with that. A crash between the run and the flag write means one duplicate run after restart. And the agent now shares read-state with any human using the same mailbox; whoever opens the message first wins. The documented recommendation is a dedicated address, folder or label the agent owns, with mail routed in by the operator's own filters. One detail decided in implementation: messages the filters drop (unlisted sender, auto-generated) are also marked seen, or every poll would refetch them forever. The alternative, persisting a UID cursor in SQLite, would be the first time a trigger touches the store; the seen-flag answer has been good enough so far, and the door stays closed until it isn't.
 
 ## Phasing
 
-1. **Pushed transport.** `packages/triggers/email.ts` with `transport: resend`, signature verification, the `shouldHandle` filter and replies through the provider's send API. Schema, factory, generated `agent.json`, `docs/email.mdx`, an example agent under `examples/` (an invoice inbox is the natural one).
-2. **IMAP.** The polling loop, SMTP replies, the seen-flag cursor. This is the transport that covers self-hosted mail and app-password Gmail.
-3. **Gmail and Outlook transports.** OAuth refresh-token flow, API polling.
+1. **Pushed transport.** (Shipped.) `packages/triggers/email.ts` with `transport: resend`, signature verification, the sender filter and replies through the provider's send API. Schema, factory, generated `agent.json`, `docs/email.mdx`, the `examples/mail-assistant` agent.
+2. **IMAP.** (Shipped.) `email_imap.ts`: the polling loop, SMTP replies, the seen-flag cursor, and a deliberately minimal hand-rolled IMAP/SMTP/MIME subset (`mime.ts`) rather than a mail library — the same no-library posture as the Telegram transport. This covers self-hosted mail and app-password Gmail.
+3. **Gmail and Outlook transports.** (Shipped.) `email_gmail.ts` and `email_outlook.ts`: OAuth refresh-token loops, API polling, replies threaded via Gmail's `threadId` and Graph's reply endpoint. Conversation keys use the providers' native thread ids (`email:gmail:<threadId>`, `email:outlook:<conversationId>`) since they're stable and match where replies land.
 
 Hermetic mode (Plan 6) needs two additions when these land: the pushed transport claims a listen right like the webhook trigger, and the pulled transports contribute their mail hosts to the derived net allowlist.
 
 ## Open questions
 
-- Should phase 1 include a `generic` pushed transport (documented JSON shape, shared-secret auth) alongside Resend, so any provider with inbound webhooks can be wired up without a framework release?
+- Should a `generic` pushed transport (documented JSON shape, shared-secret auth) join Resend, so any provider with inbound webhooks can be wired up without a framework release?
 - Attachments: when they do get delivered, where do they land (a path under `/data`?), and what size caps apply?
-- IMAP cursor: is the seen-flag answer enough, or do triggers get SQLite access for a proper UID cursor?
-- Refresh-token acquisition for Gmail/Outlook: documented manual flow, or an `af email auth` helper that runs the browser dance on the operator's machine?
 - Should wildcard `from_addresses` require a per-sender rate cap, or is `limits.max_cost` enough of a backstop?
-- Multiple email triggers on one agent (two mailboxes, different filters): allowed from day one or explicitly deferred?
+- Multiple email triggers on one agent: the pulled transports compose freely today, but two pushed triggers each claim their own port. Is one shared listener worth building, or does Plan 12's channel model subsume this?
+- An `af email auth` helper for the Gmail/Outlook token dance: the documented curl flow works, but a guided command would take the setup from ten minutes to two.
+
+Resolved since the design draft: the IMAP cursor stays in the mailbox (seen flags / unread state; no SQLite), and refresh-token acquisition is a documented manual flow in `docs/email.mdx`.
