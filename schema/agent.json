@@ -19,9 +19,10 @@
           "type": "string",
           "enum": [
             "openai-compatible",
-            "anthropic"
+            "anthropic",
+            "codex"
           ],
-          "description": "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy."
+          "description": "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy. codex uses an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login` (no API key)."
         },
         "id": {
           "type": "string",
@@ -34,7 +35,7 @@
           "minLength": 1
         },
         "base_url": {
-          "description": "Endpoint override for openai-compatible providers, e.g. http://localhost:11434/v1 for Ollama (no API key required with a base_url).",
+          "description": "Endpoint override, e.g. http://localhost:11434/v1 for Ollama with openai-compatible (no API key required with a base_url).",
           "type": "string",
           "format": "uri"
         },

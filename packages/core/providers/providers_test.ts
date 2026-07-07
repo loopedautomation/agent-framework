@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { OpenAICompatibleProvider } from "./openai.ts";
 import { AnthropicProvider } from "./anthropic.ts";
+import { CodexProvider } from "./codex.ts";
 import { createProvider, ProviderError, withRetry } from "./mod.ts";
 import { parseAgentConfig } from "../config/load.ts";
 
@@ -128,6 +129,228 @@ Deno.test("anthropic adapter: parses tool_use blocks into tool calls", async () 
   assertEquals(completion.stopReason, "tool_calls");
   assertEquals(completion.toolCalls[0].id, "t9");
   assertEquals(completion.content, "let me check");
+});
+
+/** An unsigned JWT with the given payload — the provider only decodes, never verifies. */
+function fakeJwt(payload: Record<string, unknown>): string {
+  const b64 = (o: unknown) =>
+    btoa(JSON.stringify(o)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${b64({ alg: "none" })}.${b64(payload)}.sig`;
+}
+
+function sseBody(response: unknown): string {
+  return `data: {"type":"response.created"}\n\ndata: ${
+    JSON.stringify({ type: "response.completed", response })
+  }\n\n`;
+}
+
+async function writeCodexAuth(tokens: Record<string, unknown>): Promise<string> {
+  const dir = await Deno.makeTempDir();
+  const path = `${dir}/auth.json`;
+  await Deno.writeTextFile(path, JSON.stringify({ tokens }));
+  return path;
+}
+
+Deno.test("codex adapter: maps request, auth headers, and parses function calls", async () => {
+  const farFuture = Math.floor(Date.now() / 1000) + 3600;
+  const authFile = await writeCodexAuth({
+    access_token: fakeJwt({
+      exp: farFuture,
+      "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" },
+    }),
+    refresh_token: "r1",
+  });
+  const f = fakeFetch(200, null);
+  const fetchSse = ((input: RequestInfo | URL, init?: RequestInit) => {
+    f.calls.push(new Request(input, init));
+    return Promise.resolve(
+      new Response(
+        sseBody({
+          status: "completed",
+          output: [
+            { type: "message", content: [{ type: "output_text", text: "checking" }] },
+            { type: "function_call", call_id: "c1", name: "echo", arguments: '{"message":"hi"}' },
+          ],
+          usage: { input_tokens: 9, output_tokens: 4 },
+        }),
+        { status: 200 },
+      ),
+    );
+  }) as typeof fetch;
+
+  const provider = new CodexProvider({ authFile, fetch: fetchSse });
+  const completion = await provider.complete({
+    model: "gpt-5-codex",
+    system: "sys",
+    messages: [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "", toolCalls: [{ id: "c0", name: "echo", arguments: "{}" }] },
+      { role: "tool", toolCallId: "c0", content: "ok" },
+    ],
+    tools: [{ name: "echo", description: "d", inputSchema: { type: "object" } }],
+  });
+
+  assertEquals(completion.stopReason, "tool_calls");
+  assertEquals(completion.toolCalls[0], { id: "c1", name: "echo", arguments: '{"message":"hi"}' });
+  assertEquals(completion.content, "checking");
+  assertEquals(completion.usage, { inputTokens: 9, outputTokens: 4 });
+
+  const call = f.calls[0];
+  assert(call.url.endsWith("/responses"));
+  assertEquals(call.headers.get("chatgpt-account-id"), "acct_1");
+  assert(call.headers.get("authorization")!.startsWith("Bearer "));
+  const sent = await call.json();
+  assertEquals(sent.instructions, "sys");
+  assertEquals(sent.stream, true);
+  assertEquals(sent.store, false);
+  assertEquals(sent.input[0], {
+    type: "message",
+    role: "user",
+    content: [{ type: "input_text", text: "hello" }],
+  });
+  assertEquals(sent.input[1], {
+    type: "function_call",
+    call_id: "c0",
+    name: "echo",
+    arguments: "{}",
+  });
+  assertEquals(sent.input[2], { type: "function_call_output", call_id: "c0", output: "ok" });
+  assertEquals(sent.tools[0].name, "echo");
+});
+
+Deno.test("codex adapter: refreshes an expired token and persists it", async () => {
+  const expired = fakeJwt({
+    exp: Math.floor(Date.now() / 1000) - 10,
+    "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" },
+  });
+  const fresh = fakeJwt({
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" },
+  });
+  const authFile = await writeCodexAuth({ access_token: expired, refresh_token: "r1" });
+
+  const urls: string[] = [];
+  const routed = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const req = new Request(input, init);
+    urls.push(req.url);
+    if (req.url.includes("auth.openai.com")) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ access_token: fresh, refresh_token: "r2" }), { status: 200 }),
+      );
+    }
+    assertEquals(req.headers.get("authorization"), `Bearer ${fresh}`);
+    return Promise.resolve(
+      new Response(
+        sseBody({
+          status: "completed",
+          output: [{ type: "message", content: [{ type: "output_text", text: "hi" }] }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200 },
+      ),
+    );
+  }) as typeof fetch;
+
+  const provider = new CodexProvider({ authFile, fetch: routed });
+  const completion = await provider.complete({
+    model: "gpt-5-codex",
+    messages: [{ role: "user", content: "x" }],
+  });
+  assertEquals(completion.content, "hi");
+  assert(urls[0].includes("auth.openai.com"));
+
+  const persisted = JSON.parse(await Deno.readTextFile(authFile));
+  assertEquals(persisted.tokens.access_token, fresh);
+  assertEquals(persisted.tokens.refresh_token, "r2");
+});
+
+Deno.test("codex adapter: inline CODEX_AUTH_JSON credentials work without a file", async () => {
+  const authJson = JSON.stringify({
+    tokens: {
+      access_token: fakeJwt({
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        "https://api.openai.com/auth": { chatgpt_account_id: "acct_2" },
+      }),
+      refresh_token: "r1",
+    },
+  });
+  const fetchSse = (() =>
+    Promise.resolve(
+      new Response(
+        sseBody({
+          status: "completed",
+          output: [{ type: "message", content: [{ type: "output_text", text: "hi" }] }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200 },
+      ),
+    )) as typeof fetch;
+
+  const provider = new CodexProvider({
+    authFile: "/nonexistent/auth.json",
+    authJson,
+    fetch: fetchSse,
+  });
+  const completion = await provider.complete({
+    model: "gpt-5-codex",
+    messages: [{ role: "user", content: "x" }],
+  });
+  assertEquals(completion.content, "hi");
+});
+
+Deno.test("codex adapter: a static CODEX_ACCESS_TOKEN needs no file, refresh, or account id", async () => {
+  const calls: Request[] = [];
+  const fetchSse = ((input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(new Request(input, init));
+    return Promise.resolve(
+      new Response(
+        sseBody({
+          status: "completed",
+          output: [{ type: "message", content: [{ type: "output_text", text: "hi" }] }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200 },
+      ),
+    );
+  }) as typeof fetch;
+
+  // An opaque (non-JWT) token: no exp to inspect, no account id to derive.
+  const provider = new CodexProvider({
+    authFile: "/nonexistent/auth.json",
+    accessToken: "machine-token",
+    fetch: fetchSse,
+  });
+  const completion = await provider.complete({
+    model: "gpt-5-codex",
+    messages: [{ role: "user", content: "x" }],
+  });
+  assertEquals(completion.content, "hi");
+  assertEquals(calls.length, 1); // straight to the completion; no refresh call
+  assertEquals(calls[0].headers.get("authorization"), "Bearer machine-token");
+  assertEquals(calls[0].headers.get("chatgpt-account-id"), null);
+});
+
+Deno.test("codex adapter: missing credential file is a non-retryable auth error", async () => {
+  const provider = new CodexProvider({ authFile: "/nonexistent/auth.json" });
+  const err = await assertRejects(
+    () => provider.complete({ model: "m", messages: [{ role: "user", content: "x" }] }),
+    ProviderError,
+  );
+  assertEquals(err.kind, "auth");
+  assert(err.message.includes("codex login"));
+});
+
+Deno.test("createProvider builds codex from CODEX_HOME without any API key", () => {
+  const model = parseAgentConfig(`
+handle: p
+description: d
+model:
+  provider: codex
+  id: gpt-5-codex
+purpose: s
+`).model;
+  const provider = createProvider(model, (n) => (n === "CODEX_HOME" ? "/tmp/codex" : undefined));
+  assertEquals(provider.id, "codex");
 });
 
 Deno.test("withRetry retries retryable errors and gives up on the rest", async () => {

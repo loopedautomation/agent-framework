@@ -56,7 +56,7 @@ af init issue-helper --trigger discord --provider openai-compatible \
 | Flag | Choices | |
 | --- | --- | --- |
 | `--trigger` | `discord` `webhook` `cron` `none` | `none` = REPL agent |
-| `--provider` | `openai-compatible` `anthropic` `local` | `local` = openai-compatible + Ollama `base_url`, no key |
+| `--provider` | `openai-compatible` `anthropic` `codex` `local` | `codex` = ChatGPT subscription via `codex login`, no key; `local` = openai-compatible + Ollama `base_url`, no key |
 | `--deploy` | `local` `docker` `compose` `compose-inline` `paas-git` `paas-env` | see below |
 | `--model` | any model id | sensible default per provider |
 | `--clis` | comma-separated executables | adds a Dockerfile layer + `permissions.run` |
