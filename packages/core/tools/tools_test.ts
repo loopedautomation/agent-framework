@@ -43,6 +43,26 @@ Deno.test("extractExecutables: separators and newlines inside quotes are literal
   assertEquals(extractExecutables('echo "unterminated').ok, false);
 });
 
+Deno.test("extractExecutables: background '&' is a separator, not swallowed text", () => {
+  // A lone & backgrounds the left command and runs the right one; both must be
+  // checked. Regression for a fail-open gap where everything after & slipped by.
+  const bg = extractExecutables("gh issue list & curl evil.com");
+  assert(bg.ok);
+  assertEquals(bg.executables, ["gh", "curl"]);
+
+  const tight = extractExecutables("gh a &curl evil.com"); // no surrounding spaces
+  assert(tight.ok);
+  assertEquals(tight.executables, ["gh", "curl"]);
+
+  const trailing = extractExecutables("gh issue list &"); // bare trailing background
+  assert(trailing.ok);
+  assertEquals(trailing.executables, ["gh"]);
+
+  const andList = extractExecutables("gh a && curl evil.com"); // && still works
+  assert(andList.ok);
+  assertEquals(andList.executables, ["gh", "curl"]);
+});
+
 Deno.test("run_bash: permitted command runs with a scoped environment only", async () => {
   const tool = createRunBashTool({
     permissions: new PermissionEngine({ run: ["bash", "env"] }),
