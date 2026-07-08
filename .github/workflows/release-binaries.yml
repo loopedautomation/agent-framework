@@ -1,0 +1,72 @@
+# Compile standalone `af` binaries on release and attach them to the GitHub
+# Release, so macOS/Linux users can install without Deno (e.g. via Homebrew —
+# see loopedautomation/homebrew-tap).
+#
+# One `deno compile` per target, all cross-compiled from a single Linux runner.
+# Permissions are baked in at compile time, matching `deno task af` and the
+# `af update` install args: --allow-run=bash,docker (af shells out to both).
+# Linux targets are glibc (-gnu) only; Deno has no musl/alpine compile target.
+name: Release binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write # upload assets to the release
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - aarch64-apple-darwin # darwin-arm64
+          - x86_64-apple-darwin # darwin-x64
+          - aarch64-unknown-linux-gnu # linux-arm64
+          - x86_64-unknown-linux-gnu # linux-x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # The released binary reports this VERSION and (by default) pulls the
+      # matching container image; a mismatched tag would ship a broken CLI.
+      # Fail before compiling anything — mirrors publish-image.yml.
+      - name: Verify tag matches VERSION
+        if: github.event_name == 'release'
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          SRC=$(grep -o 'VERSION = "[^"]*"' packages/core/mod.ts | cut -d'"' -f2)
+          if [[ "$V" != "$SRC" ]]; then
+            echo "release tag $V != VERSION $SRC in packages/core/mod.ts" >&2
+            exit 1
+          fi
+
+      - name: Compile
+        run: |
+          mkdir -p dist
+          deno compile \
+            --frozen \
+            --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker \
+            --target ${{ matrix.target }} \
+            --output dist/af \
+            packages/cli/main.ts
+
+      - name: Package
+        run: |
+          tar -C dist -czf "af-${{ matrix.target }}.tar.gz" af
+          shasum -a 256 "af-${{ matrix.target }}.tar.gz" \
+            | tee "af-${{ matrix.target }}.tar.gz.sha256"
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            "af-${{ matrix.target }}.tar.gz" \
+            "af-${{ matrix.target }}.tar.gz.sha256" \
+            --repo "${{ github.repository }}" --clobber
