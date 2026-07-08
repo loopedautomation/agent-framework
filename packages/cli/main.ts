@@ -24,6 +24,7 @@ import {
   resolveAgentConfig,
   VERSION,
 } from "@looped/core";
+import denoConfig from "./deno.json" with { type: "json" };
 import { discordInvite } from "./discord.ts";
 import {
   DEFAULT_CONFIG,
@@ -57,6 +58,7 @@ function usage(): string {
     ["af update", "Reinstall af at the latest published version"],
   ];
   const flags: [string, string][] = [
+    ["-v, --version", "Print the af version"],
     ["-d, --detach", "up: leave agents running in the background (restart unless-stopped)"],
     ["--dry-run", "run/up: print the docker command(s) and start nothing"],
     ["--image <ref>", "run/up: container image override"],
@@ -118,6 +120,10 @@ async function main() {
         break;
       case "update":
         await update();
+        break;
+      case "--version":
+      case "-v":
+        console.log(`af ${denoConfig.version}`);
         break;
       default:
         console.log(usage());
