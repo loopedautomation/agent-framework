@@ -204,7 +204,12 @@ function composeInlineYaml(o: InitOptions): string {
 
 function composeYaml(o: InitOptions, withBuild: boolean): string {
   const lines = ["services:", `  ${o.handle}:`];
-  lines.push(withBuild ? "    build: ." : `    image: ${IMAGE}`);
+  // docker compose derives an implicit image name from the service name when
+  // `build:` has no `image:` alongside it, and won't lowercase that for us —
+  // an uppercase handle would produce an invalid tag. Pin one explicitly.
+  lines.push(
+    withBuild ? `    build: .\n    image: ${o.handle.toLowerCase()}` : `    image: ${IMAGE}`,
+  );
   if (!withBuild) lines.push("    volumes:", "      - ./agent.yaml:/agent/agent.yaml:ro");
   lines.push("    env_file: .env");
   if (withBuild) lines.push("    volumes:");

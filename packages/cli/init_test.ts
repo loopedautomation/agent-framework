@@ -58,6 +58,20 @@ Deno.test("deployment shapes produce the right files", () => {
   assert(!("Dockerfile" in envDeploy));
 });
 
+Deno.test("a custom-built image gets an explicit lowercase tag (uppercase handle)", () => {
+  // docker compose won't lowercase the image name it derives from a service
+  // name when `build:` has no `image:` alongside it — an uppercase handle
+  // would otherwise produce a tag docker rejects.
+  const files = generateProject({
+    ...BASE,
+    handle: "TestAgent",
+    deploy: "compose",
+    clis: ["gh"],
+  });
+  assert(files["compose.yaml"].includes("image: testagent"));
+  assert(!files["compose.yaml"].includes("image: TestAgent"));
+});
+
 Deno.test("webhook agents expose the trigger port; others don't", () => {
   const hook = generateProject({ ...BASE, trigger: "webhook", deploy: "compose" });
   assert(hook["compose.yaml"].includes('"8080:8080"'));
