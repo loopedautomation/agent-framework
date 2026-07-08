@@ -40,3 +40,7 @@ Published at [docs.looped.sh/agent-framework](https://docs.looped.sh/agent-frame
 If you'd rather start from a complete, runnable agent, the [examples](examples/) go from a minimal REPL bot to the Discord to GitHub [gh-issues-cli](examples/gh-issues-cli/) (`docker compose up`) and [agent-zero](examples/agent-zero/), the agent that builds agents.
 
 The runtime is [Deno](https://deno.com) + TypeScript, built in the open.
+
+## Contributing
+
+Setup, local development tasks and what CI checks are covered in [CONTRIBUTING.md](CONTRIBUTING.md).
