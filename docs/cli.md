@@ -6,7 +6,7 @@ description: "Every af command: init, run, up, ps, down, validate, flags, schema
 `af` is the framework's CLI, published to JSR as [`@looped/af`](https://jsr.io/@looped/af). Install it once with Deno:
 
 ```sh
-deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker -n af jsr:@looped/af
+deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker,deno -n af jsr:@looped/af
 ```
 
 The CLI orchestrates Docker under the hood: agents always execute in the published container, never on your machine. Pointing `af` at an agent file starts the container with the config mounted, the data volume attached and the env file passed. Config paths default to `./agent.yaml`.

@@ -13,7 +13,7 @@ const INSTALL_ARGS = [
   "--allow-write",
   "--allow-env",
   "--allow-net",
-  "--allow-run=bash,docker",
+  "--allow-run=bash,docker,deno",
   "-n",
   "af",
   "jsr:@looped/af@latest",
