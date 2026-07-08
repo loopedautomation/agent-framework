@@ -1,9 +1,6 @@
 # yaml-language-server: $schema=https://looped.sh/schema/agent.json
-# The M1 exit-demo agent: the minimal agent.yaml — identity, model, job.
-# Run it:
-#
-#   OPENAI_API_KEY=... deno task af run examples/time-bot/agent.yaml
-#
+# The demo agent: the minimal agent.yaml — identity, model, job.
+
 handle: time-bot
 description: Answers questions, and knows what time it is.
 
@@ -14,3 +11,6 @@ model:
 purpose: |
   You are a concise assistant. When asked about the current date or time,
   use the current_time tool rather than guessing.
+
+memory:
+  scope: thread
