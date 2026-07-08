@@ -59,6 +59,26 @@ limits:
   assertEquals(config.limits.max_steps, 10);
 });
 
+Deno.test("accepts an uppercase handle", () => {
+  const config = parseAgentConfig(`
+handle: LoopedAgent
+description: A minimal test agent.
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+purpose: You are a test agent.
+`);
+  assertEquals(config.handle, "LoopedAgent");
+});
+
+Deno.test("rejects a handle with invalid characters", () => {
+  const err = assertThrows(
+    () => parseAgentConfig(MINIMAL.replace("handle: test-bot", "handle: test_bot")),
+    ConfigError,
+  );
+  assert(err.message.includes("handle"));
+});
+
 Deno.test("rejects unknown keys loudly (typos must not silently no-op)", () => {
   const err = assertThrows(
     () => parseAgentConfig(MINIMAL + `permisions:\n  net: [example.com]\n`),

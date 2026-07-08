@@ -60,7 +60,7 @@ af init issue-helper --trigger discord --provider openai-compatible \
 | `--deploy` | `local` `docker` `compose` `compose-inline` `paas-git` `paas-env` | see below |
 | `--model` | any model id | sensible default per provider |
 | `--clis` | comma-separated executables | adds a Dockerfile layer + `permissions.run` |
-| `--handle` / `[name]` | lowercase, hyphens | what you call the agent |
+| `--handle` / `[name]` | letters, digits, hyphens | what you call the agent |
 | `--dir` | a directory | where to scaffold (default `.`) |
 
 Every shape generates `agent.yaml`, `.env.example` (every secret the config references, ready to copy to `.env`) and a `README.md` with the exact deploy steps. Each deploy shape then adds its own files:

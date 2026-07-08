@@ -46,7 +46,7 @@ Four keys are required: `handle`, `description`, `model`, and `purpose`. Everyth
 
 ## Identity: handle, description — and the name
 
-`handle` is what *you* call the agent — lowercase, hyphens (`^[a-z0-9][a-z0-9-]*$`). It names the compose service, the log lines, and the agent's database file. `description` is one line: what job this agent does.
+`handle` is what *you* call the agent — letters, digits, hyphens (`^[a-zA-Z0-9][a-zA-Z0-9-]*$`). It names the compose service, the log lines, and the agent's database file. `description` is one line: what job this agent does.
 
 You don't choose the agent's display name. On first boot the agent names itself with a single LLM call (routed to the `model.small` role) and persists the name in its SQLite identity; the CLI prints a banner when this happens. You address the agent by its `handle`, and it signs its work with the name it chose. A fresh data volume means a fresh identity, and the agent will name itself again.
 

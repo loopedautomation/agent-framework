@@ -187,8 +187,8 @@ const agentConfigSchema = z.strictObject({
   handle: z
     .string()
     .regex(
-      /^[a-z0-9][a-z0-9-]*$/,
-      "handle must be lowercase alphanumeric with hyphens (it names volumes, services, and log streams)",
+      /^[a-zA-Z0-9][a-zA-Z0-9-]*$/,
+      "handle must be alphanumeric with hyphens (it names volumes, services, and log streams)",
     )
     .describe(
       "The operator's handle for this agent (compose service, logs, CLI, session keys). The agent chooses its own name on first boot.",

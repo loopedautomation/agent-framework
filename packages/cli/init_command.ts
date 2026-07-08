@@ -25,9 +25,9 @@ function choose<T extends string>(label: string, options: readonly T[], flagValu
 
 export function init(nameArg?: string) {
   const handle = nameArg ?? flag("handle") ??
-    prompt("handle (lowercase, hyphens — what you'll call the agent):") ?? "";
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(handle)) {
-    fail("handle must be lowercase alphanumeric with hyphens");
+    prompt("handle (letters, digits, hyphens — what you'll call the agent):") ?? "";
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(handle)) {
+    fail("handle must be alphanumeric with hyphens");
   }
   const trigger = choose("trigger", TRIGGERS, flag("trigger"));
   const provider = choose("provider", PROVIDERS, flag("provider"));
