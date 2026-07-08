@@ -4,7 +4,7 @@
 // server — files live in git or on your laptop, or nowhere (env-var deploy).
 
 export const TRIGGERS = ["discord", "slack", "telegram", "webhook", "cron", "none"] as const;
-export const PROVIDERS = ["openai-compatible", "anthropic", "local"] as const;
+export const PROVIDERS = ["openai-compatible", "anthropic", "codex", "local"] as const;
 export const DEPLOYS = [
   "local",
   "docker",
@@ -31,13 +31,14 @@ const IMAGE = "ghcr.io/loopedautomation/agent:latest";
 const DEFAULT_MODELS: Record<InitOptions["provider"], string> = {
   "openai-compatible": "gpt-5.4-mini",
   anthropic: "claude-sonnet-5",
+  codex: "gpt-5-codex",
   local: "llama3.1",
 };
 
 function keyEnv(provider: InitOptions["provider"]): string | undefined {
   if (provider === "openai-compatible") return "OPENAI_API_KEY";
   if (provider === "anthropic") return "ANTHROPIC_API_KEY";
-  return undefined; // local endpoints need no key
+  return undefined; // local endpoints need no key; codex uses `codex login` credentials
 }
 
 function agentYaml(o: InitOptions): string {
@@ -126,6 +127,9 @@ function envExample(o: InitOptions): string {
   const vars: string[] = [];
   const key = keyEnv(o.provider);
   if (key) vars.push(`${key}=`);
+  if (o.provider === "codex") {
+    vars.push("# codex: no API key — authenticates via ~/.codex/auth.json (run `codex login`)");
+  }
   if (o.trigger === "discord") vars.push("DISCORD_BOT_TOKEN=");
   if (o.trigger === "slack") vars.push("SLACK_BOT_TOKEN=", "SLACK_APP_TOKEN=");
   if (o.trigger === "telegram") vars.push("TELEGRAM_BOT_TOKEN=");
@@ -176,6 +180,9 @@ function composeInlineYaml(o: InitOptions): string {
     "    env_file: .env",
     "    volumes:",
     `      - ${o.handle}-data:/data # the agent's memory and name live here`,
+    ...(o.provider === "codex"
+      ? ["      - ~/.codex:/home/looped/.codex # `codex login` credentials"]
+      : []),
   ];
   const ports = [
     "      # Status surface: curl localhost:9090/healthz",
@@ -202,6 +209,9 @@ function composeYaml(o: InitOptions, withBuild: boolean): string {
   lines.push("    env_file: .env");
   if (withBuild) lines.push("    volumes:");
   lines.push(`      - ${o.handle}-data:/data # the agent's memory and name live here`);
+  if (o.provider === "codex") {
+    lines.push("      - ~/.codex:/home/looped/.codex # `codex login` credentials");
+  }
   const ports = [
     "      # Status surface: curl localhost:9090/healthz",
     "      # If host port 9090 is taken, change only the left side.",
@@ -245,7 +255,7 @@ function readme(o: InitOptions): string {
         "af run",
         "```",
         "",
-        "(Install the CLI first: `deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker -n af jsr:@looped/af`.)",
+        "(Install the CLI first: `deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker,deno -n af jsr:@looped/af`.)",
       );
       break;
     case "docker":
@@ -256,6 +266,7 @@ function readme(o: InitOptions): string {
         "  -v ./agent.yaml:/agent/agent.yaml:ro \\",
         "  --env-file .env \\",
         `  -v ${o.handle}-data:/data \\`,
+        ...(o.provider === "codex" ? ["  -v ~/.codex:/home/looped/.codex \\"] : []),
         ...(o.trigger === "webhook" ? ["  -p 8080:8080 \\"] : []),
         `  ${IMAGE}`,
         "```",

@@ -118,14 +118,15 @@ const ENV_REF = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
  * plus the API key env var — api_key_env when set, otherwise the provider's
  * default, matching createProvider. An openai-compatible model with a
  * base_url tolerates a missing key (local endpoints), so only an explicit
- * api_key_env counts there.
+ * api_key_env counts there. codex needs no key at all — it authenticates
+ * with `codex login` credentials.
  */
 export function collectEnvRefs(config: AgentConfig): string[] {
   const refs = new Set<string>();
   const { provider, api_key_env, base_url } = config.model;
   if (api_key_env) {
     refs.add(api_key_env);
-  } else if (!(provider === "openai-compatible" && base_url)) {
+  } else if (provider !== "codex" && !(provider === "openai-compatible" && base_url)) {
     refs.add(DEFAULT_API_KEY_ENV[provider]);
   }
   const scan = (env?: Record<string, string>) => {

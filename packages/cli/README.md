@@ -5,7 +5,7 @@
 Install it once with Deno:
 
 ```sh
-deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker -n af jsr:@looped/af
+deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker,deno -n af jsr:@looped/af
 ```
 
 Then, from an empty directory:

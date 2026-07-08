@@ -1,6 +1,7 @@
 // docker plumbing + the run/up/ps/down commands (af's docker frontend over @looped/core).
 
 import { type AgentConfig, collectEnvRefs, resolveAgentConfig } from "@looped/core";
+import { dirname, join } from "@std/path";
 import {
   dockerPortArgs,
   dockerPsArgs,
@@ -85,10 +86,10 @@ async function prepare(path: string, mode: RunMode, f: CommandFlags): Promise<Pr
   }
 
   // Env file: explicit flag, else a .env sitting next to the agent file.
-  const baseDir = configPath.slice(0, configPath.lastIndexOf("/"));
+  const baseDir = dirname(configPath);
   let envFile = f.envFile;
   if (envFile === undefined) {
-    const sibling = `${baseDir}/.env`;
+    const sibling = join(baseDir, ".env");
     if (await Deno.stat(sibling).then((s) => s.isFile).catch(() => false)) envFile = sibling;
   } else {
     envFile = await Deno.realPath(envFile).catch(() => fail(`cannot read env file ${f.envFile}`));

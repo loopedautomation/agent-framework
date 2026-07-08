@@ -13,6 +13,13 @@ This directory is the source of truth for what Looped AF is and where it's going
 | 4 | [004-landscape.md](004-landscape.md) | Competitive landscape, positioning, target market, adopted lessons |
 | 5 | [005-platform.md](005-platform.md) | Hosted platform, service business, agent hub |
 | 6 | [006-security.md](006-security.md) | Enforcement layers, egress gaps, hermetic mode and the egress proxy |
+| 7 | [007-email-triggers.md](007-email-triggers.md) | Email as a trigger: inbound webhooks, mailbox polling, Gmail and Outlook |
+| 8 | [008-multi-agent.md](008-multi-agent.md) | Composition via `agent_call` and the A2A surface |
+| 9 | [009-evals.md](009-evals.md) | The eval harness: `af test`, mocked tools, the model-graded judge |
+| 10 | [010-slash-commands.md](010-slash-commands.md) | Operator commands across every chat surface |
+| 11 | [011-footprint.md](011-footprint.md) | A smaller image and a smaller resident set: compile, distroless, memory caps |
+| 12 | [012-channels.md](012-channels.md) | Triggers become channels: two-way, named, with routed replies |
+| 13 | [013-concurrency.md](013-concurrency.md) | Ordering, queues and the scaling story for a single agent |
 
 ## How to read and amend these
 

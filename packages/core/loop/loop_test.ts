@@ -1,6 +1,11 @@
 import { assert, assertEquals } from "@std/assert";
 import { z } from "zod";
-import type { Completion, CompletionRequest, Provider } from "../providers/types.ts";
+import {
+  type Completion,
+  type CompletionRequest,
+  type Provider,
+  ProviderError,
+} from "../providers/types.ts";
 import { parseAgentConfig } from "../config/load.ts";
 import { defineTool } from "../tools/types.ts";
 import { runAgent } from "./loop.ts";
@@ -85,13 +90,59 @@ Deno.test("unknown tool names get a readable result listing available tools", as
   assert(toolMsg?.content.includes("echo"));
 });
 
-Deno.test("ends with error_max_steps when the model never stops calling tools", async () => {
+Deno.test("a capped run ends with the model's wrap-up summary", async () => {
+  const call = { id: "c1", name: "echo", arguments: '{"message":"again"}' };
+  const provider = scripted([
+    { toolCalls: [call] },
+    { toolCalls: [call] },
+    { toolCalls: [call] },
+    { content: "Step limit reached: echoed three times, nothing remains." },
+  ]);
+  const result = await runAgent({ config: CONFIG, provider, tools: [echoTool], input: "loop" });
+
+  assertEquals(result.status, "error_max_steps");
+  assertEquals(result.reply, "Step limit reached: echoed three times, nothing remains.");
+  assertEquals(result.steps, 4); // 3 budgeted steps + the wrap-up call
+  // The wrap-up call offers no tools and injects the prompt as the last user turn:
+  const wrapupReq = provider.requests[3];
+  assertEquals(wrapupReq.tools, undefined);
+  const lastMsg = wrapupReq.messages.at(-1);
+  assert(lastMsg?.role === "user" && lastMsg.content.includes("maximum number of steps"));
+  // The injected prompt stays out of the transcript; the summary is kept:
+  assert(
+    !result.messages.some(
+      (m) => m.role === "user" && m.content.includes("maximum number of steps"),
+    ),
+  );
+  const final = result.messages.at(-1);
+  assert(final?.role === "assistant" && final.content.includes("Step limit reached"));
+});
+
+Deno.test("a capped run falls back to the canned reply when the wrap-up produces no text", async () => {
   const provider = scripted([
     { toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"again"}' }] },
   ]);
   const result = await runAgent({ config: CONFIG, provider, tools: [echoTool], input: "loop" });
   assertEquals(result.status, "error_max_steps");
-  assertEquals(result.steps, 3);
+  assertEquals(result.reply, "run ended after 3 steps without a final answer");
+  assertEquals(result.steps, 4);
+});
+
+Deno.test("a capped run falls back to the canned reply when the wrap-up call fails", async () => {
+  const inner = scripted([
+    { toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"again"}' }] },
+  ]);
+  let calls = 0;
+  const provider: Provider = {
+    id: "mock",
+    complete(req) {
+      if (++calls > 3) return Promise.reject(new ProviderError("boom", "overloaded"));
+      return inner.complete(req);
+    },
+  };
+  const result = await runAgent({ config: CONFIG, provider, tools: [echoTool], input: "loop" });
+  assertEquals(result.status, "error_max_steps");
+  assertEquals(result.reply, "run ended after 3 steps without a final answer");
 });
 
 Deno.test("history carries across runs", async () => {

@@ -9,15 +9,16 @@ import { z } from "zod";
 // don't let the two drift.
 
 const ModelConfigSchema = z.strictObject({
-  provider: z.enum(["openai-compatible", "anthropic"]).describe(
-    "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy.",
+  provider: z.enum(["openai-compatible", "anthropic", "codex"]).describe(
+    "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy. " +
+      "codex uses an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login` (no API key).",
   ),
   id: z.string().min(1).describe("Model identifier, e.g. gpt-5.4-mini or claude-sonnet-5."),
   small: z.string().min(1).optional().describe(
     "Model for cheap internal calls (summaries, compaction, the naming ritual). Defaults to the main model.",
   ),
   base_url: z.url().optional().describe(
-    "Endpoint override for openai-compatible providers, e.g. http://localhost:11434/v1 for Ollama (no API key required with a base_url).",
+    "Endpoint override, e.g. http://localhost:11434/v1 for Ollama with openai-compatible (no API key required with a base_url).",
   ),
   api_key_env: z.string().min(1).optional().describe(
     "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ANTHROPIC_API_KEY per provider.",
@@ -177,7 +178,8 @@ const MemoryConfigSchema = z.strictObject({
 
 const LimitsSchema = z.strictObject({
   max_steps: z.number().int().positive().default(20).describe(
-    "Inner-loop iterations (LLM calls) before the run ends with error_max_steps.",
+    "Tool-calling iterations (LLM calls) per run. On hitting the cap the agent gets one final " +
+      "tool-less call to summarize its progress, then the run ends with error_max_steps.",
   ),
 }).describe("Per-run budgets — the dead-man's switches for unattended operation.");
 
@@ -234,8 +236,11 @@ const agentConfigSchema = z.strictObject({
 
 /** The `model` block of an agent config: which model runs the agent, and how to reach it. */
 export interface ModelConfig {
-  /** LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM and compatible proxies. */
-  provider: "openai-compatible" | "anthropic";
+  /**
+   * LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM and compatible proxies;
+   * codex uses an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login`.
+   */
+  provider: "openai-compatible" | "anthropic" | "codex";
   /** Model identifier, e.g. gpt-5.4-mini or claude-sonnet-5. */
   id: string;
   /** Model for cheap internal calls. Defaults to the main model. */
@@ -374,7 +379,10 @@ export interface MemoryConfig {
 
 /** Per-run budgets. */
 export interface LimitsConfig {
-  /** Inner-loop iterations (LLM calls) before the run ends with error_max_steps. */
+  /**
+   * Tool-calling iterations (LLM calls) per run. On hitting the cap the agent gets one final
+   * tool-less call to summarize its progress, then the run ends with error_max_steps.
+   */
   max_steps: number;
 }
 
@@ -430,8 +438,12 @@ export interface AgentConfigValidator {
   ): { success: true; data: AgentConfig } | { success: false; error: Error };
 }
 
-/** The env var each provider reads its API key from when api_key_env is omitted. */
-export const DEFAULT_API_KEY_ENV: Record<ModelConfig["provider"], string> = {
+/**
+ * The env var each key-based provider reads its API key from when api_key_env
+ * is omitted. codex is absent: it authenticates with OAuth credentials from
+ * `codex login`, not an API key.
+ */
+export const DEFAULT_API_KEY_ENV: Record<Exclude<ModelConfig["provider"], "codex">, string> = {
   "openai-compatible": "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
 };

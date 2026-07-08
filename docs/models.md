@@ -1,24 +1,24 @@
 ---
-title: "Models"
-description: "The two provider dialects, API keys, local models, and retry behavior."
+title: "Overview"
+description: "The provider dialects, how API keys are supplied, and retry behavior."
 ---
 
-Every agent names its model in the required `model:` block; there is no fleet-wide default. The `provider` field is a **dialect**: two dialects cover effectively every hosted and local endpoint, and swapping providers is a one-line change. The short version lives in [Agent Config](agent-file.md#model); this page covers the details.
+Every agent names its model in the required `model:` block; there is no fleet-wide default. The `provider` field is a **dialect**: three dialects cover effectively every hosted and local endpoint, and swapping providers is a one-line change. The short version lives in [Agent Config](agent-file.md#model); this page covers what the dialects share, and each provider has its own page: [OpenAI](openai.md), [Anthropic](anthropic.md) and [Codex](codex.md).
 
 ```yaml
 model:
-  provider: openai-compatible   # or: anthropic
+  provider: openai-compatible   # or: anthropic, codex
   id: gpt-5.4-mini
 ```
 
-## The two dialects
+## The three dialects
 
-| | `openai-compatible` | `anthropic` |
-| --- | --- | --- |
-| Speaks to | OpenAI, Ollama, vLLM, LiteLLM, OpenRouter — anything serving the chat-completions API | The native Anthropic Messages API |
-| Default endpoint | `https://api.openai.com/v1` | `https://api.anthropic.com` |
-| Default key env var | `OPENAI_API_KEY` | `ANTHROPIC_API_KEY` |
-| `base_url` | Any compatible endpoint — this is how local models work | Anthropic-compatible proxies |
+| | [`openai-compatible`](openai.md) | [`anthropic`](anthropic.md) | [`codex`](codex.md) |
+| --- | --- | --- | --- |
+| Speaks to | OpenAI, Ollama, vLLM, LiteLLM, OpenRouter — anything serving the chat-completions API | The native Anthropic Messages API | The ChatGPT Codex backend |
+| Default endpoint | `https://api.openai.com/v1` | `https://api.anthropic.com` | `https://chatgpt.com/backend-api/codex` |
+| Auth | `OPENAI_API_KEY` | `ANTHROPIC_API_KEY` | `codex login` credentials (no key) |
+| `base_url` | Any compatible endpoint — this is how local models work | Anthropic-compatible proxies | Rarely needed |
 
 `id` is the plain model identifier the endpoint expects — `gpt-5.4-mini`, `claude-sonnet-5`, `llama3.1`. There is no combined `provider/model` string syntax; the two fields stay separate, which is what makes `base_url` proxies transparent.
 
@@ -41,20 +41,7 @@ A missing key fails at startup, before any event is handled:
 missing API key: set OPENAI_API_KEY (or point model.api_key_env at the right env var)
 ```
 
-The one exception: `openai-compatible` with an explicit `base_url` needs no key, because local models usually don't have one.
-
-## Local models
-
-```yaml
-model:
-  provider: openai-compatible
-  id: llama3.1
-  base_url: http://localhost:11434/v1   # Ollama
-```
-
-`base_url` points the dialect at any compatible endpoint — Ollama, vLLM, a LiteLLM proxy — and with it set, no API key is required. `af init --provider local` scaffolds exactly this shape.
-
-When the agent runs in a container, remember `localhost` is the container itself: use `http://host.docker.internal:11434/v1` to reach a model server on the host (on Linux, add `--add-host=host.docker.internal:host-gateway`).
+Two exceptions: `openai-compatible` with an explicit `base_url` needs no key, because [local models](openai.md#local-models) usually don't have one; and the [`codex` provider](codex.md) authenticates with ChatGPT subscription credentials, so no key env var applies.
 
 ## The small model
 

@@ -6,7 +6,7 @@ description: "Every af command: init, run, up, ps, down, validate, flags, schema
 `af` is the framework's CLI, published to JSR as [`@looped/af`](https://jsr.io/@looped/af). Install it once with Deno:
 
 ```sh
-deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker -n af jsr:@looped/af
+deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker,deno -n af jsr:@looped/af
 ```
 
 The CLI orchestrates Docker under the hood: agents always execute in the published container, never on your machine. Pointing `af` at an agent file starts the container with the config mounted, the data volume attached and the env file passed. Config paths default to `./agent.yaml`.
@@ -37,7 +37,7 @@ docker run -d --restart unless-stopped \
   -v agent-data:/data \
   -p 127.0.0.1:0:9090 \
   --read-only --tmpfs /tmp \
-  ghcr.io/loopedautomation/agent:0.4.0
+  ghcr.io/loopedautomation/agent:0.5.0
 ```
 
 That's the config and any `skills:` mounted read-only, the `<handle>-data` volume so identity survives restarts, the `.env` next to the agent file, the [status surface](docker-run.md#the-status-surface) on an ephemeral loopback port so fleets never collide, and a read-only root filesystem. The image tag matches the CLI's version — never `:latest`, so a cached image can't drift out from under a newer CLI (`--image` overrides). `af ps` and `af down` find containers by the `af.agent` label. Because it's all plain Docker, everything you know still works: `docker logs af-<handle>`, `docker stats`, restart policies, volume backups.
@@ -56,7 +56,7 @@ af init issue-helper --trigger discord --provider openai-compatible \
 | Flag | Choices | |
 | --- | --- | --- |
 | `--trigger` | `discord` `webhook` `cron` `none` | `none` = REPL agent |
-| `--provider` | `openai-compatible` `anthropic` `local` | `local` = openai-compatible + Ollama `base_url`, no key |
+| `--provider` | `openai-compatible` `anthropic` `codex` `local` | `codex` = ChatGPT subscription via `codex login`, no key; `local` = openai-compatible + Ollama `base_url`, no key |
 | `--deploy` | `local` `docker` `compose` `compose-inline` `paas-git` `paas-env` | see below |
 | `--model` | any model id | sensible default per provider |
 | `--clis` | comma-separated executables | adds a Dockerfile layer + `permissions.run` |
