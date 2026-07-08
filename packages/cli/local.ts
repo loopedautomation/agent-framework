@@ -41,7 +41,7 @@ export async function validate(path: string) {
 /** The plain line-at-a-time loop, for piped stdin and dumb terminals. */
 async function repl(config: AgentConfig, service: AgentService, name: string) {
   console.log(
-    `${name} (${config.handle}) is listening (model: ${config.model.id}; ctrl-d to exit)`,
+    `${name} (${config.handle}) is listening (model: ${config.model.id}; /help for commands; ctrl-d to exit)`,
   );
   const conversationKey = config.memory?.scope === "thread" ? "cli" : undefined;
   while (true) {

@@ -114,6 +114,19 @@ export class Store {
     return rows.map((r) => JSON.parse(r.message_json));
   }
 
+  /** Lifetime run count and token totals (the /status command). */
+  runStats(): { runs: number; inputTokens: number; outputTokens: number } {
+    const row = this.#db
+      .prepare(
+        `SELECT COUNT(*) AS runs,
+                COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                COALESCE(SUM(output_tokens), 0) AS output_tokens
+         FROM runs`,
+      )
+      .get() as { runs: number; input_tokens: number; output_tokens: number };
+    return { runs: row.runs, inputTokens: row.input_tokens, outputTokens: row.output_tokens };
+  }
+
   /** Insert a run record; returns the new run id. */
   recordRun(run: RunRecord): number {
     const result = this.#db

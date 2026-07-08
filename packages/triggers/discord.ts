@@ -1,4 +1,4 @@
-import type { AgentEvent, RunResult, Trigger } from "@looped/core";
+import type { AgentEvent, CommandSpec, RunResult, Trigger } from "@looped/core";
 import { NO_REPLY, splitMessage } from "./text.ts";
 
 // A deliberately minimal Discord gateway client: identify, heartbeat,
@@ -96,6 +96,20 @@ export interface DiscordTriggerOptions extends DiscordFilterOptions {
   allowSilence?: boolean;
   /** Show the typing indicator in the source channel while the agent works. */
   showTyping?: boolean;
+  /** Slash commands to register as Discord application commands, so clients offer a native picker with descriptions. */
+  commands?: CommandSpec[];
+}
+
+/** A Discord slash-command interaction (the fields this trigger reads). */
+export interface DiscordInteraction {
+  id: string;
+  token: string;
+  type: number;
+  channel_id?: string;
+  guild_id?: string;
+  data?: { name?: string; options?: { name: string; value?: string }[] };
+  member?: { user?: { id: string; username?: string } };
+  user?: { id: string; username?: string };
 }
 
 /**
@@ -121,6 +135,7 @@ export class DiscordTrigger implements Trigger {
   #heartbeat?: ReturnType<typeof setInterval>;
   #stopped = false;
   #botUserId = "";
+  #applicationId = "";
   #channelNames = new Map<string, string | undefined>();
   #reconnectDelayMs = 1_000;
 
@@ -191,6 +206,88 @@ export class DiscordTrigger implements Trigger {
     }
   }
 
+  /**
+   * Register the command list as global application commands (bulk overwrite,
+   * so removed commands disappear too). Native registration is cosmetic —
+   * autocomplete and descriptions in the client; failure only logs.
+   */
+  async #registerCommands() {
+    const commands = this.#opts.commands;
+    if (!commands?.length) return;
+    this.#applicationId = await fetchApplicationId(this.#opts.token);
+    const res = await this.#api(`/applications/${this.#applicationId}/commands`, {
+      method: "PUT",
+      body: JSON.stringify(commands.map((c) => ({
+        name: c.name,
+        description: c.description,
+        type: 1, // CHAT_INPUT
+        options: [{
+          type: 3, // STRING
+          name: "args",
+          description: "Text passed to the command",
+          required: false,
+        }],
+      }))),
+    });
+    if (!res.ok) {
+      console.error(`discord: command registration failed (${res.status}): ${await res.text()}`);
+    } else {
+      await res.body?.cancel();
+    }
+  }
+
+  /**
+   * A native slash-command invocation arrives as an interaction, not a
+   * message: acknowledge with a deferred reply ("thinking…"), run the agent
+   * on the equivalent "/name args" text, then fill the deferred message in.
+   */
+  async #handleInteraction(
+    interaction: DiscordInteraction,
+    emit: (event: AgentEvent) => Promise<RunResult>,
+  ) {
+    if (interaction.type !== 2 || !interaction.data?.name) return; // APPLICATION_COMMAND only
+    const user = interaction.member?.user ?? interaction.user;
+    // The same author gate as messages, before the model is called.
+    if (
+      this.#opts.fromUsers?.length && user &&
+      !this.#opts.fromUsers.some((u) => u === user.id || u === user.username)
+    ) return;
+
+    const ack = await this.#api(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+      method: "POST",
+      body: JSON.stringify({ type: 5 }), // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
+    });
+    if (!ack.ok) {
+      console.error(`discord: interaction ack failed (${ack.status}): ${await ack.text()}`);
+      return;
+    }
+    await ack.body?.cancel();
+
+    const args = interaction.data.options?.find((o) => o.name === "args")?.value ?? "";
+    const result = await emit({
+      id: interaction.id,
+      trigger: this.name,
+      input: `/${interaction.data.name}${args ? ` ${args}` : ""}`,
+      conversationKey: interaction.channel_id ? `discord:${interaction.channel_id}` : undefined,
+    });
+
+    const webhook = `/webhooks/${this.#applicationId}/${interaction.token}`;
+    const parts = splitMessage((result.reply ?? "").trim() || `(${result.status})`);
+    for (const [i, part] of parts.entries()) {
+      const res = i === 0
+        ? await this.#api(`${webhook}/messages/@original`, {
+          method: "PATCH",
+          body: JSON.stringify({ content: part }),
+        })
+        : await this.#api(webhook, { method: "POST", body: JSON.stringify({ content: part }) });
+      if (!res.ok) {
+        console.error(`discord: interaction reply failed (${res.status}): ${await res.text()}`);
+      } else {
+        await res.body?.cancel();
+      }
+    }
+  }
+
   /** Connect to the gateway; matching messages emit events and get replies. */
   async start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
     const res = await this.#api("/gateway/bot");
@@ -198,6 +295,7 @@ export class DiscordTrigger implements Trigger {
       throw new Error(`discord: cannot reach gateway (${res.status}) — check the bot token`);
     }
     const { url } = await res.json();
+    await this.#registerCommands();
     this.#connect(`${url}?v=10&encoding=json`, emit);
   }
 
@@ -233,6 +331,11 @@ export class DiscordTrigger implements Trigger {
             this.#botUserId = payload.d.user.id;
             this.#reconnectDelayMs = 1_000;
             console.log(`discord trigger connected as ${payload.d.user.username}`);
+          }
+          if (payload.t === "INTERACTION_CREATE") {
+            this.#handleInteraction(payload.d as DiscordInteraction, emit).catch((err) =>
+              console.error(`discord: interaction handling failed: ${err}`)
+            );
           }
           if (payload.t === "MESSAGE_CREATE") {
             const msg = payload.d as DiscordMessage;

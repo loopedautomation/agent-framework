@@ -25,6 +25,7 @@
     "tools",
     "permissions",
     "memory",
+    "slash-commands",
     "testing",
     "---Providers---",
     "models",

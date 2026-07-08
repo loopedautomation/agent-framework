@@ -20,6 +20,14 @@ import {
   withMcpAudit,
 } from "../tools/mcp.ts";
 import { SEARCH_AUTO_THRESHOLD, ToolRegistry } from "../tools/registry.ts";
+import {
+  BUILTIN_COMMANDS,
+  commandSpecs,
+  helpText,
+  parseCommand,
+  type ParsedCommand,
+  substituteArgs,
+} from "./commands.ts";
 
 /** An event from the outside world, normalized by a trigger. */
 export interface AgentEvent {
@@ -37,6 +45,18 @@ export interface AgentEvent {
 export interface HandleOptions {
   /** Observes inner-loop progress live — for interactive surfaces like the REPL. */
   onEvent?: (event: RunEvent) => void;
+}
+
+/** Render seconds as "2d 3h 4m 5s", dropping leading zero units. */
+function formatUptime(totalSeconds: number): string {
+  const d = Math.floor(totalSeconds / 86_400);
+  const h = Math.floor((totalSeconds % 86_400) / 3_600);
+  const m = Math.floor((totalSeconds % 3_600) / 60);
+  const s = totalSeconds % 60;
+  const parts = [[d, "d"], [h, "h"], [m, "m"], [s, "s"]] as const;
+  const first = parts.findIndex(([n]) => n > 0);
+  if (first === -1) return "0s";
+  return parts.slice(first).map(([n, unit]) => `${n}${unit}`).join(" ");
 }
 
 /** A trigger connects outward, emits events, and carries replies back. */
@@ -88,6 +108,7 @@ export class AgentService {
   #skills?: Skill[];
   #mcp?: McpConnections;
   #wrapTool: (tool: NativeTool) => NativeTool;
+  #startedAtMs = Date.now();
 
   /** Resolves env references, opens the store, and builds the provider. */
   constructor(opts: AgentServiceOptions) {
@@ -165,10 +186,90 @@ export class AgentService {
     return this.#identity;
   }
 
+  /**
+   * A built-in command answers deterministically: zero steps, zero tokens,
+   * no provider call. The synthetic result rides the normal reply path.
+   */
+  #runBuiltin(command: ParsedCommand, event: AgentEvent, identityName: string): RunResult {
+    let reply: string;
+    switch (command.name) {
+      case "help":
+        reply = helpText(commandSpecs(this.config.commands));
+        break;
+      case "status": {
+        const stats = this.store.runStats();
+        const uptimeS = Math.floor((Date.now() - this.#startedAtMs) / 1000);
+        reply = [
+          `${identityName} (${this.config.handle})`,
+          `model: ${this.config.model.provider}/${this.config.model.id}`,
+          `uptime: ${formatUptime(uptimeS)}`,
+          `runs: ${stats.runs} (${stats.inputTokens} in / ${stats.outputTokens} out tokens)`,
+        ].join("\n");
+        break;
+      }
+      case "reset": {
+        const canReset = this.config.memory?.scope === "thread" && event.conversationKey;
+        if (!canReset) {
+          reply = "Nothing to reset — this agent keeps no conversation history.";
+        } else {
+          const cleared = this.store.clearSession(event.conversationKey!);
+          reply = cleared
+            ? "Conversation history cleared. Persistent memories are untouched."
+            : "This conversation had no history to clear.";
+        }
+        break;
+      }
+      default:
+        // Unreachable: parseCommand only matches known names.
+        reply = `Unknown command /${command.name}.`;
+    }
+    return {
+      status: "ok",
+      reply,
+      steps: 0,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      messages: [],
+    };
+  }
+
   /** Handle one event end to end: context → inner loop → persist + audit. */
   async handle(event: AgentEvent, opts?: HandleOptions): Promise<RunResult> {
     const identity = await this.init();
     const startedAt = new Date().toISOString();
+
+    // Slash commands are intercepted before the session loads and before any
+    // provider call — a deterministic path that works identically on every
+    // trigger (Plan 10). Unrecognized input falls through to the model.
+    const command = parseCommand(
+      event.input,
+      commandSpecs(this.config.commands).map((c) => c.name),
+    );
+    if (command && BUILTIN_COMMANDS.some((c) => c.name === command.name)) {
+      const result = this.#runBuiltin(command, event, identity.name);
+      const useSession = this.config.memory?.scope === "thread" && event.conversationKey;
+      const runId = this.store.recordRun({
+        sessionId: useSession ? this.store.sessionFor(event.conversationKey!) : undefined,
+        trigger: event.trigger,
+        input: event.input,
+        status: result.status,
+        reply: result.reply,
+        steps: 0,
+        usage: result.usage,
+        startedAt,
+      });
+      this.store.recordAudit({
+        runId,
+        kind: "command",
+        detail: { name: command.name, args: command.args, builtin: true },
+      });
+      return result;
+    }
+    if (command) {
+      // A config-defined command is a named, repeatable prompt: substitute
+      // the arguments and run the normal loop with it as the input.
+      const config = this.config.commands!.find((c) => c.name === command.name)!;
+      event = { ...event, input: substituteArgs(config.prompt, command.args) };
+    }
     const decisions: PermissionDecision[] = [];
     const mcpCalls: McpCallRecord[] = [];
     const engine = new PermissionEngine(this.config.permissions, (e) => {
@@ -215,6 +316,13 @@ export class AgentService {
     }
     for (const call of mcpCalls) {
       this.store.recordAudit({ runId, kind: "mcp", detail: call });
+    }
+    if (command) {
+      this.store.recordAudit({
+        runId,
+        kind: "command",
+        detail: { name: command.name, args: command.args, builtin: false },
+      });
     }
     return result;
   }

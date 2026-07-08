@@ -101,3 +101,7 @@ Three optional keys together turn the trigger from a chatbot into an observer �
 Leave `show_typing` off for an observer. A typing indicator that ends in no message reads as the bot changing its mind, and an observer stays silent most of the time.
 
 Every run — replied or silent — lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps and tokens.
+
+## Slash commands
+
+The trigger registers the agent's [slash commands](slash-commands.md) as Discord application commands at startup, so typing `/` in a channel pops Discord's native picker with each command's description. Picking one arrives as an interaction; the agent acknowledges it with the "thinking…" state and fills in the reply when the run finishes. Typing a command as plain text works the same way.

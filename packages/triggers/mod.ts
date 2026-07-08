@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { AgentConfig, Trigger } from "@looped/core";
+import { type AgentConfig, commandSpecs, type Trigger } from "@looped/core";
 import { WebhookTrigger } from "./webhook.ts";
 import { CronTrigger } from "./cron.ts";
 import { DiscordTrigger } from "./discord.ts";
@@ -20,6 +20,8 @@ import { TelegramTrigger } from "./telegram.ts";
 export type {
   AgentConfig,
   AgentEvent,
+  CommandConfig,
+  CommandSpec,
   CronTriggerConfig,
   DiscordTriggerConfig,
   EmailTriggerConfig,
@@ -69,14 +71,21 @@ export { OutlookEmailTrigger, type OutlookEmailTriggerOptions } from "./email_ou
 export { decodeWords, type ParsedMail, parseMime } from "./mime.ts";
 export {
   type DiscordFilterOptions,
+  type DiscordInteraction,
   DiscordTrigger,
   type DiscordTriggerOptions,
   fetchApplicationId,
   INVITE_PERMISSIONS,
   inviteUrl,
 } from "./discord.ts";
-export { type SlackFilterOptions, SlackTrigger, type SlackTriggerOptions } from "./slack.ts";
 export {
+  type SlackFilterOptions,
+  type SlackSlashCommand,
+  SlackTrigger,
+  type SlackTriggerOptions,
+} from "./slack.ts";
+export {
+  stripCommandMention,
   type TelegramFilterOptions,
   TelegramTrigger,
   type TelegramTriggerOptions,
@@ -91,6 +100,9 @@ export function triggersFromConfig(
   getEnv: (name: string) => string | undefined = Deno.env.get,
 ): Trigger[] {
   const triggers: Trigger[] = [];
+  // Built-ins plus config-defined commands, registered natively on the chat
+  // platforms so clients offer a picker with descriptions.
+  const commands = commandSpecs(config.commands);
   for (const t of config.triggers ?? []) {
     switch (t.type) {
       case "webhook": {
@@ -231,6 +243,7 @@ export function triggersFromConfig(
             replyChannel: t.reply_channel,
             allowSilence: t.allow_silence,
             showTyping: t.show_typing,
+            commands,
           }),
         );
         break;
@@ -272,6 +285,7 @@ export function triggersFromConfig(
             fromUsers: t.from_users,
             replyChat: t.reply_chat,
             allowSilence: t.allow_silence,
+            commands,
           }),
         );
         break;

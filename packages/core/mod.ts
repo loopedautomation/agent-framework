@@ -11,6 +11,7 @@ export {
   agentConfigJsonSchema,
   AgentConfigSchema,
   type AgentConfigValidator,
+  type CommandConfig,
   type CronTriggerConfig,
   type DiscordTriggerConfig,
   type EmailTriggerConfig,
@@ -81,6 +82,13 @@ export {
 } from "./skills/skills.ts";
 export { connectMcpServers, type McpConnections, mcpToolsFromClient } from "./tools/mcp.ts";
 export { type AgentIdentity, ensureIdentity, identityNote } from "./runtime/identity.ts";
+export {
+  BUILTIN_COMMANDS,
+  type CommandSpec,
+  commandSpecs,
+  parseCommand,
+  type ParsedCommand,
+} from "./runtime/commands.ts";
 export { startStatusServer, type StatusServerOptions } from "./runtime/status.ts";
 export { type AuditRecord, type RunRecord, Store } from "./store/store.ts";
 export {

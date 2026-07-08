@@ -669,6 +669,38 @@
       },
       "additionalProperties": false
     },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "What operators type after the slash: /standup. Lowercase letters, digits, underscores, max 32 chars — valid on every chat platform."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 100,
+            "description": "One line shown by /help and in each platform's native command picker (platforms cap this around 100 chars)."
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The prompt the command runs through the normal agent loop. $ARGS is replaced with whatever follows the command name."
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "prompt"
+        ],
+        "additionalProperties": false,
+        "description": "An operator-defined slash command: a named, repeatable prompt."
+      },
+      "description": "Operator-defined slash commands, alongside the built-ins /help, /status and /reset."
+    },
     "permissions": {
       "type": "object",
       "properties": {
