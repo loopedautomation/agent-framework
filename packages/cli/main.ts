@@ -24,7 +24,6 @@ import {
   resolveAgentConfig,
   VERSION,
 } from "@looped/core";
-import denoConfig from "./deno.json" with { type: "json" };
 import { discordInvite } from "./discord.ts";
 import {
   DEFAULT_CONFIG,
@@ -56,6 +55,7 @@ function usage(): string {
     ["af schema", "Print the agent.yaml JSON Schema"],
     ["af discord-invite [agent.yaml]", "Print the bot's OAuth invite URL (no bitfield math)"],
     ["af update", "Reinstall af at the latest published version"],
+    ["af version", "Print the af version (also --version, -v)"],
   ];
   const flags: [string, string][] = [
     ["-v, --version", "Print the af version"],
@@ -121,9 +121,10 @@ async function main() {
       case "update":
         await update();
         break;
+      case "version":
       case "--version":
       case "-v":
-        console.log(`af ${denoConfig.version}`);
+        console.log(`af ${VERSION}`);
         break;
       default:
         console.log(usage());
