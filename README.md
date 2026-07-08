@@ -1,6 +1,6 @@
 # Looped Agent Framework
 
-Looped AF is a Docker-native, config-driven framework for building single-purpose, event-driven AI agents that automate business processes.
+Looped AF lets you build contained, event-driven AI agents. Define your agent in a single config file, run it in a container and deploy it anywhere.
 
 > **This is alpha software.** We're still early, and things are going to change and sometimes break: interfaces, config fields, defaults. If you're up for experimenting anyway, welcome. File an issue when something breaks and we'll sort it out.
 
