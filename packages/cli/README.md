@@ -2,11 +2,19 @@
 
 `af` is the [Looped AF](https://github.com/loopedautomation/agent-framework) command line: a Docker frontend for agents defined as a single YAML file. It scaffolds a project, validates the file and runs the agent inside the published container image, so nothing executes on your host.
 
-Install it once with Deno:
+Install it once. On macOS or Linux, Homebrew is the shortest path — no Deno required:
+
+```sh
+brew install loopedautomation/tap/af
+```
+
+Or install from JSR with Deno:
 
 ```sh
 deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker,deno -n af jsr:@looped/af
 ```
+
+`af` runs Docker under the hood, so Docker still needs to be installed and running either way. Upgrade a Homebrew install with `brew upgrade af`; a Deno install with `af update`.
 
 Then, from an empty directory:
 

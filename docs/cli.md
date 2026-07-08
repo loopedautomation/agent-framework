@@ -3,11 +3,19 @@ title: "CLI"
 description: "Every af command: init, run, up, ps, down, validate, flags, schema, discord-invite."
 ---
 
-`af` is the framework's CLI, published to JSR as [`@looped/af`](https://jsr.io/@looped/af). Install it once with Deno:
+`af` is the framework's CLI, published to JSR as [`@looped/af`](https://jsr.io/@looped/af). On macOS or Linux, install it with Homebrew — no Deno required:
+
+```sh
+brew install loopedautomation/tap/af
+```
+
+Or install from JSR with Deno:
 
 ```sh
 deno install -g --allow-read --allow-write --allow-env --allow-net --allow-run=bash,docker,deno -n af jsr:@looped/af
 ```
+
+Either way the CLI drives Docker, which must be installed and running. Upgrade a Homebrew install with `brew upgrade af`; a Deno install with `af update`.
 
 The CLI orchestrates Docker under the hood: agents always execute in the published container, never on your machine. Pointing `af` at an agent file starts the container with the config mounted, the data volume attached and the env file passed. Config paths default to `./agent.yaml`.
 
@@ -22,6 +30,7 @@ af flags [agent.yaml]     Print compiled Deno permission flags
 af schema                 Print the agent.yaml JSON Schema
 af discord-invite <agent.yaml>
                           Print the bot's OAuth invite URL (no bitfield math)
+af version                Print the af version (also --version, -v)
 ```
 
 ## Under the hood
