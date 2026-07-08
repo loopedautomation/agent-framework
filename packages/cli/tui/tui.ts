@@ -15,9 +15,15 @@
 //     ❯ /help   List commands and keys
 
 import type { AgentConfig, AgentService, RunEvent, RunResult } from "@looped/core";
-import { ACCENT, accent, bold, dim, err, ok, paint, table, visibleLength, warn } from "../style.ts";
+import { ACCENT, accent, bold, dim, err, paint, table, visibleLength, warn } from "../style.ts";
 import { decodeKeys, type Key, LineEditor } from "./editor.ts";
-import { COMMANDS, completions, parseSlash, type SlashCommand } from "./commands.ts";
+import {
+  completions,
+  LOCAL_COMMANDS,
+  parseSlash,
+  replCommands,
+  type SlashCommand,
+} from "./commands.ts";
 import { renderMarkdown } from "./markdown.ts";
 
 const enc = new TextEncoder();
@@ -145,11 +151,12 @@ class Tui {
   #pending: Key[] = [];
   #decoder = new TextDecoder();
   #buf = new Uint8Array(4096);
-  #stats = { runs: 0, steps: 0, inputTokens: 0, outputTokens: 0 };
+  #commands: SlashCommand[];
 
   constructor({ config, service }: TuiOptions) {
     this.#config = config;
     this.#service = service;
+    this.#commands = replCommands(config.commands);
     this.#conversationKey = config.memory?.scope === "thread" ? "cli" : undefined;
     const dataDir = Deno.env.get("AF_DATA_DIR") ?? ".looped";
     this.#historyPath = `${dataDir}/cli_history`;
@@ -174,28 +181,23 @@ class Tui {
     write(SHOW_CURSOR + "\n");
   }
 
-  /** Route one submitted line: built-in command or a turn with the agent. */
+  /** Route one submitted line: screen-local command or a turn with the agent. */
   async #dispatch(line: string): Promise<boolean> {
     if (line.toLowerCase() === "exit") return true;
     const slash = parseSlash(line);
-    // Unknown /names fall through to the model untouched (plan 010).
-    switch (slash && COMMANDS.some((c) => c.name === slash.name) ? slash.name : null) {
+    // Only the screen-local commands live here. Everything else — built-ins,
+    // config-defined commands, plain prose — goes to the agent, where
+    // handle() intercepts known commands and unknown /names fall through to
+    // the model untouched (plan 010).
+    switch (slash && LOCAL_COMMANDS.some((c) => c.name === slash.name) ? slash.name : null) {
       case "exit":
         return true;
-      case "help":
-        this.#help();
-        return false;
-      case "status":
-        this.#status();
-        return false;
-      case "reset":
-        this.#reset();
-        return false;
       case "clear":
         this.#clearScreen();
         return false;
       default:
         await this.#turn(line);
+        if (slash?.name === "help") this.#localHelp();
         return false;
     }
   }
@@ -279,7 +281,7 @@ class Tui {
   }
 
   #menu(): SlashCommand[] {
-    return this.#dismissed ? [] : completions(this.#ed.text);
+    return this.#dismissed ? [] : completions(this.#ed.text, this.#commands);
   }
 
   // ── painting ───────────────────────────────────────────────────────────
@@ -413,10 +415,6 @@ class Tui {
   }
 
   #reply(result: RunResult) {
-    this.#stats.runs++;
-    this.#stats.steps += result.steps;
-    this.#stats.inputTokens += result.usage.inputTokens;
-    this.#stats.outputTokens += result.usage.outputTokens;
     write("\n" + accent(`● ${this.#config.handle}`) + "\n");
     for (const line of renderMarkdown(result.reply).split("\n")) write(`  ${line}\n`);
     const status = `[${result.status} · ${result.steps} step${result.steps === 1 ? "" : "s"} · ` +
@@ -424,40 +422,15 @@ class Tui {
     write("  " + (result.status === "ok" ? dim(status) : warn(status)) + "\n\n");
   }
 
-  // ── built-ins ──────────────────────────────────────────────────────────
+  // ── the screen-local commands ──────────────────────────────────────────
 
-  #help() {
-    const rows = COMMANDS.map((c) => [`  ${accent("/" + c.name)}`, dim(c.description)]);
+  /** Printed after the agent's /help reply: this surface's own extras. */
+  #localHelp() {
+    const rows = LOCAL_COMMANDS.map((c) => [`  ${accent("/" + c.name)}`, dim(c.description)]);
     write(table(rows).join("\n") + "\n");
     write(
       dim("  keys: ↑↓ history · tab complete · ctrl-c clear line / exit · ctrl-l clear screen") +
         "\n\n",
     );
-  }
-
-  #status() {
-    const rows = [
-      ["  agent", this.#config.handle],
-      ["  model", `${this.#config.model.provider} / ${this.#config.model.id}`],
-      ["  memory", this.#memoryDesc()],
-      ["  skills", String(this.#config.skills?.length ?? 0)],
-      [
-        "  session",
-        `${this.#stats.runs} run${
-          this.#stats.runs === 1 ? "" : "s"
-        } · ${this.#stats.steps} steps · ` +
-        `${this.#stats.inputTokens}in/${this.#stats.outputTokens}out tokens`,
-      ],
-    ];
-    write(table(rows.map(([k, v]) => [dim(k), v])).join("\n") + "\n\n");
-  }
-
-  #reset() {
-    if (!this.#conversationKey) {
-      write(dim('  this agent keeps no thread history (memory.scope is not "thread")') + "\n\n");
-      return;
-    }
-    const cleared = this.#service.store.clearSession(this.#conversationKey);
-    write(`  ${ok("✓")} conversation history cleared${cleared ? "" : " (was already empty)"}\n\n`);
   }
 }

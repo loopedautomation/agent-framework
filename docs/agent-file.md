@@ -121,6 +121,7 @@ The `env:` block grants environment variables to tools and MCP servers — and o
 - **`tools:`** — capability beyond the natives: MCP servers, and tool search to keep their schemas out of context. → [Tools](tools.md)
 - **`permissions:`** — deny-by-default allowlists for hosts, executables, and paths. Omit the block and the agent can touch nothing. → [Permissions](permissions.md)
 - **`memory:`** — conversation history (`scope`) and facts that survive across conversations and restarts (`persistent`). → [Memory](memory.md)
+- **`commands:`** — operator-defined slash commands, alongside the built-ins `/help`, `/status` and `/reset`. → [Slash commands](slash-commands.md)
 
 ## Validating
 

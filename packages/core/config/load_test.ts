@@ -281,3 +281,45 @@ Deno.test("the shipped agent-zero example is a valid agent definition", async ()
   assertEquals(config.handle, "agent-zero");
   assertEquals(config.permissions?.write, ["agents"]);
 });
+
+Deno.test("parses config-defined commands", () => {
+  const config = parseAgentConfig(
+    MINIMAL +
+      `commands:\n  - name: standup\n    description: Summarize the last day of activity\n    prompt: "Summarize. Focus: $ARGS"\n`,
+  );
+  assertEquals(config.commands?.length, 1);
+  assertEquals(config.commands?.[0].name, "standup");
+});
+
+Deno.test("rejects a command that shadows a built-in", () => {
+  const err = assertThrows(
+    () =>
+      parseAgentConfig(
+        MINIMAL + `commands:\n  - name: reset\n    description: Nope nope\n    prompt: x\n`,
+      ),
+    ConfigError,
+  );
+  assert(err.message.includes("built-in"));
+});
+
+Deno.test("rejects duplicate command names", () => {
+  assertThrows(
+    () =>
+      parseAgentConfig(
+        MINIMAL +
+          `commands:\n  - name: a_cmd\n    description: First one\n    prompt: x\n  - name: a_cmd\n    description: Second one\n    prompt: y\n`,
+      ),
+    ConfigError,
+  );
+});
+
+Deno.test("rejects command names no platform would register", () => {
+  assertThrows(
+    () =>
+      parseAgentConfig(
+        MINIMAL +
+          `commands:\n  - name: Bad-Name\n    description: Hyphens and caps\n    prompt: x\n`,
+      ),
+    ConfigError,
+  );
+});

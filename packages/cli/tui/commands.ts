@@ -1,30 +1,46 @@
-// Slash commands for the REPL — the parser and the dropdown's view of it.
-// Pure functions, per plan 010: strict parsing, and anything that isn't an
-// exact known command falls through to the model untouched.
+// Slash commands for the REPL — the dropdown's view of the command system.
+// The agent-level commands (built-ins plus config-defined) come from core
+// and run inside AgentService.handle(), the same interception every trigger
+// gets (plan 010). The REPL adds two of its own that only make sense on a
+// screen, and handles just those itself.
+
+import { type CommandConfig, type CommandSpec, commandSpecs } from "@looped/core";
 
 /** One REPL command, as shown in /help and the dropdown. */
-export interface SlashCommand {
-  /** The name typed after the slash. */
-  name: string;
-  /** One line for the dropdown and /help. */
-  description: string;
-}
+export type SlashCommand = CommandSpec;
 
-/** The REPL's built-ins. */
-export const COMMANDS: SlashCommand[] = [
-  { name: "help", description: "List commands and keys" },
-  { name: "status", description: "Agent, model and session facts" },
-  { name: "reset", description: "Clear this conversation's history" },
+/** The commands the REPL handles itself — they exist only on this surface. */
+export const LOCAL_COMMANDS: SlashCommand[] = [
   { name: "clear", description: "Clear the screen" },
   { name: "exit", description: "Leave the REPL" },
 ];
+
+/**
+ * The dropdown's wording for the built-ins. Core's descriptions are written
+ * for the platform pickers; the dropdown wants them terse, and /help here
+ * also covers the keys.
+ */
+const REPL_DESCRIPTIONS: Record<string, string> = {
+  help: "List commands and keys",
+  status: "Agent, model and session facts",
+  reset: "Clear this conversation's history",
+};
+
+/** Everything the dropdown offers: the agent's commands, then the REPL's own. */
+export function replCommands(configured?: CommandConfig[]): SlashCommand[] {
+  const agent = commandSpecs(configured).map((c) => ({
+    ...c,
+    description: REPL_DESCRIPTIONS[c.name] ?? c.description,
+  }));
+  return [...agent, ...LOCAL_COMMANDS];
+}
 
 /**
  * The dropdown's contents for the line as typed: commands whose names start
  * with what follows the slash. Empty once arguments begin (first space) or
  * when the line isn't a slash line at all.
  */
-export function completions(line: string, commands: SlashCommand[] = COMMANDS): SlashCommand[] {
+export function completions(line: string, commands: SlashCommand[]): SlashCommand[] {
   if (!line.startsWith("/") || line.includes(" ")) return [];
   const prefix = line.slice(1).toLowerCase();
   return commands.filter((c) => c.name.startsWith(prefix));

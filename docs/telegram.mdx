@@ -37,3 +37,7 @@ Three optional keys together turn the trigger from a chatbot into an observer �
 - `allow_silence` — let the agent say nothing. Instruct it in `purpose` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message.
 
 Every run — replied or silent — lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps and tokens.
+
+## Slash commands
+
+The trigger calls `setMyCommands` at startup, so Telegram's `/` menu lists the agent's [slash commands](slash-commands.md) with their descriptions. In groups Telegram addresses commands per-bot (`/status@your_bot`); the trigger strips the suffix before the command is parsed, so both forms work.

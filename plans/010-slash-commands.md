@@ -2,7 +2,7 @@
 
 Operating a deployed agent happens from the outside today: query the status server, read `docker logs`, edit the config and restart. From inside the channel where the agent actually lives, the only thing you can do is talk to the model, which means even "what model are you running?" costs a provider call and gets a model-shaped answer. Small operator actions deserve a deterministic path, and the chat surfaces already have a convention for one: a message that starts with a slash.
 
-Status: design; implementation has not started. Plan 2 excluded slash commands from the MVP scope; this plan is where they come back in.
+Status: implemented, including native registration (phase 3) — Discord application commands with interaction handling, Telegram `setMyCommands`, and Slack `slash_commands` envelopes over Socket Mode. See [docs/slash-commands.md](../docs/slash-commands.md).
 
 ## One interception point covers every channel
 

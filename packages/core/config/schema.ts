@@ -301,6 +301,51 @@ const MemoryConfigSchema = z.strictObject({
   ),
 }).describe("What the agent remembers between events.");
 
+/** Built-in command names a config-defined command may not shadow. */
+const RESERVED_COMMAND_NAMES = ["help", "status", "reset"];
+
+const CommandConfigSchema = z.strictObject({
+  name: z
+    .string()
+    .regex(
+      /^[a-z][a-z0-9_]{0,31}$/,
+      "command names are lowercase letters, digits, and underscores, max 32 chars (the strictest platform rules, so one name registers everywhere)",
+    )
+    .describe(
+      "What operators type after the slash: /standup. Lowercase letters, digits, underscores, max 32 chars — valid on every chat platform.",
+    ),
+  description: z.string().min(3).max(100).describe(
+    "One line shown by /help and in each platform's native command picker (platforms cap this around 100 chars).",
+  ),
+  prompt: z.string().min(1).describe(
+    "The prompt the command runs through the normal agent loop. $ARGS is replaced with whatever follows the command name.",
+  ),
+}).describe("An operator-defined slash command: a named, repeatable prompt.");
+
+const CommandsSchema = z
+  .array(CommandConfigSchema)
+  .superRefine((commands, ctx) => {
+    const seen = new Set<string>();
+    for (const [i, cmd] of commands.entries()) {
+      if (RESERVED_COMMAND_NAMES.includes(cmd.name)) {
+        ctx.addIssue({
+          code: "custom",
+          path: [i, "name"],
+          message: `"${cmd.name}" is a built-in command and cannot be redefined`,
+        });
+      }
+      if (seen.has(cmd.name)) {
+        ctx.addIssue({
+          code: "custom",
+          path: [i, "name"],
+          message: `duplicate command name "${cmd.name}"`,
+        });
+      }
+      seen.add(cmd.name);
+    }
+  })
+  .describe("Operator-defined slash commands, alongside the built-ins /help, /status and /reset.");
+
 const LimitsSchema = z.strictObject({
   max_steps: z.number().int().positive().default(20).describe(
     "Tool-calling iterations (LLM calls) per run. On hitting the cap the agent gets one final " +
@@ -344,6 +389,7 @@ const agentConfigSchema = z.strictObject({
     })
     .optional()
     .describe("Tool sources beyond the natives and skills."),
+  commands: CommandsSchema.optional(),
   permissions: PermissionsSchema.optional(),
   env: z.record(z.string(), z.string()).optional().describe(
     "Env for tools and MCP servers. Values may be ${VAR} references, resolved at startup (env var, then /run/secrets/<VAR>) and scoped per tool.",
@@ -584,6 +630,16 @@ export interface McpServerConfig {
   readonly?: boolean;
 }
 
+/** An operator-defined slash command: a named, repeatable prompt. */
+export interface CommandConfig {
+  /** What operators type after the slash: /standup. Lowercase letters, digits, underscores, max 32 chars. */
+  name: string;
+  /** One line shown by /help and in each platform's native command picker. */
+  description: string;
+  /** The prompt the command runs through the normal agent loop; $ARGS is replaced with the trailing text. */
+  prompt: string;
+}
+
 /** Deny-by-default allowlists. Omitting a list means the agent can touch nothing on that axis. */
 export interface Permissions {
   /** Hosts http_request may reach; *.example.com matches subdomains. */
@@ -636,6 +692,8 @@ export interface AgentConfig {
     /** Tool search: defer MCP tool schemas out of context behind a search_tools tool. */
     search: "auto" | "on" | "off";
   };
+  /** Operator-defined slash commands, alongside the built-ins /help, /status and /reset. */
+  commands?: CommandConfig[];
   /** Deny-by-default permission allowlists. */
   permissions?: Permissions;
   /** Env for tools and MCP servers; values may be ${VAR} references. */

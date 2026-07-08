@@ -62,6 +62,15 @@ export function shouldHandle(
   return true;
 }
 
+/** A Slack slash-command payload (the fields this trigger reads). */
+export interface SlackSlashCommand {
+  command: string;
+  text?: string;
+  user_id: string;
+  channel_id: string;
+  response_url: string;
+}
+
 /** Options for {@linkcode SlackTrigger}. */
 export interface SlackTriggerOptions extends SlackFilterOptions {
   /** Bot token (xoxb-…) — reads channel info, posts replies. */
@@ -171,6 +180,36 @@ export class SlackTrigger implements Trigger {
     await this.#reply(msg, result);
   }
 
+  /**
+   * A Slack slash command (registered in the app config, delivered over
+   * Socket Mode — messages starting with "/" never arrive as message events).
+   * The reply goes through the command's response_url, visible in-channel.
+   */
+  async #handleSlashCommand(
+    cmd: SlackSlashCommand,
+    emit: (event: AgentEvent) => Promise<RunResult>,
+  ) {
+    // The same author gate as messages, before the model is called.
+    if (this.#opts.fromUsers?.length && !this.#opts.fromUsers.includes(cmd.user_id)) return;
+    const text = (cmd.text ?? "").trim();
+    const result = await emit({
+      id: `${cmd.channel_id}:${cmd.command}:${crypto.randomUUID()}`,
+      trigger: this.name,
+      input: `${cmd.command}${text ? ` ${text}` : ""}`,
+      conversationKey: `slack:${cmd.channel_id}`,
+    });
+    const body = (result.reply ?? "").trim() || `(${result.status})`;
+    for (const part of splitMessage(body, LIMIT)) {
+      const res = await fetch(cmd.response_url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ response_type: "in_channel", text: part }),
+      });
+      if (!res.ok) console.error(`slack: slash command reply failed (${res.status})`);
+      await res.body?.cancel();
+    }
+  }
+
   /** Open the Socket Mode connection; matching messages emit events and get replies. */
   async start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
     const auth = await this.#api("auth.test");
@@ -213,6 +252,15 @@ export class SlackTrigger implements Trigger {
               console.error(`slack: handling failed: ${err}`)
             );
           }
+          break;
+        }
+        case "slash_commands": {
+          // Ack immediately — agent runs outlast Slack's 3s window; the real
+          // reply follows via response_url.
+          ws.send(JSON.stringify({ envelope_id: payload.envelope_id }));
+          this.#handleSlashCommand(payload.payload as SlackSlashCommand, emit).catch((err) =>
+            console.error(`slack: slash command handling failed: ${err}`)
+          );
           break;
         }
       }

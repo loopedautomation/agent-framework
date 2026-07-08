@@ -1,5 +1,5 @@
-import { assert } from "@std/assert";
-import { shouldHandle, type TelegramMessage } from "./telegram.ts";
+import { assert, assertEquals } from "@std/assert";
+import { shouldHandle, stripCommandMention, type TelegramMessage } from "./telegram.ts";
 
 const BOT = "looped_bot";
 
@@ -47,4 +47,16 @@ Deno.test("shouldHandle: from_users matches by id or username, drops everyone el
   assert(!shouldHandle(msg({ from: { id: 9, username: "someone" } }), BOT, opts));
   // empty list behaves like no filter
   assert(shouldHandle(msg({ from: { id: 9 } }), BOT, { fromUsers: [] }));
+});
+
+Deno.test("stripCommandMention: removes this bot's suffix from a command", () => {
+  assertEquals(stripCommandMention("/status@my_bot", "my_bot"), "/status");
+  assertEquals(stripCommandMention("/standup@my_bot deploys", "my_bot"), "/standup deploys");
+  assertEquals(stripCommandMention("/status@My_Bot", "my_bot"), "/status"); // case-insensitive
+});
+
+Deno.test("stripCommandMention: leaves other text alone", () => {
+  assertEquals(stripCommandMention("/status@other_bot", "my_bot"), "/status@other_bot");
+  assertEquals(stripCommandMention("/status", "my_bot"), "/status");
+  assertEquals(stripCommandMention("email me a@b.com", "my_bot"), "email me a@b.com");
 });

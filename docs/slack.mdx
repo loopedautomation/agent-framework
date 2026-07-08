@@ -38,3 +38,7 @@ Three optional keys together turn the trigger from a chatbot into an observer �
 - `allow_silence` — let the agent say nothing. Instruct it in `purpose` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message.
 
 Every run — replied or silent — lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps and tokens.
+
+## Slash commands
+
+Slack treats any message starting with `/` as a slash command and never delivers it as a message event, so [commands](slash-commands.md) need one manual step here: add each command (with its description) to your Slack app configuration. They work over Socket Mode with no public URL. The trigger acknowledges the command and posts the agent's reply through the command's response URL when the run finishes.

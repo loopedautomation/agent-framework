@@ -1,4 +1,4 @@
-import type { AgentEvent, RunResult, Trigger } from "@looped/core";
+import type { AgentEvent, CommandSpec, RunResult, Trigger } from "@looped/core";
 import { NO_REPLY, splitMessage } from "./text.ts";
 
 // A deliberately minimal Telegram Bot API client: getMe, getUpdates
@@ -58,6 +58,17 @@ export function shouldHandle(
   return true;
 }
 
+/**
+ * Telegram addresses commands per-bot in groups: the client sends
+ * "/status@my_bot". Strip the suffix so the core parser sees "/status".
+ * (pure, unit-tested)
+ */
+export function stripCommandMention(text: string, botUsername: string): string {
+  const match = text.match(/^(\/[a-z0-9_]+)@(\S+)([\s\S]*)$/i);
+  if (!match || match[2].toLowerCase() !== botUsername.toLowerCase()) return text;
+  return match[1] + match[3];
+}
+
 /** Options for {@linkcode TelegramTrigger}. */
 export interface TelegramTriggerOptions extends TelegramFilterOptions {
   /** Telegram bot token (from @BotFather). */
@@ -66,6 +77,8 @@ export interface TelegramTriggerOptions extends TelegramFilterOptions {
   replyChat?: string;
   /** Suppress the reply when the agent answers with the NO_REPLY sentinel (or nothing). */
   allowSilence?: boolean;
+  /** Slash commands to register via setMyCommands, so clients offer a native picker with descriptions. */
+  commands?: CommandSpec[];
 }
 
 /**
@@ -139,6 +152,21 @@ export class TelegramTrigger implements Trigger {
       throw new Error(`telegram: getMe failed (${res.status}) — check the bot token`);
     }
     const me = (await res.json()).result;
+    if (this.#opts.commands?.length) {
+      // Native registration is cosmetic (autocomplete + descriptions in the
+      // client); the plain-text parser is the real path, so failure only logs.
+      const set = await this.#api("setMyCommands", {
+        commands: this.#opts.commands.map((c) => ({
+          command: c.name,
+          description: c.description,
+        })),
+      });
+      if (!set.ok) {
+        console.error(`telegram: setMyCommands failed (${set.status}): ${await set.text()}`);
+      } else {
+        await set.body?.cancel();
+      }
+    }
     console.log(`telegram trigger connected as @${me.username}`);
     this.#poll(me.username, emit); // long-poll loop runs for the service's lifetime
   }
@@ -167,7 +195,7 @@ export class TelegramTrigger implements Trigger {
           const result = await emit({
             id: String(update.update_id),
             trigger: this.name,
-            input: msg.text!,
+            input: stripCommandMention(msg.text!, botUsername),
             conversationKey: `telegram:${msg.chat.id}`,
           });
           await this.#reply(msg, result);

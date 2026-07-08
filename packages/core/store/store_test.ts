@@ -30,22 +30,6 @@ Deno.test("messages round-trip through a session", () => {
   store.close();
 });
 
-Deno.test("clearSession wipes one conversation's transcript, nothing else", () => {
-  const store = tempStore();
-  const a = store.sessionFor("cli");
-  const b = store.sessionFor("discord:thread:123");
-  store.saveMessages(a, [{ role: "user", content: "hi" }]);
-  store.saveMessages(b, [{ role: "user", content: "other thread" }]);
-
-  assert(store.clearSession("cli"));
-  assertEquals(store.loadMessages(a), []);
-  assertEquals(store.loadMessages(b).length, 1);
-  // Already empty and unknown keys report nothing to clear:
-  assertEquals(store.clearSession("cli"), false);
-  assertEquals(store.clearSession("never-seen"), false);
-  store.close();
-});
-
 Deno.test("runs and audit records land in the trail", () => {
   const store = tempStore();
   const runId = store.recordRun({
@@ -94,5 +78,40 @@ Deno.test("memories persist across keys, independent of session history", () => 
   assert(store.forgetMemory("timezone"));
   assertEquals(store.forgetMemory("timezone"), false);
   assertEquals(store.listMemories().length, 1);
+  store.close();
+});
+
+Deno.test("clearSession wipes one conversation's messages and nothing else", () => {
+  const store = tempStore();
+  const a = store.sessionFor("discord:a");
+  const b = store.sessionFor("discord:b");
+  store.saveMessages(a, [{ role: "user", content: "hi" }]);
+  store.saveMessages(b, [{ role: "user", content: "yo" }]);
+  store.rememberMemory("fact", "survives");
+
+  assert(store.clearSession("discord:a"));
+  assertEquals(store.loadMessages(a), []);
+  assertEquals(store.loadMessages(b).length, 1);
+  assertEquals(store.recallMemory("fact")?.value, "survives");
+
+  assertEquals(store.clearSession("discord:a"), false); // already empty
+  assertEquals(store.clearSession("no-such-key"), false);
+  store.close();
+});
+
+Deno.test("runStats aggregates run count and token totals", () => {
+  const store = tempStore();
+  assertEquals(store.runStats(), { runs: 0, inputTokens: 0, outputTokens: 0 });
+  const run = {
+    trigger: "cli",
+    input: "hi",
+    status: "ok" as const,
+    reply: "hello",
+    steps: 1,
+    startedAt: new Date().toISOString(),
+  };
+  store.recordRun({ ...run, usage: { inputTokens: 10, outputTokens: 5 } });
+  store.recordRun({ ...run, usage: { inputTokens: 7, outputTokens: 3 } });
+  assertEquals(store.runStats(), { runs: 2, inputTokens: 17, outputTokens: 8 });
   store.close();
 });
