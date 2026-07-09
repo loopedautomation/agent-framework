@@ -137,15 +137,46 @@ interface WireResponse {
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
+interface FinalEvent {
+  response: WireResponse;
+  /**
+   * Text accumulated from `response.output_text.delta` events, in stream
+   * order. Some accounts/models return a `response.completed` whose
+   * `output` array is empty even though the model answered — the answer
+   * only ever appears in the incremental delta events. Used as a last-resort
+   * fallback when neither `response.output` nor `reconstructedOutput` yields
+   * any text.
+   */
+  streamedText: string;
+  /**
+   * Output items rebuilt from `response.output_item.done` events (each
+   * carries the fully finalized item — message or function_call — as
+   * `event.item`), ordered by `output_index`. The same broken-account bug
+   * that empties `response.output` can also drop function_call items, and
+   * those have no text delta to fall back on, so this is the fallback for
+   * tool calls (and a secondary fallback for text).
+   */
+  reconstructedOutput: WireOutputItem[];
+}
+
 /**
- * Pull the terminal event out of an SSE stream. The Codex backend only
- * streams; we buffer and read the final `response.completed` payload.
+ * Walk an SSE stream and pull out the terminal `response.completed` payload,
+ * plus everything needed to reconstruct output when that payload's `output`
+ * array is empty (see FinalEvent for why that happens).
  */
-function finalEvent(sse: string): WireResponse {
+function finalEvent(sse: string): FinalEvent {
   let completed: WireResponse | undefined;
+  let streamedText = "";
+  const itemsByIndex = new Map<number, WireOutputItem>();
   for (const line of sse.split("\n")) {
     if (!line.startsWith("data:")) continue;
-    let event: { type?: string; response?: WireResponse };
+    let event: {
+      type?: string;
+      response?: WireResponse;
+      delta?: string;
+      output_index?: number;
+      item?: WireOutputItem;
+    };
     try {
       event = JSON.parse(line.slice(5).trim());
     } catch {
@@ -156,12 +187,40 @@ function finalEvent(sse: string): WireResponse {
         ?.message;
       throw new ProviderError(`codex response failed: ${reason ?? "unknown"}`, "unknown");
     }
+    if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+      streamedText += event.delta;
+    }
+    if (
+      event.type === "response.output_item.done" && event.item &&
+      typeof event.output_index === "number"
+    ) {
+      itemsByIndex.set(event.output_index, event.item);
+    }
     if (event.type === "response.completed" && event.response) completed = event.response;
   }
   if (!completed) {
     throw new ProviderError("codex stream ended without response.completed", "unknown");
   }
-  return completed;
+  const reconstructedOutput = [...itemsByIndex.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, item]) => item);
+  return { response: completed, streamedText, reconstructedOutput };
+}
+
+/** Extract text content and tool calls from a list of Responses API output items. */
+function extractOutput(items: WireOutputItem[]): { content: string; toolCalls: ToolCall[] } {
+  let content = "";
+  const toolCalls: ToolCall[] = [];
+  for (const item of items) {
+    if (item.type === "message") {
+      for (const block of item.content ?? []) {
+        if (block.type === "output_text" && block.text) content += block.text;
+      }
+    } else if (item.type === "function_call" && item.call_id && item.name) {
+      toolCalls.push({ id: item.call_id, name: item.name, arguments: item.arguments ?? "{}" });
+    }
+  }
+  return { content, toolCalls };
 }
 
 /**
@@ -357,19 +416,17 @@ export class CodexProvider implements Provider {
       );
     }
 
-    const response = finalEvent(await res.text());
+    const { response, streamedText, reconstructedOutput } = finalEvent(await res.text());
 
-    let content = "";
-    const toolCalls: ToolCall[] = [];
-    for (const item of response.output ?? []) {
-      if (item.type === "message") {
-        for (const block of item.content ?? []) {
-          if (block.type === "output_text" && block.text) content += block.text;
-        }
-      } else if (item.type === "function_call" && item.call_id && item.name) {
-        toolCalls.push({ id: item.call_id, name: item.name, arguments: item.arguments ?? "{}" });
-      }
+    let { content, toolCalls } = extractOutput(response.output ?? []);
+    // response.completed.output is empty for some accounts even when the
+    // model answered (with content or a tool call) — fall back to items
+    // rebuilt from response.output_item.done, and finally to raw streamed
+    // text if even that reconstruction comes up empty.
+    if (!content && toolCalls.length === 0) {
+      ({ content, toolCalls } = extractOutput(reconstructedOutput));
     }
+    if (!content && toolCalls.length === 0) content = streamedText;
 
     return {
       content,
