@@ -144,6 +144,26 @@ function sseBody(response: unknown): string {
   }\n\n`;
 }
 
+/**
+ * An SSE stream matching the broken-account shape: `response.completed`'s
+ * `output` is empty, but `response.output_item.done` events (which carry the
+ * fully finalized item) fired along the way. `items` are assigned
+ * ascending `output_index`.
+ */
+function sseBodyWithReconstructedItems(
+  response: Record<string, unknown>,
+  items: unknown[],
+): string {
+  const doneEvents = items
+    .map((item, output_index) =>
+      `data: ${JSON.stringify({ type: "response.output_item.done", output_index, item })}\n\n`
+    )
+    .join("");
+  return `data: {"type":"response.created"}\n\n${doneEvents}data: ${
+    JSON.stringify({ type: "response.completed", response: { ...response, output: [] } })
+  }\n\n`;
+}
+
 async function writeCodexAuth(tokens: Record<string, unknown>): Promise<string> {
   const dir = await Deno.makeTempDir();
   const path = `${dir}/auth.json`;
@@ -216,6 +236,70 @@ Deno.test("codex adapter: maps request, auth headers, and parses function calls"
   });
   assertEquals(sent.input[2], { type: "function_call_output", call_id: "c0", output: "ok" });
   assertEquals(sent.tools[0].name, "echo");
+});
+
+Deno.test("codex adapter: reconstructs a tool call when response.completed.output is empty", async () => {
+  const farFuture = Math.floor(Date.now() / 1000) + 3600;
+  const authFile = await writeCodexAuth({
+    access_token: fakeJwt({
+      exp: farFuture,
+      "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" },
+    }),
+    refresh_token: "r1",
+  });
+  const fetchSse = (() =>
+    Promise.resolve(
+      new Response(
+        sseBodyWithReconstructedItems(
+          { status: "completed", usage: { input_tokens: 9, output_tokens: 4 } },
+          [{ type: "function_call", call_id: "c1", name: "echo", arguments: '{"message":"hi"}' }],
+        ),
+        { status: 200 },
+      ),
+    )) as typeof fetch;
+
+  const provider = new CodexProvider({ authFile, fetch: fetchSse });
+  const completion = await provider.complete({
+    model: "gpt-5.5",
+    system: "sys",
+    messages: [{ role: "user", content: "hello" }],
+    tools: [{ name: "echo", description: "d", inputSchema: { type: "object" } }],
+  });
+
+  assertEquals(completion.stopReason, "tool_calls");
+  assertEquals(completion.toolCalls[0], { id: "c1", name: "echo", arguments: '{"message":"hi"}' });
+  assertEquals(completion.content, "");
+});
+
+Deno.test("codex adapter: reconstructs message text from output_item.done when output is empty and no delta streamed", async () => {
+  const farFuture = Math.floor(Date.now() / 1000) + 3600;
+  const authFile = await writeCodexAuth({
+    access_token: fakeJwt({
+      exp: farFuture,
+      "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" },
+    }),
+    refresh_token: "r1",
+  });
+  const fetchSse = (() =>
+    Promise.resolve(
+      new Response(
+        sseBodyWithReconstructedItems(
+          { status: "completed", usage: { input_tokens: 9, output_tokens: 4 } },
+          [{ type: "message", content: [{ type: "output_text", text: "Hello" }] }],
+        ),
+        { status: 200 },
+      ),
+    )) as typeof fetch;
+
+  const provider = new CodexProvider({ authFile, fetch: fetchSse });
+  const completion = await provider.complete({
+    model: "gpt-5.5",
+    system: "sys",
+    messages: [{ role: "user", content: "hi" }],
+  });
+
+  assertEquals(completion.content, "Hello");
+  assertEquals(completion.toolCalls, []);
 });
 
 Deno.test("codex adapter: refreshes an expired token and persists it", async () => {
