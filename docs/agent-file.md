@@ -63,14 +63,18 @@ model:
   # base_url: http://localhost:11434/v1   # any compatible endpoint, e.g. Ollama
   # api_key_env: OPENAI_API_KEY           # names the env var; the key stays out of config
   # small: gpt-5.4-nano                   # for cheap internal calls
-  # fallbacks: [gpt-5.4]                  # tried in order when the primary fails
+  # fallbacks:                            # tried in order when the primary fails
+  #   - gpt-5.4                           # a model id on this provider
+  #   - provider: anthropic               # …or cross to another provider
+  #     id: claude-haiku-5
+  #     api_key_env: ANTHROPIC_API_KEY
 ```
 
 - **`provider`** is a dialect: `openai-compatible` covers OpenAI, Ollama, vLLM, and anything speaking that API; `anthropic` is the native Anthropic API; `codex` runs on an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login`, with no API key involved. Swapping providers is one config line — no provider is load-bearing.
 - **`base_url`** points `openai-compatible` at any endpoint. Local models need no key.
 - **`api_key_env`** names the env var holding the key; the key itself stays out of the config. Defaults to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider.
 - **`small`** is the model for cheap internal calls (the naming ritual, summaries). Defaults to the main `id` — set it to something tiny and these calls round to free.
-- **`fallbacks`** names model ids to try in order when the primary fails — validated today, with the runtime chain still landing ([Models](models.md#when-the-provider-fails)).
+- **`fallbacks`** lists models to try in order when the primary fails. A bare string is a model id on the same provider; the object form (`provider`/`id`/`base_url`/`api_key_env`) can cross to another provider entirely ([Models](models.md#when-the-provider-fails)).
 
 The full model story — dialects, keys, local endpoints, retries — is [Models](models.md).
 

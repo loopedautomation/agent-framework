@@ -9,6 +9,7 @@ export { OpenAICompatibleProvider } from "./openai.ts";
 export { AnthropicProvider } from "./anthropic.ts";
 export { CodexProvider } from "./codex.ts";
 export { type RetryOptions, withRetry } from "./retry.ts";
+export { createFallbackChain, type FallbackAttempt, FallbackProvider } from "./fallback.ts";
 
 /**
  * Build a provider from config. The API key is read from the env var named

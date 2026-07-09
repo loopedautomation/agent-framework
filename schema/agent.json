@@ -45,11 +45,49 @@
           "minLength": 1
         },
         "fallbacks": {
-          "description": "Model ids to fall back to when the primary fails.",
+          "description": "Models to try in order when the primary fails. A bare string is a model id on the primary's provider; the object form can override provider/base_url/api_key_env to cross providers.",
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "openai-compatible",
+                      "anthropic",
+                      "codex"
+                    ],
+                    "description": "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy. codex uses an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login` (no API key)."
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Model identifier, e.g. gpt-5.4-mini or claude-sonnet-5."
+                  },
+                  "base_url": {
+                    "description": "Endpoint override; inherited from the primary model when omitted.",
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "api_key_env": {
+                    "description": "Name of the env var holding the API key; inherited from the primary model when omitted.",
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": false,
+                "description": "A model to fall back to when the primary fails."
+              }
+            ]
           }
         }
       },

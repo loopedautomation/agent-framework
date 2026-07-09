@@ -8,11 +8,28 @@ import { z } from "zod";
 // yaml-language-server modeline. The schema IS the config documentation;
 // don't let the two drift.
 
-const ModelConfigSchema = z.strictObject({
-  provider: z.enum(["openai-compatible", "anthropic", "codex"]).describe(
-    "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy. " +
-      "codex uses an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login` (no API key).",
+const ProviderSchema = z.enum(["openai-compatible", "anthropic", "codex"]).describe(
+  "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy. " +
+    "codex uses an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login` (no API key).",
+);
+
+// A fallback names a model to try when the primary fails. A bare string is
+// shorthand for {id} on the primary's provider; the object form overrides any
+// of provider/base_url/api_key_env and inherits the rest from the primary,
+// which is what lets a fallback cross to a different provider entirely.
+const FallbackModelSchema = z.strictObject({
+  provider: ProviderSchema.optional(),
+  id: z.string().min(1).describe("Model identifier, e.g. gpt-5.4-mini or claude-sonnet-5."),
+  base_url: z.url().optional().describe(
+    "Endpoint override; inherited from the primary model when omitted.",
   ),
+  api_key_env: z.string().min(1).optional().describe(
+    "Name of the env var holding the API key; inherited from the primary model when omitted.",
+  ),
+}).describe("A model to fall back to when the primary fails.");
+
+const ModelConfigSchema = z.strictObject({
+  provider: ProviderSchema,
   id: z.string().min(1).describe("Model identifier, e.g. gpt-5.4-mini or claude-sonnet-5."),
   small: z.string().min(1).optional().describe(
     "Model for cheap internal calls (summaries, compaction, the naming ritual). Defaults to the main model.",
@@ -23,8 +40,9 @@ const ModelConfigSchema = z.strictObject({
   api_key_env: z.string().min(1).optional().describe(
     "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ANTHROPIC_API_KEY per provider.",
   ),
-  fallbacks: z.array(z.string().min(1)).optional().describe(
-    "Model ids to fall back to when the primary fails.",
+  fallbacks: z.array(z.union([z.string().min(1), FallbackModelSchema])).optional().describe(
+    "Models to try in order when the primary fails. A bare string is a model id on the primary's " +
+      "provider; the object form can override provider/base_url/api_key_env to cross providers.",
   ),
 }).describe("Which model runs this agent, and how to reach it.");
 
@@ -234,6 +252,18 @@ const agentConfigSchema = z.strictObject({
 // The _sync checks at the bottom of this file fail to compile if a type
 // drifts from its schema, so the two cannot diverge silently.
 
+/** A model to fall back to when the primary fails; inherits unspecified fields from the primary. */
+export interface FallbackModel {
+  /** Provider dialect; inherited from the primary model when omitted. */
+  provider?: "openai-compatible" | "anthropic" | "codex";
+  /** Model identifier, e.g. gpt-5.4-mini or claude-sonnet-5. */
+  id: string;
+  /** Endpoint override; inherited from the primary model when omitted. */
+  base_url?: string;
+  /** Name of the env var holding the API key; inherited from the primary model when omitted. */
+  api_key_env?: string;
+}
+
 /** The `model` block of an agent config: which model runs the agent, and how to reach it. */
 export interface ModelConfig {
   /**
@@ -249,8 +279,8 @@ export interface ModelConfig {
   base_url?: string;
   /** Name of the env var holding the API key. */
   api_key_env?: string;
-  /** Model ids to fall back to when the primary fails. */
-  fallbacks?: string[];
+  /** Models to try in order when the primary fails. Strings are model ids on the primary's provider. */
+  fallbacks?: (string | FallbackModel)[];
 }
 
 /** A Discord trigger: listen to messages via the gateway. */
@@ -447,6 +477,25 @@ export const DEFAULT_API_KEY_ENV: Record<Exclude<ModelConfig["provider"], "codex
   "openai-compatible": "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
 };
+
+/**
+ * Normalize one `fallbacks` entry into a full ModelConfig. A bare string is a
+ * model id on the primary's provider; an object overrides any of
+ * provider/base_url/api_key_env and inherits the rest from the primary. The
+ * result carries no `fallbacks` or `small` of its own — a fallback is a leaf.
+ */
+export function resolveFallbackModel(
+  primary: ModelConfig,
+  entry: string | FallbackModel,
+): ModelConfig {
+  const fb: FallbackModel = typeof entry === "string" ? { id: entry } : entry;
+  return {
+    provider: fb.provider ?? primary.provider,
+    id: fb.id,
+    base_url: fb.base_url ?? primary.base_url,
+    api_key_env: fb.api_key_env ?? primary.api_key_env,
+  };
+}
 
 // Compile-time drift guards: each fails if the hand-written type and the
 // schema's inferred type stop being mutually assignable.

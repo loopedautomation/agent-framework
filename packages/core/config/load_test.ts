@@ -19,6 +19,37 @@ Deno.test("parses a minimal config and applies defaults", () => {
   assertEquals(config.permissions, undefined); // deny-by-default: nothing granted
 });
 
+const WITH_FALLBACKS = (fallbacks: string) => `
+handle: test-bot
+description: A minimal test agent.
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  fallbacks:
+${fallbacks}
+purpose: You are a test agent.
+`;
+
+Deno.test("parses fallbacks: bare strings and cross-provider objects", () => {
+  const config = parseAgentConfig(WITH_FALLBACKS(
+    `    - gpt-5.4
+    - provider: anthropic
+      id: claude-haiku-5
+      api_key_env: ANTHROPIC_API_KEY`,
+  ));
+  assertEquals(config.model.fallbacks, [
+    "gpt-5.4",
+    { provider: "anthropic", id: "claude-haiku-5", api_key_env: "ANTHROPIC_API_KEY" },
+  ]);
+});
+
+Deno.test("rejects a fallback object with an unknown key", () => {
+  assertThrows(
+    () => parseAgentConfig(WITH_FALLBACKS(`    - id: m\n      modle: typo`)),
+    ConfigError,
+  );
+});
+
 Deno.test("parses the full MVP-shaped config", () => {
   const config = parseAgentConfig(`
 handle: issue-bot

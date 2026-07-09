@@ -1,7 +1,7 @@
 import type { AgentConfig } from "../config/schema.ts";
 import { resolveEnv } from "../config/env.ts";
 import type { Provider } from "../providers/types.ts";
-import { createProvider } from "../providers/mod.ts";
+import { createFallbackChain, createProvider } from "../providers/mod.ts";
 import { type PermissionDecision, PermissionEngine } from "../permissions/engine.ts";
 import type { NativeTool } from "../tools/types.ts";
 import { currentTimeTool } from "../tools/time.ts";
@@ -68,6 +68,7 @@ export class AgentService {
   /** The agent's SQLite store: sessions, runs, audit, identity. */
   readonly store: Store;
   #provider: Provider;
+  #loopProvider: Provider;
   #env: Record<string, string>;
   #extraTools: NativeTool[];
   #triggers: Trigger[] = [];
@@ -79,7 +80,12 @@ export class AgentService {
   /** Resolves env references, opens the store, and builds the provider. */
   constructor(opts: AgentServiceOptions) {
     this.config = opts.config;
+    // The primary provider drives the identity/naming ritual, which honors
+    // model.small. The loop provider adds the fallback chain (when configured)
+    // on top of the primary — scoped to the agent loop so small-model routing
+    // stays untouched. An injected provider (tests) serves both roles.
     this.#provider = opts.provider ?? createProvider(opts.config.model);
+    this.#loopProvider = opts.provider ?? createFallbackChain(opts.config.model);
     // Resolve env references at startup — a missing secret fails here,
     // not mid-run in front of the model.
     this.#env = resolveEnv(opts.config.env);
@@ -169,7 +175,7 @@ export class AgentService {
           memoryPromptSection(memories) +
           identityNote(this.config, identity.name),
       },
-      provider: this.#provider,
+      provider: this.#loopProvider,
       tools: this.#buildTools(engine, (e) => memoryEvents.push(e), (call) => mcpCalls.push(call)),
       input: event.input,
       history,

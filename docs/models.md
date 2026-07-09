@@ -60,7 +60,24 @@ Transient failures retry themselves: rate limits (HTTP 429), overload (5xx), and
 
 A call that still fails ends the run with status `error_provider` and a one-line reason. The *run* fails; the *service* stays up, waiting for the next event — statuses are in the [limits table](agent-file.md#limits).
 
-**`fallbacks`** declares model ids to try in order when the primary fails. The schema accepts and validates the field today, but the runtime chain hasn't landed yet — until it does, a failed primary ends the run `error_provider` regardless of the list.
+## Fallbacks
+
+**`fallbacks`** declares models to try, in order, when the primary fails — each entry only after the primary's own transient retries (above) are exhausted. A run ends `error_provider` only when the primary *and* every fallback have failed.
+
+```yaml
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+  fallbacks:
+    - claude-haiku-5              # a bare string: a model id on this provider
+    - provider: openai-compatible # an object: cross to a different provider
+      id: gpt-5.4-mini
+      api_key_env: OPENAI_API_KEY
+```
+
+A bare string is shorthand for a model id on the primary's provider. The object form overrides any of `provider`, `id`, `base_url`, and `api_key_env`, inheriting the rest from the primary — which is what lets a fallback cross to a different provider. Each fallback's provider is built at startup, so a missing API key on a fallback fails fast (the same startup error as a missing primary key), never mid-run.
+
+Fallbacks apply to the agent's own work. The one-time [naming ritual](agent-file.md#identity-handle-description--and-the-name) always uses the primary (via `small`) and degrades to the handle on failure, so it is unaffected.
 
 ## What is deliberately not configurable
 
