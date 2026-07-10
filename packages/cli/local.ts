@@ -13,6 +13,7 @@ import {
 import { triggersFromConfig } from "@looped/triggers";
 import { printBirthBanner } from "./banner.ts";
 import { accent, dim, ok, warn } from "./style.ts";
+import { tui } from "./tui/tui.ts";
 
 function statusLine(result: RunResult): string {
   return `[${result.status} · ${result.steps} step${result.steps === 1 ? "" : "s"} · ` +
@@ -37,6 +38,7 @@ export async function validate(path: string) {
   }
 }
 
+/** The plain line-at-a-time loop, for piped stdin and dumb terminals. */
 async function repl(config: AgentConfig, service: AgentService, name: string) {
   console.log(
     `${name} (${config.handle}) is listening (model: ${config.model.id}; ctrl-d to exit)`,
@@ -82,5 +84,7 @@ export async function runLocal(path: string) {
   const identity = await service.init();
   if (identity.isNew) printBirthBanner(config.handle, identity.name);
   if (config.triggers?.length) await serve(config, service, identity.name);
-  else await repl(config, service, identity.name);
+  else if (Deno.stdin.isTerminal() && Deno.stdout.isTerminal()) {
+    await tui({ config, service });
+  } else await repl(config, service, identity.name);
 }

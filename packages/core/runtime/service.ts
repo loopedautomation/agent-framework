@@ -8,7 +8,7 @@ import { currentTimeTool } from "../tools/time.ts";
 import { createRunBashTool } from "../tools/bash.ts";
 import { createHttpRequestTool } from "../tools/http.ts";
 import { createReadFileTool, createWriteFileTool } from "../tools/files.ts";
-import { runAgent, type RunResult } from "../loop/loop.ts";
+import { runAgent, type RunEvent, type RunResult } from "../loop/loop.ts";
 import { Store } from "../store/store.ts";
 import { type AgentIdentity, ensureIdentity, identityNote } from "./identity.ts";
 import { createSkillTool, loadSkills, type Skill, skillsPromptSection } from "../skills/skills.ts";
@@ -31,6 +31,12 @@ export interface AgentEvent {
   input: string;
   /** Session identity (e.g. a thread id). Absent → the run has no history. */
   conversationKey?: string;
+}
+
+/** Per-call options for {@linkcode AgentService.handle}. */
+export interface HandleOptions {
+  /** Observes inner-loop progress live — for interactive surfaces like the REPL. */
+  onEvent?: (event: RunEvent) => void;
 }
 
 /** A trigger connects outward, emits events, and carries replies back. */
@@ -146,7 +152,7 @@ export class AgentService {
   }
 
   /** Handle one event end to end: context → inner loop → persist + audit. */
-  async handle(event: AgentEvent): Promise<RunResult> {
+  async handle(event: AgentEvent, opts?: HandleOptions): Promise<RunResult> {
     const identity = await this.init();
     const startedAt = new Date().toISOString();
     const decisions: PermissionDecision[] = [];
@@ -173,6 +179,7 @@ export class AgentService {
       tools: this.#buildTools(engine, (e) => memoryEvents.push(e), (call) => mcpCalls.push(call)),
       input: event.input,
       history,
+      onEvent: opts?.onEvent,
     });
 
     if (sessionId !== undefined) this.store.saveMessages(sessionId, result.messages);

@@ -30,6 +30,22 @@ Deno.test("messages round-trip through a session", () => {
   store.close();
 });
 
+Deno.test("clearSession wipes one conversation's transcript, nothing else", () => {
+  const store = tempStore();
+  const a = store.sessionFor("cli");
+  const b = store.sessionFor("discord:thread:123");
+  store.saveMessages(a, [{ role: "user", content: "hi" }]);
+  store.saveMessages(b, [{ role: "user", content: "other thread" }]);
+
+  assert(store.clearSession("cli"));
+  assertEquals(store.loadMessages(a), []);
+  assertEquals(store.loadMessages(b).length, 1);
+  // Already empty and unknown keys report nothing to clear:
+  assertEquals(store.clearSession("cli"), false);
+  assertEquals(store.clearSession("never-seen"), false);
+  store.close();
+});
+
 Deno.test("runs and audit records land in the trail", () => {
   const store = tempStore();
   const runId = store.recordRun({

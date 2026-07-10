@@ -22,6 +22,18 @@ Your reply must:
 
 Do not attempt any further tool calls.`;
 
+/**
+ * Live progress from a run in flight, for interactive surfaces (the REPL's
+ * run view). Purely observational: the loop never awaits a listener and the
+ * run behaves identically without one.
+ */
+export type RunEvent =
+  | { type: "step"; n: number }
+  /** Interim commentary the model produced alongside tool calls (not the final reply). */
+  | { type: "assistant"; content: string }
+  | { type: "tool_call"; name: string; arguments: string }
+  | { type: "tool_result"; name: string; content: string; durationMs: number };
+
 /** What one run produced. */
 export interface RunResult {
   /** How the run ended. */
@@ -48,6 +60,8 @@ export interface RunOptions {
   input: string;
   /** Prior conversation, e.g. from session memory. */
   history?: Message[];
+  /** Observes progress as the run happens; see {@linkcode RunEvent}. */
+  onEvent?: (event: RunEvent) => void;
 }
 
 /**
@@ -62,6 +76,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     : () => opts.tools as NativeTool[] ?? [];
   const messages: Message[] = [...(opts.history ?? []), { role: "user", content: input }];
   const usage: Usage = { inputTokens: 0, outputTokens: 0 };
+  const emit = opts.onEvent ?? (() => {});
   let steps = 0;
 
   const finish = (status: RunStatus, reply: string): RunResult => ({
@@ -74,6 +89,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
 
   while (steps < config.limits.max_steps) {
     steps++;
+    emit({ type: "step", n: steps });
     // Re-resolve per iteration: a search_tools call in the previous step may
     // have activated tools that must be callable now.
     const tools = resolveTools();
@@ -104,12 +120,21 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     if (completion.toolCalls.length === 0) {
       return finish("ok", completion.content);
     }
+    if (completion.content) emit({ type: "assistant", content: completion.content });
 
     for (const call of completion.toolCalls) {
       const tool = toolsByName.get(call.name);
+      emit({ type: "tool_call", name: call.name, arguments: call.arguments });
+      const startedAt = performance.now();
       const result = tool
         ? await tool.execute(call.arguments)
         : `unknown tool: ${call.name}. Available tools: ${[...toolsByName.keys()].join(", ")}`;
+      emit({
+        type: "tool_result",
+        name: call.name,
+        content: result,
+        durationMs: performance.now() - startedAt,
+      });
       messages.push({ role: "tool", toolCallId: call.id, content: result });
     }
   }

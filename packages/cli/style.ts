@@ -50,6 +50,18 @@ export function bold(text: string): string {
   return colorEnabled ? `\x1b[1m${text}\x1b[22m` : text;
 }
 
+export function italic(text: string): string {
+  return colorEnabled ? `\x1b[3m${text}\x1b[23m` : text;
+}
+
+export function underline(text: string): string {
+  return colorEnabled ? `\x1b[4m${text}\x1b[24m` : text;
+}
+
+export function strike(text: string): string {
+  return colorEnabled ? `\x1b[9m${text}\x1b[29m` : text;
+}
+
 /** A stable gradient color for the i-th agent (foreground log prefixes). */
 export function gradientAt(i: number): string {
   return LOOP_GRADIENT[i % LOOP_GRADIENT.length];

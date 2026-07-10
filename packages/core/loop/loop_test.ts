@@ -8,7 +8,7 @@ import {
 } from "../providers/types.ts";
 import { parseAgentConfig } from "../config/load.ts";
 import { defineTool } from "../tools/types.ts";
-import { runAgent } from "./loop.ts";
+import { runAgent, type RunEvent } from "./loop.ts";
 
 /** A provider that plays back a script of completions and records requests. */
 function scripted(script: Partial<Completion>[]): Provider & { requests: CompletionRequest[] } {
@@ -143,6 +143,42 @@ Deno.test("a capped run falls back to the canned reply when the wrap-up call fai
   const result = await runAgent({ config: CONFIG, provider, tools: [echoTool], input: "loop" });
   assertEquals(result.status, "error_max_steps");
   assertEquals(result.reply, "run ended after 3 steps without a final answer");
+});
+
+Deno.test("onEvent observes the run live: steps, commentary, tool calls and results", async () => {
+  const provider = scripted([
+    {
+      content: "Let me check.",
+      toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"hi"}' }],
+    },
+    { content: "The echo said hi." },
+  ]);
+  const events: RunEvent[] = [];
+  const result = await runAgent({
+    config: CONFIG,
+    provider,
+    tools: [echoTool],
+    input: "echo hi",
+    onEvent: (e) => events.push(e),
+  });
+
+  assertEquals(result.status, "ok");
+  assertEquals(events.map((e) => e.type), [
+    "step",
+    "assistant",
+    "tool_call",
+    "tool_result",
+    "step",
+  ]);
+  const [step1, assistant, call, toolResult] = events;
+  assert(step1.type === "step" && step1.n === 1);
+  assert(assistant.type === "assistant" && assistant.content === "Let me check.");
+  assert(call.type === "tool_call" && call.name === "echo");
+  assert(
+    toolResult.type === "tool_result" &&
+      toolResult.content === "echo: hi" &&
+      toolResult.durationMs >= 0,
+  );
 });
 
 Deno.test("history carries across runs", async () => {

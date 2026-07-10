@@ -60,7 +60,13 @@ export { createRunBashTool, extractExecutables, type RunBashOptions } from "./to
 export { createHttpRequestTool, type HttpRequestOptions } from "./tools/http.ts";
 export { createReadFileTool, createWriteFileTool } from "./tools/files.ts";
 export { SEARCH_AUTO_THRESHOLD, ToolRegistry } from "./tools/registry.ts";
-export { runAgent, type RunOptions, type RunResult, type RunStatus } from "./loop/loop.ts";
+export {
+  runAgent,
+  type RunEvent,
+  type RunOptions,
+  type RunResult,
+  type RunStatus,
+} from "./loop/loop.ts";
 export {
   createSkillTool,
   loadSkills,
@@ -76,6 +82,7 @@ export {
   type AgentEvent,
   AgentService,
   type AgentServiceOptions,
+  type HandleOptions,
   type Trigger,
 } from "./runtime/service.ts";
 
