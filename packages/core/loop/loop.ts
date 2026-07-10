@@ -48,6 +48,12 @@ export interface RunResult {
   steps: number;
   /** Token usage summed over the run's LLM calls. */
   usage: Usage;
+  /**
+   * Input tokens of the run's final LLM call — the context size this
+   * conversation has reached, as the provider reported it. Absent when the
+   * run made no LLM call (built-ins, queue refusals).
+   */
+  contextTokens?: number;
   /** Full transcript including this run — feed back in as `history`. */
   messages: Message[];
 }
@@ -82,12 +88,14 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const usage: Usage = { inputTokens: 0, outputTokens: 0 };
   const emit = opts.onEvent ?? (() => {});
   let steps = 0;
+  let contextTokens: number | undefined;
 
   const finish = (status: RunStatus, reply: string): RunResult => ({
     status,
     reply,
     steps,
     usage,
+    contextTokens,
     messages,
   });
 
@@ -115,6 +123,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
 
     usage.inputTokens += completion.usage.inputTokens;
     usage.outputTokens += completion.usage.outputTokens;
+    contextTokens = completion.usage.inputTokens;
     messages.push({
       role: "assistant",
       content: completion.content,
@@ -156,6 +165,7 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     });
     usage.inputTokens += wrapup.usage.inputTokens;
     usage.outputTokens += wrapup.usage.outputTokens;
+    contextTokens = wrapup.usage.inputTokens;
     if (wrapup.content) {
       messages.push({ role: "assistant", content: wrapup.content });
       return finish("error_max_steps", wrapup.content);

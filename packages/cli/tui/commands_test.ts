@@ -12,7 +12,7 @@ const COMMANDS = replCommands([
 Deno.test("replCommands: agent commands first, then the REPL's own", () => {
   assertEquals(
     COMMANDS.map((c) => c.name),
-    ["help", "status", "reset", "standup", "clear", "exit"],
+    ["help", "status", "reset", "compact", "new", "standup", "clear", "exit"],
   );
   assertEquals(LOCAL_COMMANDS.map((c) => c.name), ["clear", "exit"]);
 });
@@ -24,6 +24,8 @@ Deno.test("replCommands: built-ins get the dropdown's terse wording", () => {
       "List commands and keys",
       "Agent, model and session facts",
       "Clear this conversation's history",
+      "Shrink history into a summary",
+      "Start a fresh conversation",
       "Summarize the last day of activity",
       "Clear the screen",
       "Leave the REPL",

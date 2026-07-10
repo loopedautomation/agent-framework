@@ -24,6 +24,14 @@ export const BUILTIN_COMMANDS: CommandSpec[] = [
     name: "reset",
     description: "Clear this conversation's history. Persistent memories survive.",
   },
+  {
+    name: "compact",
+    description: "Summarize this conversation and replace its history with the summary.",
+  },
+  {
+    name: "new",
+    description: "Start a fresh conversation; the old thread is archived.",
+  },
 ];
 
 /** A recognized slash command, split into name and trailing arguments. */

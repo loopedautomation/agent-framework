@@ -699,7 +699,7 @@
         "additionalProperties": false,
         "description": "An operator-defined slash command: a named, repeatable prompt."
       },
-      "description": "Operator-defined slash commands, alongside the built-ins /help, /status and /reset."
+      "description": "Operator-defined slash commands, alongside the built-ins /help, /status, /reset, /compact and /new."
     },
     "permissions": {
       "type": "object",
@@ -766,6 +766,21 @@
           "default": false,
           "description": "Give the agent remember/recall/list_memories/forget tools backed by its own SQLite file — facts and preferences that survive across conversation keys and restarts, not just one thread's history.",
           "type": "boolean"
+        },
+        "compact_at_tokens": {
+          "default": 50000,
+          "description": "Auto-compact a conversation once its context reaches this many tokens (the input tokens the provider reported for the run's last LLM call). The older history is replaced by a summary written via model.small; the most recent turns survive verbatim. false disables auto-compaction; without scope: thread there is no history, so the threshold is inert.",
+          "anyOf": [
+            {
+              "type": "boolean",
+              "const": false
+            },
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          ]
         }
       },
       "additionalProperties": false,

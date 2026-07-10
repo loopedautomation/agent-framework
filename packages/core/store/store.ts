@@ -67,15 +67,32 @@ export class Store {
     this.#db.close();
   }
 
-  /** Get or create the session for a conversation key (e.g. a Discord thread id). */
+  /** Get or create the active session for a conversation key (e.g. a Discord channel id). */
   sessionFor(conversationKey: string): number {
     this.#db
       .prepare("INSERT OR IGNORE INTO sessions (conversation_key) VALUES (?)")
       .run(conversationKey);
     const row = this.#db
-      .prepare("SELECT id FROM sessions WHERE conversation_key = ?")
+      .prepare("SELECT id FROM sessions WHERE conversation_key = ? AND archived_at IS NULL")
       .get(conversationKey) as { id: number };
     return row.id;
+  }
+
+  /**
+   * Archive the active session for a key (the `/new` command): the history
+   * stays queryable under the old session id, and the next message mints a
+   * fresh session. Returns false when there is no active session with
+   * messages — the conversation was already fresh.
+   */
+  archiveSession(conversationKey: string): boolean {
+    const result = this.#db
+      .prepare(
+        `UPDATE sessions SET archived_at = datetime('now')
+         WHERE conversation_key = ? AND archived_at IS NULL
+           AND EXISTS (SELECT 1 FROM messages m WHERE m.session_id = sessions.id)`,
+      )
+      .run(conversationKey);
+    return result.changes > 0;
   }
 
   /** Replace a session's transcript with the post-run message list. */
@@ -102,7 +119,7 @@ export class Store {
    */
   clearSession(conversationKey: string): boolean {
     const row = this.#db
-      .prepare("SELECT id FROM sessions WHERE conversation_key = ?")
+      .prepare("SELECT id FROM sessions WHERE conversation_key = ? AND archived_at IS NULL")
       .get(conversationKey) as { id: number } | undefined;
     if (!row) return false;
     const result = this.#db.prepare("DELETE FROM messages WHERE session_id = ?").run(row.id);

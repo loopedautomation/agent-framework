@@ -24,6 +24,8 @@ const REPL_DESCRIPTIONS: Record<string, string> = {
   help: "List commands and keys",
   status: "Agent, model and session facts",
   reset: "Clear this conversation's history",
+  compact: "Shrink history into a summary",
+  new: "Start a fresh conversation",
 };
 
 /** Everything the dropdown offers: the agent's commands, then the REPL's own. */

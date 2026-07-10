@@ -5,21 +5,23 @@ description: "Built-in and operator-defined commands that run deterministically,
 
 Operating a deployed agent usually means going around it: query the status server, read `docker logs`, edit the config and restart. From inside the channel where the agent lives, the only thing you can do is talk to the model, so even "what model are you running?" costs a provider call and gets back a model-shaped answer. Small operator actions deserve a deterministic path, and chat surfaces already have a convention for one: a message that starts with a slash.
 
-A recognized command is intercepted before the session loads and before any provider call. It runs its handler, produces a result with zero steps and zero tokens, and rides the normal reply path back through whichever trigger delivered it. This means commands work the same on Discord, Slack, Telegram, the webhook trigger and the REPL, with no per-surface behavior to learn.
+A recognized command is intercepted before the session loads and before any provider call. It runs its handler and rides the normal reply path back through whichever trigger delivered it. This means commands work the same on Discord, Slack, Telegram, the webhook trigger and the REPL, with no per-surface behavior to learn. Almost every built-in answers deterministically with zero steps and zero tokens; the one exception is `/compact`, which spends a single model call to write the summary it replaces the history with.
 
 Parsing is strict on purpose. The message has to be a `/` followed by an exact known command name; everything else falls through to the model untouched, so a pasted file path or a conversational `/shrug` never gets eaten.
 
 ## Built-ins
 
-Every agent answers three commands with no configuration:
+Every agent answers five commands with no configuration:
 
 | Command | What it does |
 | --- | --- |
 | `/help` | List the commands this agent responds to, including your config-defined ones with their descriptions. |
 | `/status` | Report the agent's identity, model, uptime, and run totals. The same facts the [status server](docker-run.md) exposes, delivered where you already are. |
 | `/reset` | Clear the conversation history for the thread it was typed in. Persistent memories survive. |
+| `/compact` | Summarize the conversation and replace its history with the summary plus the most recent turns. The one built-in that costs a model call. See [Memory](memory.md#compaction). |
+| `/new` | Start a fresh conversation under the same channel or thread. The old history stays archived in the agent's data volume. |
 
-`/reset` is scoped to one conversation key, so resetting a Discord channel touches nothing else. It only applies when [`memory.scope: thread`](memory.md) is on; an agent that keeps no history says so and does nothing.
+`/reset`, `/compact` and `/new` are scoped to one conversation key, so running them in a Discord channel touches nothing else. They only apply when [`memory.scope: thread`](memory.md) is on; an agent that keeps no history says so and does nothing. The difference between the three is what happens to the transcript: `/reset` deletes it, `/compact` shrinks it and keeps the conversation going, and `/new` retires it and starts over.
 
 ## Config-defined commands
 
@@ -52,7 +54,7 @@ Registration is cosmetic: the plain-text parser is the real path, and a failed r
 
 ## Who gets to run them
 
-A command is admitted by the same filters as any other message: `from_users` on the chat triggers. Within that audience there is no further gate, which is fine for `/help` and `/status` and worth naming for `/reset`: anyone the trigger admits can wipe the thread's history. The blast area is one conversation's context, persistent memories survive, and every command execution lands in the [audit trail](docker-run.md) as a `command` event recording who ran what.
+A command is admitted by the same filters as any other message: `from_users` on the chat triggers. Within that audience there is no further gate, which is fine for `/help` and `/status` and worth naming for the history commands: anyone the trigger admits can wipe a thread's history with `/reset`, rewrite it with `/compact` or rotate it with `/new`. The blast area is one conversation's context, persistent memories survive, and every command execution lands in the [audit trail](docker-run.md) as a `command` event recording who ran what.
 
 ## What this doesn't do
 
