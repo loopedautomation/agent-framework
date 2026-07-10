@@ -92,6 +92,20 @@ export class Store {
     }
   }
 
+  /**
+   * Clear a conversation's transcript (the `/reset` command). Persistent
+   * memories are untouched. Returns false when the key has no session or
+   * the session was already empty.
+   */
+  clearSession(conversationKey: string): boolean {
+    const row = this.#db
+      .prepare("SELECT id FROM sessions WHERE conversation_key = ?")
+      .get(conversationKey) as { id: number } | undefined;
+    if (!row) return false;
+    const result = this.#db.prepare("DELETE FROM messages WHERE session_id = ?").run(row.id);
+    return result.changes > 0;
+  }
+
   /** Load a session's transcript in order. */
   loadMessages(sessionId: number): Message[] {
     const rows = this.#db
