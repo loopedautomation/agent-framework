@@ -99,6 +99,56 @@ Deno.test("/reset without a conversation says there is nothing to reset", async 
   await service.stop();
 });
 
+Deno.test("/new archives the thread and the conversation restarts clean", async () => {
+  const dataDir = await Deno.makeTempDir();
+  const { provider, inputs } = recordingProvider();
+  const service = new AgentService({ config: CONFIG, provider, dataDir });
+
+  await service.handle({ id: "e1", trigger: "cli", input: "hi", conversationKey: "discord:a" });
+  const oldSession = service.store.sessionFor("discord:a");
+
+  const fresh = await service.handle({
+    id: "e2",
+    trigger: "cli",
+    input: "/new",
+    conversationKey: "discord:a",
+  });
+  assertStringIncludes(fresh.reply, "Fresh conversation started");
+
+  // The next run starts with no history, while the old transcript survives
+  // under the archived session id.
+  const before = inputs.length;
+  await service.handle({ id: "e3", trigger: "cli", input: "again", conversationKey: "discord:a" });
+  assertEquals(inputs.length, before + 1);
+  const newSession = service.store.sessionFor("discord:a");
+  assert(newSession !== oldSession);
+  assertEquals(service.store.loadMessages(newSession).length, 2); // just the new exchange
+  assertEquals(service.store.loadMessages(oldSession).length, 2); // untouched
+
+  await service.stop();
+});
+
+Deno.test("/new twice in a row admits there is nothing to archive", async () => {
+  const dataDir = await Deno.makeTempDir();
+  const { provider } = recordingProvider();
+  const service = new AgentService({ config: CONFIG, provider, dataDir });
+
+  await service.handle({ id: "e1", trigger: "cli", input: "hi", conversationKey: "k" });
+  await service.handle({ id: "e2", trigger: "cli", input: "/new", conversationKey: "k" });
+  const again = await service.handle({
+    id: "e3",
+    trigger: "cli",
+    input: "/new",
+    conversationKey: "k",
+  });
+  assertStringIncludes(again.reply, "Already a fresh conversation");
+
+  const sessionless = await service.handle({ id: "e4", trigger: "cli", input: "/new" });
+  assertStringIncludes(sessionless.reply, "Nothing to start over");
+
+  await service.stop();
+});
+
 Deno.test("config-defined command substitutes $ARGS and runs the loop", async () => {
   const dataDir = await Deno.makeTempDir();
   const { provider, inputs } = recordingProvider();

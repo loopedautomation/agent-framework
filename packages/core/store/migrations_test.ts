@@ -82,6 +82,42 @@ Deno.test("a failed migration rolls back and keeps the version", () => {
   db.close();
 });
 
+Deno.test("002: a populated 001 database rebuilds sessions without losing anything", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON");
+  migrate(db, MIGRATIONS.slice(0, 1));
+  db.exec(`
+INSERT INTO sessions (conversation_key) VALUES ('discord:1'), ('discord:2');
+INSERT INTO messages (session_id, seq, message_json) VALUES (1, 0, '{}'), (2, 0, '{}');
+INSERT INTO runs (session_id, trigger, input, status, reply, steps,
+  input_tokens, output_tokens, started_at)
+  VALUES (2, 'cli', 'hi', 'ok', 'yo', 1, 10, 5, datetime('now'));
+`);
+
+  migrate(db);
+  // Ids survived the rebuild, so messages and runs still point at their sessions.
+  const keys = db
+    .prepare("SELECT id, conversation_key, archived_at FROM sessions ORDER BY id")
+    .all() as { id: number; conversation_key: string; archived_at: string | null }[];
+  assertEquals(keys.map((r) => [r.id, r.conversation_key, r.archived_at]), [
+    [1, "discord:1", null],
+    [2, "discord:2", null],
+  ]);
+  assertEquals(db.prepare("PRAGMA foreign_key_check").all(), []);
+  // Enforcement is back on after migrate() returns.
+  assertEquals(
+    (db.prepare("PRAGMA foreign_keys").get() as { foreign_keys: number }).foreign_keys,
+    1,
+  );
+  // Uniqueness now lives in the partial index: a second active row per key
+  // is refused, but archiving frees the key up.
+  const index = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'sessions_active_key'")
+    .get();
+  assert(index);
+  db.close();
+});
+
 Deno.test("a database from a newer build is refused", () => {
   const db = new DatabaseSync(":memory:");
   db.exec(`PRAGMA user_version = ${MIGRATIONS.length + 1}`);

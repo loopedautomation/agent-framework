@@ -68,6 +68,33 @@ CREATE TABLE IF NOT EXISTS memories (
 `);
     },
   },
+  {
+    id: "002_archivable_sessions",
+    // /new archives the active session and lets the same conversation key
+    // mint a fresh one, so uniqueness moves from the column to a partial
+    // index over active sessions only. SQLite can't drop an inline UNIQUE,
+    // hence the rebuild; the runner has foreign keys off while this runs.
+    up(db) {
+      db.exec(`
+CREATE TABLE sessions_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_key TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  archived_at TEXT
+);
+INSERT INTO sessions_new (id, conversation_key, created_at)
+  SELECT id, conversation_key, created_at FROM sessions;
+DROP TABLE sessions;
+ALTER TABLE sessions_new RENAME TO sessions;
+CREATE UNIQUE INDEX sessions_active_key
+  ON sessions (conversation_key) WHERE archived_at IS NULL;
+`);
+      const violations = db.prepare("PRAGMA foreign_key_check").all();
+      if (violations.length > 0) {
+        throw new Error("sessions rebuild left dangling references");
+      }
+    },
+  },
 ];
 
 /**
@@ -87,17 +114,26 @@ export function migrate(db: DatabaseSync, migrations: Migration[] = MIGRATIONS) 
         `${migrations.length}; it was likely written by a newer version of the framework`,
     );
   }
-  for (let i = version; i < migrations.length; i++) {
-    const migration = migrations[i];
-    db.exec("BEGIN");
-    try {
-      migration.up(db);
-      db.exec(`PRAGMA user_version = ${i + 1}`);
-      db.exec("COMMIT");
-    } catch (err) {
-      db.exec("ROLLBACK");
-      throw new Error(`migration ${migration.id} failed`, { cause: err });
+  // Table rebuilds (002's sessions rewrite) DROP and re-create tables that
+  // other tables reference; that only works with enforcement off, and SQLite
+  // requires the switch outside the transaction. Migrations that rebuild
+  // check foreign_key_check themselves before committing.
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    for (let i = version; i < migrations.length; i++) {
+      const migration = migrations[i];
+      db.exec("BEGIN");
+      try {
+        migration.up(db);
+        db.exec(`PRAGMA user_version = ${i + 1}`);
+        db.exec("COMMIT");
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw new Error(`migration ${migration.id} failed`, { cause: err });
+      }
     }
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
   }
 }
 

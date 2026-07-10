@@ -299,10 +299,17 @@ const MemoryConfigSchema = z.strictObject({
     "Give the agent remember/recall/list_memories/forget tools backed by its own SQLite file — " +
       "facts and preferences that survive across conversation keys and restarts, not just one thread's history.",
   ),
+  compact_at_tokens: z.union([z.literal(false), z.number().int().positive()]).default(50_000)
+    .describe(
+      "Auto-compact a conversation once its context reaches this many tokens (the input tokens " +
+        "the provider reported for the run's last LLM call). The older history is replaced by a " +
+        "summary written via model.small; the most recent turns survive verbatim. false disables " +
+        "auto-compaction; without scope: thread there is no history, so the threshold is inert.",
+    ),
 }).describe("What the agent remembers between events.");
 
 /** Built-in command names a config-defined command may not shadow. */
-const RESERVED_COMMAND_NAMES = ["help", "status", "reset"];
+const RESERVED_COMMAND_NAMES = ["help", "status", "reset", "compact", "new"];
 
 const CommandConfigSchema = z.strictObject({
   name: z
@@ -344,7 +351,9 @@ const CommandsSchema = z
       seen.add(cmd.name);
     }
   })
-  .describe("Operator-defined slash commands, alongside the built-ins /help, /status and /reset.");
+  .describe(
+    "Operator-defined slash commands, alongside the built-ins /help, /status, /reset, /compact and /new.",
+  );
 
 const LimitsSchema = z.strictObject({
   max_steps: z.number().int().positive().default(20).describe(
@@ -667,6 +676,13 @@ export interface MemoryConfig {
   scope: "thread" | "none";
   /** Give the agent remember/recall/list_memories/forget tools, backed by its own SQLite file. */
   persistent: boolean;
+  /**
+   * Auto-compact a conversation once its context reaches this many tokens (the input tokens the
+   * provider reported for the run's last LLM call). The older history is replaced by a summary
+   * written via model.small; the most recent turns survive verbatim. false disables
+   * auto-compaction; without scope: thread there is no history, so the threshold is inert.
+   */
+  compact_at_tokens: number | false;
 }
 
 /** Per-run budgets. */
@@ -711,7 +727,7 @@ export interface AgentConfig {
     /** Tool search: defer MCP tool schemas out of context behind a search_tools tool. */
     search: "auto" | "on" | "off";
   };
-  /** Operator-defined slash commands, alongside the built-ins /help, /status and /reset. */
+  /** Operator-defined slash commands, alongside the built-ins /help, /status, /reset, /compact and /new. */
   commands?: CommandConfig[];
   /** Deny-by-default permission allowlists. */
   permissions?: Permissions;

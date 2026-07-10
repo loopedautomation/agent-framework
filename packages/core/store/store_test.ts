@@ -99,6 +99,40 @@ Deno.test("clearSession wipes one conversation's messages and nothing else", () 
   store.close();
 });
 
+Deno.test("archiveSession retires the thread and the key mints a fresh one", () => {
+  const store = tempStore();
+  const first = store.sessionFor("discord:chan");
+  store.saveMessages(first, [{ role: "user", content: "hi" }]);
+
+  assert(store.archiveSession("discord:chan"));
+  const second = store.sessionFor("discord:chan");
+  assert(first !== second);
+  assertEquals(store.loadMessages(second), []);
+  // The archived transcript is still there under the old id.
+  assertEquals(store.loadMessages(first).length, 1);
+  store.close();
+});
+
+Deno.test("archiveSession is honest about having nothing to archive", () => {
+  const store = tempStore();
+  assertEquals(store.archiveSession("no-such-key"), false);
+  const empty = store.sessionFor("fresh");
+  assertEquals(store.archiveSession("fresh"), false); // session exists, no messages
+  assertEquals(store.sessionFor("fresh"), empty); // and stays the active one
+  store.close();
+});
+
+Deno.test("clearSession leaves archived transcripts alone", () => {
+  const store = tempStore();
+  const old = store.sessionFor("k");
+  store.saveMessages(old, [{ role: "user", content: "history" }]);
+  store.archiveSession("k");
+
+  assertEquals(store.clearSession("k"), false); // the fresh session is empty
+  assertEquals(store.loadMessages(old).length, 1);
+  store.close();
+});
+
 Deno.test("runStats aggregates run count and token totals", () => {
   const store = tempStore();
   assertEquals(store.runStats(), { runs: 0, inputTokens: 0, outputTokens: 0 });

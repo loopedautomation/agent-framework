@@ -32,6 +32,33 @@ Deno.test("limits: concurrency fields parse, keep sibling defaults, and reject z
   );
 });
 
+Deno.test("memory: compact_at_tokens defaults on, takes a value, and false disables", () => {
+  assertEquals(parseAgentConfig(MINIMAL).memory, undefined); // no memory block, no field
+  const defaulted = parseAgentConfig(MINIMAL + "memory:\n  scope: thread\n");
+  assertEquals(defaulted.memory?.compact_at_tokens, 50_000);
+  const tuned = parseAgentConfig(MINIMAL + "memory:\n  scope: thread\n  compact_at_tokens: 8000\n");
+  assertEquals(tuned.memory?.compact_at_tokens, 8_000);
+  const off = parseAgentConfig(MINIMAL + "memory:\n  scope: thread\n  compact_at_tokens: false\n");
+  assertEquals(off.memory?.compact_at_tokens, false);
+  assertThrows(
+    () => parseAgentConfig(MINIMAL + "memory:\n  scope: thread\n  compact_at_tokens: 0\n"),
+    ConfigError,
+  );
+});
+
+Deno.test("config commands cannot shadow the compaction built-ins", () => {
+  for (const name of ["compact", "new"]) {
+    assertThrows(
+      () =>
+        parseAgentConfig(
+          MINIMAL + `commands:\n  - name: ${name}\n    description: shadowing\n    prompt: hi\n`,
+        ),
+      ConfigError,
+      "built-in",
+    );
+  }
+});
+
 Deno.test("parses the full MVP-shaped config", () => {
   const config = parseAgentConfig(`
 handle: issue-bot

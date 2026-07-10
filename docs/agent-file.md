@@ -69,7 +69,7 @@ model:
 - **`provider`** is a dialect: `openai-compatible` covers OpenAI, Ollama, vLLM, and anything speaking that API; `anthropic` is the native Anthropic API; `codex` runs on an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login`, with no API key involved. Swapping providers is one config line — no provider is load-bearing.
 - **`base_url`** points `openai-compatible` at any endpoint. Local models need no key.
 - **`api_key_env`** names the env var holding the key; the key itself stays out of the config. Defaults to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider.
-- **`small`** is the model for cheap internal calls (the naming ritual, summaries). Defaults to the main `id` — set it to something tiny and these calls round to free.
+- **`small`** is the model for cheap internal calls (the naming ritual, [compaction](memory.md#compaction) summaries). Defaults to the main `id` — set it to something tiny and these calls round to free.
 - **`fallbacks`** names model ids to try in order when the primary fails — validated today, with the runtime chain still landing ([Models](models.md#when-the-provider-fails)).
 
 The full model story — dialects, keys, local endpoints, retries — is [Models](models.md).
@@ -78,11 +78,12 @@ The full model story — dialects, keys, local endpoints, retries — is [Models
 
 ```yaml
 memory:
-  scope: thread       # default: none
-  persistent: true    # default: false
+  scope: thread             # default: none
+  persistent: true          # default: false
+  compact_at_tokens: 50000  # default: 50000; false disables
 ```
 
-`none` (the default) starts every run fresh. `thread` persists conversation history per conversation key — the chat channel or thread (Discord, Slack, Telegram), the webhook caller's `conversation_id`, or the REPL session — so follow-ups work ("make it weekly instead"). `persistent: true` gives the agent `remember`/`recall`/`list_memories`/`forget` tools — facts that survive across conversation keys and container restarts, not just one thread's transcript. Both live in the agent's own SQLite file, nowhere else, and compose freely. The full story, including what the model sees in its system prompt and how it's audited, is in [Memory](memory.md).
+`none` (the default) starts every run fresh. `thread` persists conversation history per conversation key — the chat channel or thread (Discord, Slack, Telegram), the webhook caller's `conversation_id`, or the REPL session — so follow-ups work ("make it weekly instead"). `persistent: true` gives the agent `remember`/`recall`/`list_memories`/`forget` tools — facts that survive across conversation keys and container restarts, not just one thread's transcript. Both live in the agent's own SQLite file, nowhere else, and compose freely. `compact_at_tokens` keeps a long thread from growing without bound: once a conversation's context reaches the threshold, the older turns are folded into a model-written summary and the recent ones stay verbatim. The full story, including what the model sees in its system prompt and how it's audited, is in [Memory](memory.md).
 
 ## Limits
 

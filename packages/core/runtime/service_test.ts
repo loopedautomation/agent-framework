@@ -4,32 +4,42 @@
 // across conversations they parallelize up to limits.concurrent_runs, and a
 // full queue refuses immediately with an audit row.
 import { assert, assertEquals } from "@std/assert";
-import type { Completion, CompletionRequest, Provider } from "../providers/types.ts";
+import {
+  type Completion,
+  type CompletionRequest,
+  type Provider,
+  ProviderError,
+} from "../providers/types.ts";
 import { parseAgentConfig } from "../config/load.ts";
+import { COMPACTION_MARKER, COMPACTION_PROMPT } from "../loop/compact.ts";
 import { type AgentEvent, AgentService } from "./service.ts";
 
-// Every complete() blocks until the test releases it, oldest first.
+// Every complete() blocks until the test releases (or fails) it, oldest first.
 class GatedProvider implements Provider {
   id = "gated";
   calls: CompletionRequest[] = [];
-  #pending: Array<(c: Completion) => void> = [];
+  #pending: Array<{ resolve: (c: Completion) => void; reject: (err: Error) => void }> = [];
 
   complete(req: CompletionRequest): Promise<Completion> {
     this.calls.push(req);
-    return new Promise((resolve) => this.#pending.push(resolve));
+    return new Promise((resolve, reject) => this.#pending.push({ resolve, reject }));
   }
 
   release(content: string) {
-    this.#pending.shift()!({
+    this.#pending.shift()!.resolve({
       content,
       toolCalls: [],
       stopReason: "end",
       usage: { inputTokens: 10, outputTokens: 5 },
     });
   }
+
+  fail(message: string) {
+    this.#pending.shift()!.reject(new ProviderError(message, "overloaded"));
+  }
 }
 
-function makeConfig(limitsYaml = "") {
+function makeConfig(limitsYaml = "", memoryYaml = "memory:\n  scope: thread") {
   return parseAgentConfig(`
 handle: concurrency-bot
 description: concurrency test agent
@@ -37,15 +47,14 @@ model:
   provider: openai-compatible
   id: test-model
 purpose: You reply tersely.
-memory:
-  scope: thread
+${memoryYaml}
 ${limitsYaml}`);
 }
 
-async function makeService(limitsYaml = "") {
+async function makeService(limitsYaml = "", memoryYaml?: string) {
   const provider = new GatedProvider();
   const service = new AgentService({
-    config: makeConfig(limitsYaml),
+    config: makeConfig(limitsYaml, memoryYaml),
     provider,
     dataDir: await Deno.makeTempDir(),
   });
@@ -166,5 +175,149 @@ Deno.test("service: a serial lane holds one running and one waiting, and skips t
   assertEquals((await p1).status, "ok");
   assertEquals((await p2).status, "ok");
   assertEquals(service.store.recentRuns().length, 2);
+  await service.stop();
+});
+
+// --- Compaction (/compact and memory.compact_at_tokens) ---
+
+/** Run `count` full exchanges through one conversation, releasing each. */
+async function exchange(
+  service: AgentService,
+  provider: GatedProvider,
+  count: number,
+  key = "k",
+) {
+  for (let i = 1; i <= count; i++) {
+    const p = service.handle(event(String(i), `msg ${i}`, { conversationKey: key }));
+    await until(() => provider.calls.length >= i, `run ${i} to start`);
+    provider.release(`reply ${i}`);
+    await p;
+  }
+}
+
+Deno.test("service: /compact folds older turns into a summary and keeps the recent ones", async () => {
+  const { service, provider } = await makeService();
+  await exchange(service, provider, 3);
+
+  const p = service.handle(event("c", "/compact", { conversationKey: "k" }));
+  await until(() => provider.calls.length === 4, "the summarize call");
+  // The summarize call: the head plus the compaction prompt, no tools.
+  const call = provider.calls[3];
+  assertEquals(call.tools, undefined);
+  assertEquals(call.messages.at(-1)?.content, COMPACTION_PROMPT);
+  assertEquals(call.messages.map((m) => m.content).slice(0, 2), ["msg 1", "reply 1"]);
+  provider.release("the summary");
+
+  const result = await p;
+  assertEquals(result.status, "ok");
+  assertEquals(result.steps, 1);
+  assertEquals(result.usage, { inputTokens: 10, outputTokens: 5 });
+  assert(result.reply.includes("Compacted 6 messages"));
+
+  const messages = service.store.loadMessages(service.store.sessionFor("k"));
+  assertEquals(messages.map((m) => m.content), [
+    COMPACTION_MARKER,
+    "the summary",
+    "msg 2",
+    "reply 2",
+    "msg 3",
+    "reply 3",
+  ]);
+  await service.stop();
+});
+
+Deno.test("service: /compact declines politely when there is nothing to do", async () => {
+  const { service, provider } = await makeService();
+
+  const empty = await service.handle(event("c1", "/compact", { conversationKey: "k" }));
+  assert(empty.reply.includes("no history to compact"));
+
+  await exchange(service, provider, 2); // both turns fit the kept tail
+  const nothingNew = await service.handle(event("c2", "/compact", { conversationKey: "k" }));
+  assert(nothingNew.reply.includes("Nothing new to compact"));
+
+  const sessionless = await service.handle(event("c3", "/compact"));
+  assert(sessionless.reply.includes("keeps no conversation history"));
+
+  assertEquals(provider.calls.length, 2); // only the exchanges reached the model
+  await service.stop();
+});
+
+Deno.test("service: a failed /compact reports the error and leaves history alone", async () => {
+  const { service, provider } = await makeService();
+  await exchange(service, provider, 3);
+
+  const p = service.handle(event("c", "/compact", { conversationKey: "k" }));
+  await until(() => provider.calls.length === 4, "the summarize call");
+  provider.fail("model went away");
+
+  const result = await p;
+  assertEquals(result.status, "error_provider");
+  assert(result.reply.includes("History is unchanged"));
+  assertEquals(service.store.loadMessages(service.store.sessionFor("k")).length, 6);
+  await service.stop();
+});
+
+Deno.test("service: auto-compaction fires past the threshold, after the reply", async () => {
+  // GatedProvider reports 10 input tokens per call; threshold 6 crosses on
+  // every run, but the first two have nothing outside the kept tail.
+  const { service, provider } = await makeService(
+    "",
+    "memory:\n  scope: thread\n  compact_at_tokens: 6",
+  );
+  await exchange(service, provider, 2);
+
+  const p3 = service.handle(event("3", "msg 3", { conversationKey: "k" }));
+  await until(() => provider.calls.length === 3, "run 3 to start");
+  provider.release("reply 3");
+  await until(() => provider.calls.length === 4, "the auto summarize call");
+  provider.release("auto summary");
+
+  const result = await p3;
+  assertEquals(result.reply, "reply 3"); // the sender sees the run's reply, not the compaction
+
+  const messages = service.store.loadMessages(service.store.sessionFor("k"));
+  assertEquals(messages[0].content, COMPACTION_MARKER);
+  assertEquals(messages[1].content, "auto summary");
+  assertEquals(messages.length, 6);
+
+  // The compaction is its own run row (the spend ledger) plus an audit row.
+  const runs = service.store.recentRuns();
+  assertEquals(runs.length, 4);
+  assertEquals(runs[0].trigger, "compaction");
+  assertEquals(runs[0].input_tokens, 10);
+  const audit = service.store.recentAudit().filter((a) => a.kind === "compaction");
+  assertEquals(audit.length, 1);
+  await service.stop();
+});
+
+Deno.test("service: auto-compaction leaves a freshly compacted thread alone", async () => {
+  const { service, provider } = await makeService(
+    "",
+    "memory:\n  scope: thread\n  compact_at_tokens: 6",
+  );
+  // Seed a thread that is already just a marker + summary pair.
+  service.store.saveMessages(service.store.sessionFor("k"), [
+    { role: "user", content: COMPACTION_MARKER },
+    { role: "assistant", content: "old summary" },
+  ]);
+
+  const p = service.handle(event("1", "msg 1", { conversationKey: "k" }));
+  await until(() => provider.calls.length === 1, "the run to start");
+  provider.release("reply 1");
+  await p;
+  await tick();
+  assertEquals(provider.calls.length, 1); // over threshold, but nothing outside the tail
+  await service.stop();
+});
+
+Deno.test("service: compact_at_tokens false never auto-compacts", async () => {
+  const { service, provider } = await makeService(
+    "",
+    "memory:\n  scope: thread\n  compact_at_tokens: false",
+  );
+  await exchange(service, provider, 4);
+  await tick();
+  assertEquals(provider.calls.length, 4); // one call per run, none for compaction
   await service.stop();
 });

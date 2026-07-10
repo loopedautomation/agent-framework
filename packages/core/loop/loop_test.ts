@@ -68,6 +68,19 @@ Deno.test("runs tool call then final answer", async () => {
   assertEquals(provider.requests[0].tools?.[0].name, "echo");
 });
 
+Deno.test("contextTokens reports the final call's input tokens, not the sum", async () => {
+  const provider = scripted([
+    {
+      toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"hi"}' }],
+      usage: { inputTokens: 100, outputTokens: 10 },
+    },
+    { content: "done", usage: { inputTokens: 250, outputTokens: 10 } },
+  ]);
+  const result = await runAgent({ config: CONFIG, provider, tools: [echoTool], input: "go" });
+  assertEquals(result.usage.inputTokens, 350);
+  assertEquals(result.contextTokens, 250);
+});
+
 Deno.test("invalid tool arguments become a self-repair message, not a crash", async () => {
   const provider = scripted([
     { toolCalls: [{ id: "c1", name: "echo", arguments: "{not json" }] },
