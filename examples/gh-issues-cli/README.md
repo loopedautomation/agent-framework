@@ -1,6 +1,6 @@
 # Deploying gh-issues-cli
 
-Goal: a Discord bot that turns messages in `#issues` into GitHub issues and replies with the link. Budget ~30 minutes; no framework knowledge needed. Here the agent works through the `gh` CLI and a [skill](../../skills/gh-issues.md); the sibling [`gh-issues-mcp`](../gh-issues-mcp/) does the same job through the GitHub MCP server.
+Goal: a Discord bot that turns messages in `#issues` into GitHub issues and replies with the link. Budget ~30 minutes; no framework knowledge needed. The agent works through the `gh` CLI and a [skill](../../skills/gh-issues.md).
 
 ## What you need before starting
 
