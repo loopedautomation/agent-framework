@@ -6,7 +6,7 @@
 //
 // Design and the honest edges: docs/permission-model.md and plans/006-security.md.
 
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { PermissionEngine } from "./engine.ts";
 import { createRunBashTool, extractExecutables } from "../tools/bash.ts";
 import { createHttpRequestTool } from "../tools/http.ts";
@@ -218,6 +218,134 @@ Deno.test("security/path: write inside the allowlist succeeds, outside is denied
     assert(denied.includes("permission denied"));
   } finally {
     await Deno.remove(dir, { recursive: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Symlinks: an allowed path must lead where it claims to (issue #87).
+// ---------------------------------------------------------------------------
+
+/** An allowed root, a directory the agent must never touch, and a secret in it. */
+async function twoRoots() {
+  const root = await Deno.makeTempDir();
+  const outside = await Deno.makeTempDir();
+  await Deno.writeTextFile(`${outside}/secret.txt`, "TOP SECRET");
+  const cleanup = async () => {
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(outside, { recursive: true });
+  };
+  return { root, outside, cleanup };
+}
+
+Deno.test("security/symlink: a link out of the root cannot be read through", async () => {
+  const { root, outside, cleanup } = await twoRoots();
+  try {
+    await Deno.symlink(outside, `${root}/escape`);
+    const tool = createReadFileTool(new PermissionEngine({ read: [root] }));
+    const denied = await tool.execute(JSON.stringify({ path: `${root}/escape/secret.txt` }));
+    assert(denied.includes("permission denied"), `symlink read escaped: ${denied}`);
+    // The denial names where the path really led, so the audit trail does too.
+    assert(denied.includes("secret.txt"));
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("security/symlink: a link out of the root cannot be written through", async () => {
+  const { root, outside, cleanup } = await twoRoots();
+  try {
+    await Deno.symlink(outside, `${root}/escape`);
+    const tool = createWriteFileTool(new PermissionEngine({ write: [root] }));
+    const denied = await tool.execute(
+      JSON.stringify({ path: `${root}/escape/planted.txt`, content: "pwned" }),
+    );
+    assert(denied.includes("permission denied"), `symlink write escaped: ${denied}`);
+    await assertRejects(() => Deno.stat(`${outside}/planted.txt`), Deno.errors.NotFound);
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("security/symlink: the file itself being a link out is denied", async () => {
+  const { root, outside, cleanup } = await twoRoots();
+  try {
+    // The last component is the link, so the parent directory is honest.
+    await Deno.symlink(`${outside}/secret.txt`, `${root}/notes.md`);
+    const read = createReadFileTool(new PermissionEngine({ read: [root] }));
+    assert((await read.execute(JSON.stringify({ path: `${root}/notes.md` }))).includes("denied"));
+
+    // Writing through it would clobber the file outside the root.
+    const write = createWriteFileTool(new PermissionEngine({ write: [root] }));
+    const denied = await write.execute(
+      JSON.stringify({ path: `${root}/notes.md`, content: "clobbered" }),
+    );
+    assert(denied.includes("permission denied"), `symlink write escaped: ${denied}`);
+    assertEquals(await Deno.readTextFile(`${outside}/secret.txt`), "TOP SECRET");
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("security/symlink: nested links are followed to the end", async () => {
+  const { root, outside, cleanup } = await twoRoots();
+  try {
+    // root/a -> root/b -> root/c -> outside. Each hop looks local.
+    await Deno.symlink(outside, `${root}/c`);
+    await Deno.symlink(`${root}/c`, `${root}/b`);
+    await Deno.symlink(`${root}/b`, `${root}/a`);
+    const tool = createReadFileTool(new PermissionEngine({ read: [root] }));
+    const denied = await tool.execute(JSON.stringify({ path: `${root}/a/secret.txt` }));
+    assert(denied.includes("permission denied"), `nested symlinks escaped: ${denied}`);
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("security/symlink: a parent swapped for a link is denied on the next call", async () => {
+  // Time-of-check/time-of-use: authorization is redone per call against the
+  // filesystem as it is *now*, so yesterday's honest directory does not carry
+  // a grant into today's symlink.
+  const { root, outside, cleanup } = await twoRoots();
+  try {
+    const engine = new PermissionEngine({ read: [root] });
+    const tool = createReadFileTool(engine);
+
+    await Deno.mkdir(`${root}/data`);
+    await Deno.writeTextFile(`${root}/data/notes.md`, "mine");
+    assertEquals(await tool.execute(JSON.stringify({ path: `${root}/data/notes.md` })), "mine");
+
+    // The directory the agent read a moment ago is now a link out of the root.
+    await Deno.remove(`${root}/data`, { recursive: true });
+    await Deno.symlink(outside, `${root}/data`);
+    const denied = await tool.execute(JSON.stringify({ path: `${root}/data/secret.txt` }));
+    assert(denied.includes("permission denied"), `substituted parent escaped: ${denied}`);
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("security/symlink: links that stay inside the root still work", async () => {
+  // The rule is containment, not a ban on symlinks: an agent whose allowed
+  // root is itself reached through a link (/tmp on macOS, a mounted volume)
+  // has to keep working.
+  const { root, cleanup } = await twoRoots();
+  try {
+    await Deno.mkdir(`${root}/real`);
+    await Deno.writeTextFile(`${root}/real/notes.md`, "inside");
+    await Deno.symlink(`${root}/real`, `${root}/link`);
+
+    const engine = new PermissionEngine({ read: [root], write: [root] });
+    const read = createReadFileTool(engine);
+    assertEquals(await read.execute(JSON.stringify({ path: `${root}/link/notes.md` })), "inside");
+
+    const write = createWriteFileTool(engine);
+    const ok = await write.execute(
+      JSON.stringify({ path: `${root}/link/deep/new.md`, content: "ok" }),
+    );
+    assert(ok.startsWith("wrote "), `legitimate write through an inside link failed: ${ok}`);
+    assertEquals(await Deno.readTextFile(`${root}/real/deep/new.md`), "ok");
+  } finally {
+    await cleanup();
   }
 });
 
