@@ -61,6 +61,17 @@ export {
   type PermissionKind,
   permissionsToDenoFlags,
 } from "./permissions/engine.ts";
+export {
+  denoNetHosts,
+  derivedHosts,
+  type Env,
+  type HermeticPlan,
+  hermeticPlan,
+  IMAGE_ENV,
+  IMAGE_FLAGS,
+  RUNTIME_READ_PATHS,
+  RUNTIME_WRITE_PATHS,
+} from "./permissions/hermetic.ts";
 export { defineTool, type NativeTool, type ToolArgs, type ToolSchema } from "./tools/types.ts";
 export { currentTimeTool } from "./tools/time.ts";
 export { createRunBashTool, extractExecutables, type RunBashOptions } from "./tools/bash.ts";

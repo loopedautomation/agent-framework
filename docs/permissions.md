@@ -70,10 +70,10 @@ The value resolves from the process environment first, then from `/run/secrets/<
 
 Enforcement is layered: the app-level engine described above runs inside a runtime sandbox, which runs inside a container.
 
-1. **The Deno sandbox.** The config compiles to Deno permission flags; `af flags agent.yaml` prints them, e.g. `--allow-net=api.github.com --allow-run=gh`. In the [base image](docker-run.md#what-the-base-image-gives-you), reads are scoped to `/agent`, `/skills`, `/data` and `/run/secrets`; writes to `/data`; subprocess spawning to `bash`, which the permission engine then gates per executable.
+1. **The Deno sandbox.** The config compiles to Deno permission flags; `af flags agent.yaml` prints them. In the [base image](docker-run.md#what-the-base-image-gives-you), reads are scoped to `/agent`, `/skills`, `/data` and `/run/secrets`; writes to `/data`; subprocess spawning to `bash`, which the permission engine then gates per executable.
 2. **The container.** This is the unit of isolation; the compose examples add `read_only: true` and a tmpfs.
 
 Two honest notes on where the layers actually sit:
 
-- The Deno layer allows all *network* egress in the container (`--allow-net`). Per-host enforcement happens in the app-level permission engine, and the container's egress policy is layer 2; restrict it with your network setup where it matters.
+- If your agent spawns something, whether that's a `permissions.run` grant or a stdio MCP server, the Deno layer allows all *network* egress in the container (`--allow-net`). Per-host enforcement happens in the app-level permission engine, and the container's egress policy is layer 2; restrict it with your network setup where it matters. An agent that spawns nothing gets its `net:` list compiled straight into `--allow-net`, so the runtime enforces it for the whole process ([hermetic mode](permission-model.md#hermetic-mode)).
 - `bash` subprocesses escape the Deno sandbox by design; the container boundary is what contains them. That is why there is no "run on the host" mode.

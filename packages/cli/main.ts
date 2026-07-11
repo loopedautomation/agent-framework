@@ -19,7 +19,8 @@
 import {
   agentConfigJsonSchema,
   ConfigError,
-  permissionsToDenoFlags,
+  hermeticPlan,
+  IMAGE_ENV,
   ProviderError,
   resolveAgentConfig,
   VERSION,
@@ -53,7 +54,7 @@ function usage(): string {
     ["af down [target...]", "Stop and remove af containers (files or handles; none = all)"],
     ["af validate [agent.yaml]", "Validate an agent definition"],
     ["af test [agent.yaml]", "Run the agent's test cases (real model, mocked tools)"],
-    ["af flags [agent.yaml]", "Print compiled Deno permission flags"],
+    ["af flags [agent.yaml]", "Print the Deno sandbox flags this agent runs under"],
     ["af schema", "Print the agent.yaml JSON Schema"],
     ["af discord-invite [agent.yaml]", "Print the bot's OAuth invite URL (no bitfield math)"],
     ["af update", "Reinstall af at the latest published version"],
@@ -113,7 +114,13 @@ async function main() {
         break;
       case "flags": {
         const config = await resolveAgentConfig(arg ?? DEFAULT_CONFIG);
-        console.log(permissionsToDenoFlags(config.permissions).join(" "));
+        const plan = hermeticPlan(config, IMAGE_ENV);
+        // stderr, so the flags themselves stay pipeable.
+        if (!plan.eligible) {
+          console.error(dim(`# the image's flags — this agent can't be narrowed:`));
+          for (const blocker of plan.blockers) console.error(dim(`#   ${blocker}`));
+        }
+        console.log(plan.flags.join(" "));
         break;
       }
       case "schema":

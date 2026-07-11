@@ -26,7 +26,7 @@ af up [agent.yaml...]     Start agents in Docker — foreground; -d to detach
 af ps                     List af containers
 af down [target...]       Stop and remove af containers (files or handles; none = all)
 af validate [agent.yaml]  Validate an agent definition
-af flags [agent.yaml]     Print compiled Deno permission flags
+af flags [agent.yaml]     Print the Deno sandbox flags this agent runs under
 af schema                 Print the agent.yaml JSON Schema
 af discord-invite <agent.yaml>
                           Print the bot's OAuth invite URL (no bitfield math)
@@ -116,20 +116,34 @@ For every agent it mounts the config and any `skills:` read-only, attaches the `
   handle:   issue-bot
   model:    openai-compatible / gpt-5.4-mini
   triggers: discord
-  sandbox:  --allow-net=api.github.com --allow-run=gh
+  sandbox:  net open below the app layer; egress bounded by the container
+  ⚠ permissions.run grants gh — a subprocess leaves the Deno sandbox
   env refs: OPENAI_API_KEY, DISCORD_BOT_TOKEN, GITHUB_TOKEN
   ⚠ not set in this environment: GITHUB_TOKEN
 ```
 
-`af validate` parses the config (unknown keys are hard errors) and prints the identity, the triggers, the compiled sandbox flags and every env var the config references, with a warning on any that aren't set in the environment.
+`af validate` parses the config (unknown keys are hard errors) and prints the identity, the triggers, every env var the config references (with a warning on any that aren't set in the environment) and which sandbox the agent gets.
+
+This one granted `gh`, so it gets the container as its egress boundary. An agent that spawns nothing runs [hermetic](permission-model.md#hermetic-mode) instead, and `af validate` lists the hosts it's allowed to reach:
+
+```
+  sandbox:  hermetic — Deno enforces net for the whole process
+  egress:   0.0.0.0:9090, api.anthropic.com, api.github.com
+```
 
 ## af flags
 
-`af flags` prints the Deno permission flags the config's `permissions:` block compiles to, which is [layer 1 of the sandbox](permissions.md#the-layers):
+`af flags` prints the Deno permission flags the agent runs under in the container, which is [layer 1 of the sandbox](permissions.md#the-layers).
+
+An agent that spawns nothing runs [hermetic](permission-model.md#hermetic-mode): its net allowlist, plus the hosts the framework works out from the config, compiled into `--allow-net`.
 
 ```
---allow-net=api.github.com --allow-run=gh
+$ af flags agent.yaml
+--allow-env --allow-read=/agent,/skills,/data,/looped,/deno-dir,/run/secrets \
+  --allow-write=/data --allow-net=0.0.0.0:9090,api.anthropic.com,api.github.com
 ```
+
+If the agent has a `permissions.run` grant or a stdio MCP server, then a subprocess is going to leave the Deno sandbox and the runtime can't hold its network access. You get the image's flags instead, and the reason why on stderr.
 
 ## af schema
 

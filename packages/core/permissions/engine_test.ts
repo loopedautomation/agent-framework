@@ -70,16 +70,28 @@ Deno.test("denials carry a reason and reach the audit sink", () => {
 
 Deno.test("compiles to Deno flags", () => {
   const flags = permissionsToDenoFlags({
-    net: ["api.github.com", "*.example.com"],
+    net: ["api.github.com"],
     run: ["gh"],
     read: ["/workspace"],
   });
   assertEquals(flags, [
-    "--allow-net=api.github.com,example.com",
+    "--allow-net=api.github.com",
     "--allow-run=gh",
     "--allow-read=/workspace",
   ]);
   assertEquals(permissionsToDenoFlags(undefined), []);
+});
+
+Deno.test("security/wildcard hosts drop out of the flags rather than widen or narrow them", () => {
+  // --allow-net has no wildcard form. Compiling *.example.com to example.com
+  // would deny sub.example.com (which the config allows) and allow the apex
+  // (which it doesn't). The compiled flags stay a subset; hermeticPlan refuses
+  // to make flags like these the enforcement boundary.
+  assertEquals(
+    permissionsToDenoFlags({ net: ["api.github.com", "*.example.com"] }),
+    ["--allow-net=api.github.com"],
+  );
+  assertEquals(permissionsToDenoFlags({ net: ["*.example.com"] }), []);
 });
 
 Deno.test("relative path prefixes resolve against cwd", () => {

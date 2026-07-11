@@ -40,14 +40,26 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
 
 # Deno sandbox = enforcement layer 1 (reads scoped to config/data/secrets,
 # writes to /data only, bash spawnable only for the permission engine to
-# gate). Net is open at this layer: hosts are enforced app-level by the
-# permission engine, and layer 2 is container egress policy — see
-# docs/deployment.md.
+# gate). These flags are the widest an agent can run under, chosen at build
+# time before any agent.yaml is known.
+#
+# An agent that spawns nothing — no permissions.run, no stdio MCP — doesn't
+# need them. The entrypoint reads its config and re-execs itself with the net
+# allowlist compiled into --allow-net (hermetic mode, Plan 6), so the sandbox
+# holds every host, not just the ones http_request asks for. `deno` is
+# spawnable for that re-exec; it happens before the model is in the loop, and
+# the child gets no --allow-run at all. Agents that do spawn subprocesses keep
+# these flags, and the container is their egress boundary — see
+# docs/permission-model.md.
+#
+# Keep the read/write paths in step with RUNTIME_READ_PATHS and
+# RUNTIME_WRITE_PATHS (packages/core/permissions/hermetic.ts); a test compares
+# this ENTRYPOINT against them.
 ENTRYPOINT ["deno", "run", \
   "--allow-env", \
   "--allow-read=/agent,/skills,/data,/looped,/deno-dir,/run/secrets", \
   "--allow-write=/data", \
   "--allow-net", \
-  "--allow-run=bash", \
+  "--allow-run=bash,deno", \
   "packages/cli/main.ts"]
 CMD ["run", "/agent/agent.yaml"]
