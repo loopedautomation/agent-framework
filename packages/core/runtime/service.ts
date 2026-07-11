@@ -1,12 +1,14 @@
 import type { AgentConfig } from "../config/schema.ts";
-import { resolveEnv } from "../config/env.ts";
+import { expandEnvRefs, resolveEnv } from "../config/env.ts";
+import { type Redactor, redactorForConfig, setDefaultRedactor } from "../redact/redact.ts";
+import { logError, logInfo } from "./log.ts";
 import type { Provider } from "../providers/types.ts";
 import { createProvider } from "../providers/mod.ts";
 import { type PermissionDecision, PermissionEngine } from "../permissions/engine.ts";
 import type { NativeTool } from "../tools/types.ts";
 import { currentTimeTool } from "../tools/time.ts";
 import { createRunBashTool } from "../tools/bash.ts";
-import { createHttpRequestTool } from "../tools/http.ts";
+import { createHttpRequestTool, type HttpCredential } from "../tools/http.ts";
 import { createReadFileTool, createWriteFileTool } from "../tools/files.ts";
 import { runAgent, type RunEvent, type RunResult } from "../loop/loop.ts";
 import { Store } from "../store/store.ts";
@@ -112,6 +114,8 @@ export interface AgentServiceOptions {
   identity?: AgentIdentity;
   /** Applied to every tool before the run sees it; `af test` swaps execute for mocks. */
   wrapTool?: (tool: NativeTool) => NativeTool;
+  /** Injectable redactor; defaults to one built from the config's secrets. */
+  redactor?: Redactor;
 }
 
 /**
@@ -124,8 +128,11 @@ export class AgentService {
   readonly config: AgentConfig;
   /** The agent's SQLite store: sessions, runs, audit, identity. */
   readonly store: Store;
+  /** Scrubs the agent's secrets from every surface they could reach. */
+  readonly redactor: Redactor;
   #provider: Provider;
   #env: Record<string, string>;
+  #credentials: HttpCredential[];
   #extraTools: NativeTool[];
   #triggers: Trigger[] = [];
   #identity?: AgentIdentity;
@@ -146,21 +153,50 @@ export class AgentService {
     // Resolve env references at startup — a missing secret fails here,
     // not mid-run in front of the model.
     this.#env = resolveEnv(opts.config.env);
+    // Credentials the runtime attaches to outbound requests itself, so an
+    // authenticated API needs no secret in a model-visible header.
+    this.#credentials = (opts.config.http?.auth ?? []).map((auth) => ({
+      url: auth.url,
+      header: auth.header,
+      value: expandEnvRefs(auth.value, `http.auth ${auth.url}`),
+    }));
+    // Every secret the config references, resolved. Scoped env keeps these out
+    // of the model's initial context; the redactor keeps them out of the tool
+    // results, transcripts, records, logs and traces that come back.
+    this.redactor = opts.redactor ?? redactorForConfig(opts.config);
+    // The process is one agent, so surfaces with no seam of their own —
+    // provider error bodies, the log path — can reach it here.
+    setDefaultRedactor(this.redactor);
     this.#extraTools = opts.extraTools ?? [];
     this.#baseDir = opts.baseDir ?? Deno.cwd();
     this.#identity = opts.identity;
-    this.#wrapTool = opts.wrapTool ?? ((tool) => tool);
+    // Redaction wraps outermost: whatever a tool (or a test's mock of one)
+    // returns is scrubbed before the loop, the model, or the store see it.
+    const wrap = opts.wrapTool ?? ((tool: NativeTool) => tool);
+    this.#wrapTool = (tool) => this.#redactTool(wrap(tool));
     if (opts.store) {
       this.store = opts.store;
     } else {
       const dataDir = opts.dataDir ?? Deno.env.get("AF_DATA_DIR") ?? ".looped";
       Deno.mkdirSync(dataDir, { recursive: true });
-      this.store = new Store(`${dataDir}/${opts.config.handle}.db`);
+      this.store = new Store(`${dataDir}/${opts.config.handle}.db`, { redactor: this.redactor });
     }
     this.#scheduler = new RunScheduler({
       concurrentRuns: opts.config.limits.concurrent_runs,
       queueDepth: opts.config.limits.queue_depth,
     });
+  }
+
+  /**
+   * Scrub a tool's result before anything downstream sees it. A permitted CLI
+   * or MCP server can echo a credential — `env | grep`, an error quoting the
+   * key it just used — and the result is the model's next message.
+   */
+  #redactTool(tool: NativeTool): NativeTool {
+    return {
+      def: tool.def,
+      execute: async (rawArgs: string) => this.redactor.jsonText(await tool.execute(rawArgs)),
+    };
   }
 
   /**
@@ -191,7 +227,7 @@ export class AgentService {
       always.push(createRunBashTool({ permissions: engine, env: this.#env }));
     }
     if (this.config.permissions?.net?.length) {
-      always.push(createHttpRequestTool({ permissions: engine }));
+      always.push(createHttpRequestTool({ permissions: engine, credentials: this.#credentials }));
     }
     if (this.config.permissions?.read?.length) always.push(createReadFileTool(engine));
     if (this.config.permissions?.write?.length) always.push(createWriteFileTool(engine));
@@ -271,7 +307,7 @@ export class AgentService {
       }
       await this.#deliver(schedule, result);
     } catch (err) {
-      console.error(`schedule #${schedule.id}: run failed: ${(err as Error).message}`);
+      logError(`schedule #${schedule.id}: run failed: ${(err as Error).message}`);
     }
   }
 
@@ -283,14 +319,14 @@ export class AgentService {
         try {
           if (await trigger.deliver?.(schedule.conversationKey, text)) return;
         } catch (err) {
-          console.error(
+          logError(
             `schedule #${schedule.id}: delivery via ${trigger.name} failed: ` +
               `${(err as Error).message}`,
           );
         }
       }
     }
-    console.log(`schedule #${schedule.id}: ${result.status} — ${text.slice(0, 200)}`);
+    logInfo(`schedule #${schedule.id}: ${result.status} — ${text.slice(0, 200)}`);
   }
 
   /**
@@ -625,6 +661,7 @@ export class AgentService {
         input: event.input,
         history,
         onEvent: opts?.onEvent,
+        redact: (text) => this.redactor.text(text),
       });
     } finally {
       if (lane && this.#aborts.get(lane) === controller) this.#aborts.delete(lane);

@@ -314,6 +314,43 @@ const PermissionsSchema = z.strictObject({
   "Deny-by-default allowlists. Omitting this block means the agent can touch nothing; denials are surfaced to the model as tool results.",
 );
 
+const HttpAuthSchema = z.strictObject({
+  url: z.string().min(1).describe(
+    "URL prefix this credential applies to, e.g. https://api.stripe.com. The longest matching " +
+      "prefix wins. The host must also be in permissions.net.",
+  ),
+  header: z.string().min(1).default("Authorization").describe(
+    "Header to attach the credential as.",
+  ),
+  value: z.string().min(1).describe(
+    "The header value, e.g. Bearer ${STRIPE_KEY}. ${VAR} references resolve at startup (env var, " +
+      "then /run/secrets/<VAR>) and are redacted from every output surface.",
+  ),
+}).describe("One credential the runtime attaches to matching outbound requests.");
+
+const HttpConfigSchema = z.strictObject({
+  auth: z.array(HttpAuthSchema).optional().describe(
+    "Credentials the runtime attaches to http_request calls, matched by URL prefix.",
+  ),
+}).describe(
+  "Outbound HTTP the runtime handles on the agent's behalf. The model asks for a URL; the " +
+    "credential is attached after the tool call, so it never passes through the model's context.",
+);
+
+const RedactConfigSchema = z.strictObject({
+  headers: z.array(z.string().min(1)).optional().describe(
+    "Extra header and field names whose value is scrubbed by name, on top of authorization, " +
+      "cookie, x-api-key and the other usual suspects.",
+  ),
+  values: z.array(z.string().min(1)).optional().describe(
+    "Extra ${VAR} references to scrub — a secret the agent reaches that this config does not " +
+      "otherwise name, such as one baked into an MCP server's own image.",
+  ),
+}).describe(
+  "Additions to the redaction the framework already does. Every secret the config references is " +
+    "redacted without being listed here.",
+);
+
 const MemoryConfigSchema = z.strictObject({
   scope: z.enum(["thread", "none"]).default("none").describe(
     "thread: conversation history persists per conversation key (chat channel or thread, webhook conversation_id). none: every run starts fresh.",
@@ -445,6 +482,8 @@ const agentConfigSchema = z.strictObject({
   env: z.record(z.string(), z.string()).optional().describe(
     "Env for tools and MCP servers. Values may be ${VAR} references, resolved at startup (env var, then /run/secrets/<VAR>) and scoped per tool.",
   ),
+  http: HttpConfigSchema.optional(),
+  redact: RedactConfigSchema.optional(),
   memory: MemoryConfigSchema.optional(),
   schedules: SchedulesConfigSchema.optional(),
   limits: LimitsSchema.default({ max_steps: 20, concurrent_runs: 4, queue_depth: 10 }),
@@ -721,6 +760,30 @@ export interface Permissions {
   write?: string[];
 }
 
+/** One credential the runtime attaches to matching outbound requests. */
+export interface HttpAuthConfig {
+  /** URL prefix this credential applies to; the longest matching prefix wins. */
+  url: string;
+  /** Header to attach the credential as. */
+  header: string;
+  /** The header value, e.g. `Bearer ${STRIPE_KEY}`; ${VAR} references resolve at startup. */
+  value: string;
+}
+
+/** Outbound HTTP the runtime handles on the agent's behalf. */
+export interface HttpConfig {
+  /** Credentials attached to http_request calls, matched by URL prefix. */
+  auth?: HttpAuthConfig[];
+}
+
+/** Additions to the redaction the framework already does. */
+export interface RedactConfig {
+  /** Extra header and field names whose value is scrubbed by name. */
+  headers?: string[];
+  /** Extra ${VAR} references to scrub. */
+  values?: string[];
+}
+
 /** What the agent remembers between events. */
 export interface MemoryConfig {
   /** thread: conversation history persists per conversation key. none: every run starts fresh. */
@@ -791,6 +854,10 @@ export interface AgentConfig {
   permissions?: Permissions;
   /** Env for tools and MCP servers; values may be ${VAR} references. */
   env?: Record<string, string>;
+  /** Credentials the runtime attaches to outbound requests, so the model never holds them. */
+  http?: HttpConfig;
+  /** Additions to the redaction the framework already does. */
+  redact?: RedactConfig;
   /** What the agent remembers between events. */
   memory?: MemoryConfig;
   /** Agent-created schedules: the schedule/list_schedules/unschedule tools. Omit = no tools. */
@@ -834,6 +901,8 @@ type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : fals
 const _agentConfigInSync: MutuallyAssignable<AgentConfig, z.infer<typeof agentConfigSchema>> = true;
 const _triggerConfigInSync: MutuallyAssignable<TriggerConfig, z.infer<typeof TriggerSchema>> = true;
 const _permissionsInSync: MutuallyAssignable<Permissions, z.infer<typeof PermissionsSchema>> = true;
+const _httpInSync: MutuallyAssignable<HttpConfig, z.infer<typeof HttpConfigSchema>> = true;
+const _redactInSync: MutuallyAssignable<RedactConfig, z.infer<typeof RedactConfigSchema>> = true;
 
 /** The published JSON Schema for agent.yaml (editor completion, validation). */
 export function agentConfigJsonSchema(): Record<string, unknown> {

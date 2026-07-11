@@ -9,6 +9,7 @@ import {
   type ToolCall,
   type ToolDef,
 } from "./types.ts";
+import { redactText } from "../redact/redact.ts";
 import { withRetry } from "./retry.ts";
 
 // The OAuth client id the Codex CLI registers with auth.openai.com; token
@@ -332,7 +333,7 @@ export class CodexProvider implements Provider {
       const text = await res.text().catch(() => "");
       throw new ProviderError(
         `codex token refresh returned ${res.status}: ${
-          text.slice(0, 300)
+          redactText(text.slice(0, 300))
         } — run \`codex login\` again`,
         res.status === 429 || res.status >= 500 ? errorKindForStatus(res.status) : "auth",
         res.status,
@@ -410,7 +411,7 @@ export class CodexProvider implements Provider {
       // attempt re-reads the file and refreshes.
       if (res.status === 401) this.#tokens = undefined;
       throw new ProviderError(
-        `provider returned ${res.status}: ${text.slice(0, 300)}`,
+        `provider returned ${res.status}: ${redactText(text.slice(0, 300))}`,
         errorKindForStatus(res.status),
         res.status,
       );

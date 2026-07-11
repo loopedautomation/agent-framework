@@ -1,3 +1,4 @@
+import { logInfo } from "@looped/core";
 import { Cron } from "croner";
 import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 
@@ -40,7 +41,7 @@ export class CronTrigger implements Trigger {
         serialKey: this.#serialKey,
       });
       (this.#opts.onResult ?? ((r: RunResult) => {
-        console.log(`cron run: ${r.status} — ${r.reply.slice(0, 200)}`);
+        logInfo(`cron run: ${r.status} — ${r.reply.slice(0, 200)}`);
       }))(result);
     });
     return Promise.resolve();

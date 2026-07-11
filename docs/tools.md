@@ -13,7 +13,7 @@ Tools follow permissions. A native tool exists for the agent only when the [perm
 | --- | --- | --- |
 | `current_time` | always | the only tool granted unconditionally |
 | `run_bash` | `permissions.run` grants executables | statically checked per executable; output capped at 8k chars |
-| `http_request` | `permissions.net` grants hosts | GET/POST/PUT/PATCH/DELETE/HEAD; 30s timeout; body capped at 8k chars |
+| `http_request` | `permissions.net` grants hosts | GET/POST/PUT/PATCH/DELETE/HEAD; 30s timeout; body capped at 8k chars; [credentials](secrets.md#credentials-for-http-attached-server-side) attached server side |
 | `read_file` | `permissions.read` grants paths | capped at 8k chars |
 | `write_file` | `permissions.write` grants paths | creates parent directories |
 | `read_skill` | `skills:` lists any | [progressive disclosure](skills.md#progressive-disclosure) |

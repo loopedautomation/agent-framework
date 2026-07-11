@@ -793,6 +793,67 @@
         "type": "string"
       }
     },
+    "http": {
+      "type": "object",
+      "properties": {
+        "auth": {
+          "description": "Credentials the runtime attaches to http_request calls, matched by URL prefix.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "description": "URL prefix this credential applies to, e.g. https://api.stripe.com. The longest matching prefix wins. The host must also be in permissions.net."
+              },
+              "header": {
+                "default": "Authorization",
+                "description": "Header to attach the credential as.",
+                "type": "string",
+                "minLength": 1
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The header value, e.g. Bearer ${STRIPE_KEY}. ${VAR} references resolve at startup (env var, then /run/secrets/<VAR>) and are redacted from every output surface."
+              }
+            },
+            "required": [
+              "url",
+              "value"
+            ],
+            "additionalProperties": false,
+            "description": "One credential the runtime attaches to matching outbound requests."
+          }
+        }
+      },
+      "additionalProperties": false,
+      "description": "Outbound HTTP the runtime handles on the agent's behalf. The model asks for a URL; the credential is attached after the tool call, so it never passes through the model's context."
+    },
+    "redact": {
+      "type": "object",
+      "properties": {
+        "headers": {
+          "description": "Extra header and field names whose value is scrubbed by name, on top of authorization, cookie, x-api-key and the other usual suspects.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "values": {
+          "description": "Extra ${VAR} references to scrub — a secret the agent reaches that this config does not otherwise name, such as one baked into an MCP server's own image.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false,
+      "description": "Additions to the redaction the framework already does. Every secret the config references is redacted without being listed here."
+    },
     "memory": {
       "type": "object",
       "properties": {

@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { Message, Usage } from "../providers/types.ts";
 import type { RunStatus } from "../loop/loop.ts";
 import { migrate } from "./migrations.ts";
+import type { Redactor } from "../redact/redact.ts";
 
 /** One remembered fact, as written to the memories table. */
 export interface MemoryRecord {
@@ -61,15 +62,28 @@ export interface AuditRecord {
   detail: unknown;
 }
 
+/** Options for the {@linkcode Store} constructor. */
+export interface StoreOptions {
+  /**
+   * Scrubs known secrets from everything written: transcripts, run inputs and
+   * replies, audit detail. The tool results the model saw were already clean;
+   * this is the boundary that keeps the file on disk clean too, whatever wrote
+   * to it. Omitted, nothing is redacted.
+   */
+  redactor?: Redactor;
+}
+
 /**
  * The agent's canonical store: sessions, messages, runs, audit — one SQLite
  * file on a volume. This is the audit trail the platform later aggregates.
  */
 export class Store {
   #db: DatabaseSync;
+  #redactor?: Redactor;
 
   /** Open (or create) the SQLite database at `path` and apply pending migrations. */
-  constructor(path: string) {
+  constructor(path: string, opts: StoreOptions = {}) {
+    this.#redactor = opts.redactor;
     this.#db = new DatabaseSync(path);
     this.#db.exec("PRAGMA journal_mode = WAL;");
     // Parallel runs across conversations mean concurrent writers on one
@@ -111,6 +125,11 @@ export class Store {
     return result.changes > 0;
   }
 
+  /** Scrub a value on its way to disk; identity when the store has no redactor. */
+  #clean<T>(value: T): T {
+    return this.#redactor ? this.#redactor.deep(value) : value;
+  }
+
   /** Replace a session's transcript with the post-run message list. */
   saveMessages(sessionId: number, messages: Message[]) {
     const del = this.#db.prepare("DELETE FROM messages WHERE session_id = ?");
@@ -120,7 +139,7 @@ export class Store {
     this.#db.exec("BEGIN");
     try {
       del.run(sessionId);
-      messages.forEach((m, seq) => ins.run(sessionId, seq, JSON.stringify(m)));
+      messages.forEach((m, seq) => ins.run(sessionId, seq, JSON.stringify(this.#clean(m))));
       this.#db.exec("COMMIT");
     } catch (err) {
       this.#db.exec("ROLLBACK");
@@ -174,9 +193,9 @@ export class Store {
       .run(
         run.sessionId ?? null,
         run.trigger,
-        run.input,
+        this.#clean(run.input),
         run.status,
-        run.reply,
+        this.#clean(run.reply),
         run.steps,
         run.usage.inputTokens,
         run.usage.outputTokens,
@@ -189,7 +208,7 @@ export class Store {
   recordAudit(record: AuditRecord) {
     this.#db
       .prepare("INSERT INTO audit (run_id, kind, detail_json) VALUES (?, ?, ?)")
-      .run(record.runId ?? null, record.kind, JSON.stringify(record.detail));
+      .run(record.runId ?? null, record.kind, JSON.stringify(this.#clean(record.detail)));
   }
 
   /** For `af runs` style introspection and tests. */

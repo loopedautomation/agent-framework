@@ -1,3 +1,4 @@
+import { logInfo } from "@looped/core";
 import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 
 /** Options for {@linkcode WebhookTrigger}. */
@@ -45,7 +46,7 @@ export class WebhookTrigger implements Trigger {
     this.#server = Deno.serve({
       port,
       onListen: this.#opts.onListen ?? ((addr) => {
-        console.log(`webhook trigger listening on :${addr.port}${path}`);
+        logInfo(`webhook trigger listening on :${addr.port}${path}`);
       }),
     }, async (req) => {
       const url = new URL(req.url);

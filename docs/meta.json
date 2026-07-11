@@ -25,6 +25,7 @@
     "skills",
     "tools",
     "permissions",
+    "secrets",
     "memory",
     "scheduling",
     "slash-commands",

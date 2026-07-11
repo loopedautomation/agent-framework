@@ -1,4 +1,5 @@
 import type { AgentService } from "./service.ts";
+import { logInfo } from "./log.ts";
 
 /** Options for {@linkcode startStatusServer}. Env vars AF_STATUS_* fill any gaps. */
 export interface StatusServerOptions {
@@ -38,7 +39,7 @@ export function startStatusServer(
     hostname,
     port,
     onListen: opts.onListen ??
-      ((addr) => console.log(`status surface on http://${addr.hostname}:${addr.port}/healthz`)),
+      ((addr) => logInfo(`status surface on http://${addr.hostname}:${addr.port}/healthz`)),
   }, (req, info) => {
     const path = new URL(req.url).pathname;
     const remoteHost = info.remoteAddr.transport === "tcp" ? info.remoteAddr.hostname : "";
@@ -57,12 +58,15 @@ export function startStatusServer(
         if (!authorized(req, remoteHost)) {
           return Response.json({ error: "unauthorized" }, { status: 401 });
         }
-        return Response.json({ runs: service.store.recentRuns() });
+        // The store is already redacted on write; scrubbing again on the way
+        // out means an older database, or a row some other path wrote, cannot
+        // serve a secret over HTTP.
+        return Response.json({ runs: service.redactor.deep(service.store.recentRuns()) });
       case "/audit":
         if (!authorized(req, remoteHost)) {
           return Response.json({ error: "unauthorized" }, { status: 401 });
         }
-        return Response.json({ audit: service.store.recentAudit() });
+        return Response.json({ audit: service.redactor.deep(service.store.recentAudit()) });
       default:
         return Response.json({ error: "not found" }, { status: 404 });
     }
