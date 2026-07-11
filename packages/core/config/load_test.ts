@@ -303,12 +303,12 @@ Deno.test("LOOPED_AGENT_CONFIG gets a rename hint, not a missing-file error", as
   );
 });
 
-Deno.test("tools.custom is rejected loudly until implemented", () => {
+Deno.test("tools.custom is rejected, pointing at MCP", () => {
   const err = assertThrows(
     () => parseAgentConfig(MINIMAL + `tools:\n  custom: [./my-tool.ts]\n`),
     ConfigError,
   );
-  assert(err.message.includes("not implemented"));
+  assert(err.message.includes("MCP"));
 });
 
 Deno.test("the shipped agent-zero-bot example is a valid agent definition", async () => {

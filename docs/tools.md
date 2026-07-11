@@ -62,6 +62,10 @@ tools:
 
 A search is a keyword match against tool names and descriptions; the top matches (up to five, with a relevance cutoff) become callable for the rest of the run. Native and skill tools always load, since they are small and framework-owned. `include:` and `search` compose: `include:` filters the server down to what the agent should ever see, and search decides when it sees it.
 
-## Custom tools
+## Code you write yourself
 
-`tools.custom` (TypeScript tool modules) is planned and hasn't landed yet; the config loader rejects the key loudly, so a config that relies on it fails immediately ([#12](https://github.com/loopedautomation/agent-framework/issues/12)). In the meantime, give the agent a CLI and a [skill](skills.md).
+There is no way to point the config at a TypeScript file and have the framework load it as a tool. We looked at it and decided against it. A tool module gets dynamically imported into the agent process, which means it runs with the agent's full permissions, and we would be maintaining a second extension mechanism that does what MCP already does.
+
+So when you have code of your own that the agent should be able to call, you have two options. Wrap it in an MCP server and declare it under `tools.mcp`, which keeps it in its own process with its own permissions. Or give the agent a CLI and a [skill](skills.md) that explains how to use it, which is usually the cheaper of the two.
+
+If you put `tools.custom` in a config, the loader rejects it and tells you the same thing.
