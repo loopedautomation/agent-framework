@@ -35,6 +35,30 @@ Deno.test("read/write: prefix matching without partial-segment leaks", () => {
   assertEquals(engine.write("/workspace/notes.md").allowed, false);
 });
 
+Deno.test("a bare * is the escape hatch for net and run, and only for them", () => {
+  const engine = new PermissionEngine({ net: ["*"], run: ["*"] });
+  assert(engine.net("anything.example").allowed);
+  assert(engine.net("localhost").allowed);
+  assert(engine.run("curl").allowed);
+  assert(engine.run("/usr/bin/anything").allowed);
+  // Paths have their own whole-filesystem spelling ("/"); * is not it.
+  const paths = new PermissionEngine({ read: ["*"], write: ["*"] });
+  assertEquals(paths.read("/tmp/x").allowed, false);
+  assertEquals(paths.write("/tmp/x").allowed, false);
+});
+
+Deno.test("* compiles to unrestricted allow-net and allow-run flags", () => {
+  assertEquals(
+    permissionsToDenoFlags({ net: ["*"], run: ["*"] }),
+    ["--allow-net", "--allow-run"],
+  );
+  // * anywhere in the list wins; the narrower entries are redundant.
+  assertEquals(
+    permissionsToDenoFlags({ net: ["api.github.com", "*"] }),
+    ["--allow-net"],
+  );
+});
+
 Deno.test("denials carry a reason and reach the audit sink", () => {
   const events: unknown[] = [];
   const engine = new PermissionEngine({ net: ["api.github.com"] }, (e) => events.push(e));

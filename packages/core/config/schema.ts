@@ -280,10 +280,13 @@ const McpServerSchema = z
 
 const PermissionsSchema = z.strictObject({
   net: z.array(z.string().min(1)).optional().describe(
-    "Hosts http_request may reach; *.example.com matches subdomains (not the apex).",
+    "Hosts http_request may reach; *.example.com matches subdomains (not the apex). A bare * " +
+      "allows every host — the escape hatch for agents whose job is the open web, stated " +
+      "loudly enough to catch in review.",
   ),
   run: z.array(z.string().min(1)).optional().describe(
-    "Executables run_bash may spawn, matched by basename. run_bash exists only if this grants something.",
+    "Executables run_bash may spawn, matched by basename. run_bash exists only if this grants " +
+      "something. A bare * allows every executable.",
   ),
   read: z.array(z.string().min(1)).optional().describe("Readable path prefixes."),
   write: z.array(z.string().min(1)).optional().describe("Writable path prefixes."),
@@ -674,9 +677,9 @@ export interface CommandConfig {
 
 /** Deny-by-default allowlists. Omitting a list means the agent can touch nothing on that axis. */
 export interface Permissions {
-  /** Hosts http_request may reach; *.example.com matches subdomains. */
+  /** Hosts http_request may reach; *.example.com matches subdomains; a bare * allows every host. */
   net?: string[];
-  /** Executables run_bash may spawn, matched by basename. */
+  /** Executables run_bash may spawn, matched by basename; a bare * allows every executable. */
   run?: string[];
   /** Readable path prefixes. */
   read?: string[];

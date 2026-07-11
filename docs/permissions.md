@@ -19,9 +19,21 @@ permissions:
 
 - **`net`** - hosts, matched exactly; `*.example.com` matches subdomains, and the apex needs its own entry.
 - **`run`** - executables, matched by basename.
-- **`read` / `write`** - path prefixes. Paths are normalized before the check, so `..` traversal cannot step outside the allowlist.
+- **`read` / `write`** - path prefixes: granting `/workspace` grants everything beneath it. Paths are normalized before the check, so `..` traversal cannot step outside the allowlist.
 
 Tools follow permissions: `run_bash` only exists for the agent if `run:` grants something, `http_request` only if `net:` does and `read_file`/`write_file` only if `read:`/`write:` do. This means that no unused tool schema takes up context. The full toolset is in [Tools](tools.md).
+
+## The escape hatches
+
+Some jobs are open-ended on purpose. A research agent's capability really is "the web", and a scripting agent on a throwaway box may genuinely need any executable. For those, `net` and `run` accept a bare `*`:
+
+```yaml
+permissions:
+  net: ["*"]   # every host
+  run: ["*"]   # every executable
+```
+
+We made the spelling loud on purpose. A `*` in a reviewed config is a choice someone can be asked about, and the audit trail still records every call the agent makes; what you give up is the allowlist as a statement of where the agent *could* reach, which is most of what this page sells. Reach for it when the job is genuinely the open web, and keep listing hosts everywhere else. Paths need no such spelling: prefixes already cover everything beneath them, and `read: ["/"]` says "the whole filesystem" in exactly as many characters as it should take.
 
 ## Denials are tool results
 
