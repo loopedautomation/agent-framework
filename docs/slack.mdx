@@ -1,6 +1,6 @@
 ---
 title: "Slack"
-description: "Connect an agent to Slack: Socket Mode setup, in-thread replies, and observer agents."
+description: "Connect an agent to Slack: Socket Mode setup, in-thread replies and slash commands."
 ---
 
 Triggers turn an agent into a long-lived service that waits for events, acts on them, delivers the result, and goes idle. The `slack` trigger connects that loop to a Slack workspace over Socket Mode — an outbound WebSocket, so the agent needs no public endpoint. It watches channels and replies in a thread under the messages that wake it.
@@ -45,13 +45,7 @@ Replies go into a thread under the triggering message; conversations are keyed p
 
 ## Observer agents
 
-Three optional keys together turn the trigger from a chatbot into an observer — an agent that watches channels, reacts to specific people, and reports elsewhere (a review bot, a moderation assistant, a coach):
-
-- `from_users` — handle only these authors (Slack user ids, the `U…` kind). The filter runs *before* the model is called: everyone else's messages are dropped in the trigger and never reach the provider.
-- `reply_channel` — deliver replies to a dedicated channel instead of the source thread. Out-of-channel replies quote the triggering message and link back to it.
-- `allow_silence` — let the agent say nothing. Instruct it in `purpose` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message.
-
-Every run — replied or silent — lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps and tokens.
+`from_users`, `reply_channel` and `allow_silence` together turn the trigger from a chatbot into an observer: an agent that watches channels, reacts to specific people and reports elsewhere. [Observer agents](observer-agents.md) covers the pattern, with a full example.
 
 ## Slash commands
 
