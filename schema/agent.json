@@ -705,7 +705,7 @@
       "type": "object",
       "properties": {
         "net": {
-          "description": "Hosts http_request may reach; *.example.com matches subdomains (not the apex).",
+          "description": "Hosts http_request may reach; *.example.com matches subdomains (not the apex). A bare * allows every host — the escape hatch for agents whose job is the open web, stated loudly enough to catch in review.",
           "type": "array",
           "items": {
             "type": "string",
@@ -713,7 +713,7 @@
           }
         },
         "run": {
-          "description": "Executables run_bash may spawn, matched by basename. run_bash exists only if this grants something.",
+          "description": "Executables run_bash may spawn, matched by basename. run_bash exists only if this grants something. A bare * allows every executable.",
           "type": "array",
           "items": {
             "type": "string",

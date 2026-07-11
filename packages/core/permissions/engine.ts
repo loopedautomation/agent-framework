@@ -22,8 +22,14 @@ export type AuditSink = (event: {
   decision: PermissionDecision;
 }) => void;
 
-/** `*.example.com` matches subdomains but not the apex; exact strings match exactly. */
+/**
+ * `*.example.com` matches subdomains but not the apex; exact strings match
+ * exactly. A bare `*` matches every host — the deliberate escape hatch for
+ * agents whose job is the open web, and a statement loud enough to catch in
+ * review.
+ */
 function hostMatches(pattern: string, host: string): boolean {
+  if (pattern === "*") return true;
   if (pattern.startsWith("*.")) return host.endsWith(pattern.slice(1)) && host !== pattern.slice(2);
   return pattern === host;
 }
@@ -67,10 +73,15 @@ export class PermissionEngine {
     return this.#decide("net", host, allowed, "permissions.net");
   }
 
-  /** `executable` is matched by basename, so `/usr/bin/gh` needs `run: [gh]`. */
+  /**
+   * `executable` is matched by basename, so `/usr/bin/gh` needs `run: [gh]`.
+   * A bare `*` entry allows every executable — the same escape hatch `net`
+   * has, and just as much a statement for review.
+   */
   run(executable: string): PermissionDecision {
     const base = executable.split("/").at(-1) ?? executable;
-    const allowed = (this.#permissions.run ?? []).includes(base);
+    const list = this.#permissions.run ?? [];
+    const allowed = list.includes("*") || list.includes(base);
     return this.#decide("run", executable, allowed, "permissions.run");
   }
 
@@ -97,10 +108,13 @@ export class PermissionEngine {
 export function permissionsToDenoFlags(permissions: Permissions | undefined): string[] {
   const p = permissions ?? {};
   const flags: string[] = [];
-  if (p.net?.length) {
+  if (p.net?.includes("*")) {
+    flags.push("--allow-net");
+  } else if (p.net?.length) {
     flags.push(`--allow-net=${p.net.map((h) => h.replace(/^\*\./, "")).join(",")}`);
   }
-  if (p.run?.length) flags.push(`--allow-run=${p.run.join(",")}`);
+  if (p.run?.includes("*")) flags.push("--allow-run");
+  else if (p.run?.length) flags.push(`--allow-run=${p.run.join(",")}`);
   if (p.read?.length) flags.push(`--allow-read=${p.read.join(",")}`);
   if (p.write?.length) flags.push(`--allow-write=${p.write.join(",")}`);
   return flags;
