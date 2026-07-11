@@ -95,6 +95,26 @@ CREATE UNIQUE INDEX sessions_active_key
       }
     },
   },
+  {
+    id: "003_schedules",
+    // Agent-created schedules (the schedule/unschedule tools): recurring
+    // cron rows or one-shot `at` rows, surviving restarts. conversation_key
+    // records where results deliver; a NULL key logs like config cron.
+    up(db) {
+      db.exec(`
+CREATE TABLE schedules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cron TEXT,
+  at TEXT,
+  timezone TEXT,
+  prompt TEXT NOT NULL,
+  conversation_key TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  CHECK ((cron IS NULL) != (at IS NULL))
+);
+`);
+    },
+  },
 ];
 
 /**

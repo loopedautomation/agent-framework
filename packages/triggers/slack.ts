@@ -163,6 +163,25 @@ export class SlackTrigger implements Trigger {
     }
   }
 
+  /**
+   * Proactive send (agent-created schedules): "slack:<channel>" and
+   * "slack:<channel>:<thread_ts>" keys are ours; a threaded key posts into
+   * its thread.
+   */
+  async deliver(conversationKey: string, text: string): Promise<boolean> {
+    const match = conversationKey.match(/^slack:([^:]+)(?::(.+))?$/);
+    if (!match) return false;
+    for (const part of splitMessage(text, LIMIT)) {
+      const res = await this.#api("chat.postMessage", {
+        channel: match[1],
+        text: part,
+        ...(match[2] ? { thread_ts: match[2] } : {}),
+      });
+      if (!res.ok) console.error(`slack: deliver failed: ${res.error}`);
+    }
+    return true;
+  }
+
   async #handle(msg: SlackMessage, emit: (event: AgentEvent) => Promise<RunResult>) {
     const channelName = this.#opts.channels?.length
       ? await this.#channelName(msg.channel)

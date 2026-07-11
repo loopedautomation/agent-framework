@@ -25,6 +25,7 @@
     "tools",
     "permissions",
     "memory",
+    "scheduling",
     "slash-commands",
     "testing",
     "---Providers---",

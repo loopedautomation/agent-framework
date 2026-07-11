@@ -107,6 +107,21 @@ export class TelegramTrigger implements Trigger {
     });
   }
 
+  /** Proactive send (agent-created schedules): "telegram:<chatId>" keys are ours. */
+  async deliver(conversationKey: string, text: string): Promise<boolean> {
+    const match = conversationKey.match(/^telegram:(.+)$/);
+    if (!match) return false;
+    for (const part of splitMessage(text, LIMIT)) {
+      const res = await this.#api("sendMessage", { chat_id: match[1], text: part });
+      if (!res.ok) {
+        console.error(`telegram: deliver failed (${res.status}): ${await res.text()}`);
+      } else {
+        await res.body?.cancel();
+      }
+    }
+    return true;
+  }
+
   async #reply(msg: TelegramMessage, result: RunResult) {
     const reply = (result.reply ?? "").trim();
 
