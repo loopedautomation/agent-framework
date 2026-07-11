@@ -433,9 +433,6 @@ const agentConfigSchema = z.strictObject({
   tools: z
     .strictObject({
       mcp: z.array(McpServerSchema).optional().describe("MCP servers to connect at startup."),
-      custom: z.array(z.string().min(1)).optional().describe(
-        "Paths to custom TypeScript tool modules. Not yet implemented (issue #12).",
-      ),
       search: z.enum(["auto", "on", "off"]).default("auto").describe(
         "Tool search: defer MCP tool schemas out of context behind a search_tools tool. " +
           "auto defers when the agent has more than 10 tools; on always defers; off loads everything.",
@@ -785,8 +782,6 @@ export interface AgentConfig {
   tools?: {
     /** MCP servers to connect at startup. */
     mcp?: McpServerConfig[];
-    /** Paths to custom TypeScript tool modules. Not yet implemented. */
-    custom?: string[];
     /** Tool search: defer MCP tool schemas out of context behind a search_tools tool. */
     search: "auto" | "on" | "off";
   };

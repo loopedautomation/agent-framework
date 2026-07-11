@@ -699,14 +699,6 @@
             "description": "A Model Context Protocol server providing tools to the agent."
           }
         },
-        "custom": {
-          "description": "Paths to custom TypeScript tool modules. Not yet implemented (issue #12).",
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
         "search": {
           "default": "auto",
           "description": "Tool search: defer MCP tool schemas out of context behind a search_tools tool. auto defers when the agent has more than 10 tools; on always defers; off loads everything.",
