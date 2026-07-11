@@ -1,6 +1,6 @@
 ---
 title: "Webhook"
-description: "Run the agent over HTTP: an authenticated endpoint that returns the run result."
+description: "Run the agent over HTTP: an authenticated endpoint that returns the run result, plus a GitHub trigger for signed repository webhooks."
 ---
 
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
@@ -74,3 +74,41 @@ Requests sharing a `conversation_id` run one at a time, in arrival order. When a
 `token_env` is required — an unauthenticated endpoint contradicts deny-by-default. The token resolves at startup, and a missing env var fails right there, before the endpoint ever accepts a call.
 
 Every call lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps and tokens.
+
+## GitHub webhooks
+
+GitHub signs its webhooks with an HMAC header rather than a bearer token, so a repository webhook can't call the generic trigger above. The `github` trigger speaks GitHub's dialect natively: point a repository or organization webhook at it, and verified deliveries wake the agent.
+
+```yaml
+triggers:
+  - type: github
+    # path: /github                    (default)
+    # port: 8080                       (default)
+    # secret_env: GITHUB_WEBHOOK_SECRET (default)
+    events: ["pull_request.opened", "issues"]
+    # repos: ["loopedautomation/*"]    # optional; useful for org-level hooks
+```
+
+Every delivery's `X-Hub-Signature-256` header is verified against the webhook secret with a timing-safe comparison before the payload is parsed; an unsigned POST is a 401 and no event. The secret resolves at startup, and GitHub's `ping` handshake is answered without a model call, so creating the webhook succeeds before the agent has ever run.
+
+### Choosing events
+
+A single webhook can carry every event type GitHub emits, so `events` is required: it says which ones cost a model call. An entry is an event name (`pull_request`, any action), an event and action (`pull_request.opened`), or `"*"` for everything the webhook sends. The filter runs before the agent is called, and a dropped delivery is acknowledged with an `ignored` note so the repository's webhook log shows why nothing happened.
+
+The common event types - pull requests, issues, comments, reviews, pushes, releases, workflow runs - render into tailored plain text: number, title, branches, state, URL and the body, clipped to a sane size. Any other event type falls back to the payload itself with the bulky repeated objects pruned, so an event the framework has never heard of is still usable the day GitHub ships it.
+
+Pull-request and issue events share a conversation key (`github:<owner>/<repo>#<number>`), so with `memory.scope: thread` ([Memory](memory.md)) every event about one PR lands in one ongoing conversation - the run for a new commit remembers the review that came before it. Events without a number, like pushes and releases, run one-shot.
+
+### Setting up the webhook
+
+1. In the repository (or organization), Settings → Webhooks → Add webhook. Point it at your public URL for the agent, e.g. `https://agents.example.com/github`, with content type `application/json`.
+2. Set a webhook secret and put the same value in `GITHUB_WEBHOOK_SECRET`. GitHub has no unsigned mode here that the trigger will accept.
+3. Pick the events to send - sending more than `events:` lists is fine, since the trigger drops the rest before the model is called.
+
+Like the email trigger, the endpoint has to be reachable from the internet, so put a TLS-terminating proxy or tunnel in front of the port.
+
+### Acting on events
+
+There is no reply channel: GitHub expects an acknowledgement and nothing more, so the trigger acks each delivery immediately (GitHub times out slow endpoints at ten seconds) and runs the agent afterwards. What the agent does about the event comes from its own capabilities - for a PR review bot, that's `permissions.run: [gh, git]` and a purpose that says to check the branch out and post the review with `gh pr review`. The run and everything the agent did land in the [run history and audit trail](docker-run.md#persistence-the-data-volume) as always.
+
+One honest caveat: GitHub's signature scheme carries no timestamp, so unlike the Svix-signed email webhooks there is no replay window to enforce - a captured delivery could be replayed until the secret rotates. The signature still proves the payload came from someone holding the secret, and the worst a replay buys is a duplicate run over the same event.

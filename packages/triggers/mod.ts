@@ -1,7 +1,7 @@
 /**
  * Event sources that wake a Looped AF agent - Discord, Slack, Telegram,
- * webhook and cron - plus {@linkcode triggersFromConfig} to build them
- * from an agent config.
+ * email, GitHub, webhook and cron - plus {@linkcode triggersFromConfig}
+ * to build them from an agent config.
  *
  * @module
  */
@@ -11,6 +11,7 @@ import { WebhookTrigger } from "./webhook.ts";
 import { CronTrigger } from "./cron.ts";
 import { DiscordTrigger } from "./discord.ts";
 import { EmailTrigger } from "./email.ts";
+import { GithubTrigger } from "./github.ts";
 import { ImapEmailTrigger } from "./email_imap.ts";
 import { GmailEmailTrigger } from "./email_gmail.ts";
 import { OutlookEmailTrigger } from "./email_outlook.ts";
@@ -25,6 +26,7 @@ export type {
   CronTriggerConfig,
   DiscordTriggerConfig,
   EmailTriggerConfig,
+  GithubTriggerConfig,
   GmailEmailTriggerConfig,
   ImapEmailTriggerConfig,
   LimitsConfig,
@@ -60,6 +62,17 @@ export {
   threadKey,
   verifySvixSignature,
 } from "./email.ts";
+export {
+  eventAllowed,
+  githubConversationKey,
+  type GithubPayload,
+  GithubTrigger,
+  type GithubTriggerOptions,
+  type GithubVerifyOptions,
+  renderGithubEvent,
+  repoAllowed,
+  verifyGithubSignature,
+} from "./github.ts";
 export {
   ImapEmailTrigger,
   type ImapEmailTriggerOptions,
@@ -118,6 +131,24 @@ export function triggersFromConfig(
       case "cron":
         triggers.push(new CronTrigger({ schedule: t.schedule, prompt: t.prompt }));
         break;
+      case "github": {
+        const secret = getEnv(t.secret_env);
+        if (!secret) {
+          throw new Error(
+            `github trigger: webhook secret env var ${t.secret_env} is not set (every delivery's signature is verified)`,
+          );
+        }
+        triggers.push(
+          new GithubTrigger({
+            path: t.path,
+            port: t.port,
+            secret,
+            events: t.events,
+            repos: t.repos,
+          }),
+        );
+        break;
+      }
       case "email": {
         switch (t.transport) {
           case "resend": {
