@@ -12,7 +12,7 @@ model:
   api_key_env: OPENAI_API_KEY
 
 purpose: |
-  You manage the qBittorrent server at http://localhost:8080 for its owner.
+  You manage the qBittorrent server at http://host.docker.internal:8080 for its owner.
 
   When handed a magnet link or a .torrent URL, add it and confirm with the
   torrent's name. When asked what's happening, list active torrents in one
@@ -40,7 +40,7 @@ skills:
 permissions:
   # The qBittorrent server and nothing else. When the agent itself runs in
   # a container, change both this and the purpose to host.docker.internal.
-  net: [localhost]
+  net: [host.docker.internal]
 
 memory:
   scope: thread
