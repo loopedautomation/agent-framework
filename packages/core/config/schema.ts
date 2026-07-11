@@ -308,6 +308,19 @@ const MemoryConfigSchema = z.strictObject({
     ),
 }).describe("What the agent remembers between events.");
 
+const SchedulesConfigSchema = z.strictObject({
+  max: z.number().int().positive().default(20).describe(
+    "How many schedules may exist at once. The schedule tool refuses past the cap and tells " +
+      "the model to unschedule something first, so an unattended agent cannot accumulate " +
+      "unbounded future work.",
+  ),
+}).describe(
+  "Let the agent schedule future runs of itself: a schedule/list_schedules/unschedule tool " +
+    "trio backed by its own SQLite file. Schedules survive restarts, fire through the normal " +
+    "run path, and deliver their result to the conversation that created them. Omit the block " +
+    "and the tools do not exist.",
+);
+
 /** Built-in command names a config-defined command may not shadow. */
 const RESERVED_COMMAND_NAMES = ["help", "status", "reset", "compact", "new"];
 
@@ -413,6 +426,7 @@ const agentConfigSchema = z.strictObject({
     "Env for tools and MCP servers. Values may be ${VAR} references, resolved at startup (env var, then /run/secrets/<VAR>) and scoped per tool.",
   ),
   memory: MemoryConfigSchema.optional(),
+  schedules: SchedulesConfigSchema.optional(),
   limits: LimitsSchema.default({ max_steps: 20, concurrent_runs: 4, queue_depth: 10 }),
 }).describe(
   "A Looped AF agent: one job, one file. https://github.com/loopedautomation/agent-framework",
@@ -685,6 +699,15 @@ export interface MemoryConfig {
   compact_at_tokens: number | false;
 }
 
+/** Agent-created schedules: the schedule/list_schedules/unschedule tools. */
+export interface SchedulesConfig {
+  /**
+   * How many schedules may exist at once. The schedule tool refuses past the cap and tells the
+   * model to unschedule something first.
+   */
+  max: number;
+}
+
 /** Per-run budgets. */
 export interface LimitsConfig {
   /**
@@ -735,6 +758,8 @@ export interface AgentConfig {
   env?: Record<string, string>;
   /** What the agent remembers between events. */
   memory?: MemoryConfig;
+  /** Agent-created schedules: the schedule/list_schedules/unschedule tools. Omit = no tools. */
+  schedules?: SchedulesConfig;
   /** Per-run budgets. */
   limits: LimitsConfig;
 }

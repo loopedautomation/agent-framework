@@ -133,6 +133,33 @@ Deno.test("clearSession leaves archived transcripts alone", () => {
   store.close();
 });
 
+Deno.test("schedules round-trip: create, list, count, delete", () => {
+  const store = tempStore();
+  assertEquals(store.countSchedules(), 0);
+  const daily = store.createSchedule({
+    cron: "0 9 * * *",
+    timezone: "Africa/Johannesburg",
+    prompt: "post the standup",
+    conversationKey: "discord:123",
+  });
+  const once = store.createSchedule({ at: "2027-01-05T09:00:00Z", prompt: "remind: renew domain" });
+  assertEquals(store.countSchedules(), 2);
+
+  const listed = store.listSchedules();
+  assertEquals(listed.map((s) => s.id), [daily, once]);
+  assertEquals(listed[0].cron, "0 9 * * *");
+  assertEquals(listed[0].timezone, "Africa/Johannesburg");
+  assertEquals(listed[0].conversationKey, "discord:123");
+  assertEquals(listed[1].at, "2027-01-05T09:00:00Z");
+  assertEquals(listed[1].cron, undefined);
+  assertEquals(listed[1].conversationKey, undefined);
+
+  assert(store.deleteSchedule(once));
+  assertEquals(store.deleteSchedule(once), false); // already gone
+  assertEquals(store.countSchedules(), 1);
+  store.close();
+});
+
 Deno.test("runStats aggregates run count and token totals", () => {
   const store = tempStore();
   assertEquals(store.runStats(), { runs: 0, inputTokens: 0, outputTokens: 0 });

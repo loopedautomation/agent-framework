@@ -165,6 +165,24 @@ export class DiscordTrigger implements Trigger {
     return this.#channelNames.get(channelId);
   }
 
+  /** Proactive send (agent-created schedules): "discord:<channelId>" keys are ours. */
+  async deliver(conversationKey: string, text: string): Promise<boolean> {
+    const match = conversationKey.match(/^discord:(.+)$/);
+    if (!match) return false;
+    for (const part of splitMessage(text)) {
+      const res = await this.#api(`/channels/${match[1]}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ content: part }),
+      });
+      if (!res.ok) {
+        console.error(`discord: deliver failed (${res.status}): ${await res.text()}`);
+      } else {
+        await res.body?.cancel();
+      }
+    }
+    return true;
+  }
+
   async #reply(msg: DiscordMessage, result: RunResult) {
     const reply = (result.reply ?? "").trim();
 

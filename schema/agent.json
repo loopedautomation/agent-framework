@@ -786,6 +786,20 @@
       "additionalProperties": false,
       "description": "What the agent remembers between events."
     },
+    "schedules": {
+      "type": "object",
+      "properties": {
+        "max": {
+          "default": 20,
+          "description": "How many schedules may exist at once. The schedule tool refuses past the cap and tells the model to unschedule something first, so an unattended agent cannot accumulate unbounded future work.",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false,
+      "description": "Let the agent schedule future runs of itself: a schedule/list_schedules/unschedule tool trio backed by its own SQLite file. Schedules survive restarts, fire through the normal run path, and deliver their result to the conversation that created them. Omit the block and the tools do not exist."
+    },
     "limits": {
       "default": {
         "max_steps": 20,

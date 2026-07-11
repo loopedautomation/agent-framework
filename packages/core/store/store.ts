@@ -35,6 +35,22 @@ export interface RunRecord {
   startedAt: string;
 }
 
+/** One agent-created schedule, as written to the schedules table. */
+export interface ScheduleRecord {
+  /** Row id; assigned on insert. */
+  id: number;
+  /** Cron expression for recurring schedules; undefined for one-shots. */
+  cron?: string;
+  /** ISO timestamp for one-shot schedules; undefined for recurring ones. */
+  at?: string;
+  /** IANA timezone the cron expression is evaluated in; undefined = local. */
+  timezone?: string;
+  /** The prompt the agent runs when the schedule fires. */
+  prompt: string;
+  /** Conversation the result delivers to; undefined logs like config cron. */
+  conversationKey?: string;
+}
+
 /** One audit event, as written to the audit table. */
 export interface AuditRecord {
   /** Run the event belongs to, when known. */
@@ -188,6 +204,58 @@ export class Store {
     return this.#db
       .prepare("SELECT * FROM audit ORDER BY id DESC LIMIT ?")
       .all(limit) as Record<string, unknown>[];
+  }
+
+  /** Persist an agent-created schedule; returns its id. */
+  createSchedule(schedule: Omit<ScheduleRecord, "id">): number {
+    const result = this.#db
+      .prepare(
+        `INSERT INTO schedules (cron, at, timezone, prompt, conversation_key)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(
+        schedule.cron ?? null,
+        schedule.at ?? null,
+        schedule.timezone ?? null,
+        schedule.prompt,
+        schedule.conversationKey ?? null,
+      );
+    return Number(result.lastInsertRowid);
+  }
+
+  /** Every persisted schedule, oldest first. */
+  listSchedules(): ScheduleRecord[] {
+    const rows = this.#db
+      .prepare(
+        "SELECT id, cron, at, timezone, prompt, conversation_key FROM schedules ORDER BY id",
+      )
+      .all() as {
+        id: number;
+        cron: string | null;
+        at: string | null;
+        timezone: string | null;
+        prompt: string;
+        conversation_key: string | null;
+      }[];
+    return rows.map((r) => ({
+      id: r.id,
+      cron: r.cron ?? undefined,
+      at: r.at ?? undefined,
+      timezone: r.timezone ?? undefined,
+      prompt: r.prompt,
+      conversationKey: r.conversation_key ?? undefined,
+    }));
+  }
+
+  /** Remove a schedule; returns true if a row was deleted. */
+  deleteSchedule(id: number): boolean {
+    return this.#db.prepare("DELETE FROM schedules WHERE id = ?").run(id).changes > 0;
+  }
+
+  /** How many schedules exist — checked against schedules.max. */
+  countSchedules(): number {
+    const row = this.#db.prepare("SELECT COUNT(*) AS c FROM schedules").get() as { c: number };
+    return row.c;
   }
 
   /** The agent's self-chosen name and other identity facts (M3). */

@@ -564,6 +564,7 @@
           "jsr:@std/path@1",
           "jsr:@std/yaml@1",
           "npm:@modelcontextprotocol/sdk@1.29.0",
+          "npm:croner@9.1.0",
           "npm:zod@4.4.3"
         ]
       },
