@@ -23,25 +23,34 @@ function msg(overrides: Partial<DiscordMessage>): DiscordMessage {
 }
 
 Deno.test("shouldHandle: ignores bots, itself, and empty messages", () => {
-  assert(shouldHandle(msg({}), BOT_ID, "issues", {}));
-  assert(!shouldHandle(msg({ author: { id: "x", bot: true } }), BOT_ID, "issues", {}));
-  assert(!shouldHandle(msg({ author: { id: BOT_ID } }), BOT_ID, "issues", {}));
-  assert(!shouldHandle(msg({ content: "   " }), BOT_ID, "issues", {}));
+  assert(shouldHandle(msg({}), BOT_ID, { name: "issues" }, {}));
+  assert(!shouldHandle(msg({ author: { id: "x", bot: true } }), BOT_ID, { name: "issues" }, {}));
+  assert(!shouldHandle(msg({ author: { id: BOT_ID } }), BOT_ID, { name: "issues" }, {}));
+  assert(!shouldHandle(msg({ content: "   " }), BOT_ID, { name: "issues" }, {}));
 });
 
 Deno.test("shouldHandle: channel filter matches by name or id", () => {
   const opts = { channels: ["issues"] };
-  assert(shouldHandle(msg({}), BOT_ID, "issues", opts));
-  assert(!shouldHandle(msg({}), BOT_ID, "general", opts));
+  assert(shouldHandle(msg({}), BOT_ID, { name: "issues" }, opts));
+  assert(!shouldHandle(msg({}), BOT_ID, { name: "general" }, opts));
   assert(shouldHandle(msg({ channel_id: "issues" }), BOT_ID, undefined, opts));
   // no filter → everything passes
-  assert(shouldHandle(msg({}), BOT_ID, "anything", {}));
+  assert(shouldHandle(msg({}), BOT_ID, { name: "anything" }, {}));
+});
+
+Deno.test("shouldHandle: channel filter matches a thread via its parent channel", () => {
+  // A thread message carries the thread's id and title, not the parent's —
+  // the parent info is what lets `channels: ["issues"]` keep matching inside.
+  const thread = { name: "big-file export", parentId: "c-issues", parentName: "issues" };
+  assert(shouldHandle(msg({ channel_id: "t-1" }), BOT_ID, thread, { channels: ["issues"] }));
+  assert(shouldHandle(msg({ channel_id: "t-1" }), BOT_ID, thread, { channels: ["c-issues"] }));
+  assert(!shouldHandle(msg({ channel_id: "t-1" }), BOT_ID, thread, { channels: ["general"] }));
 });
 
 Deno.test("shouldHandle: require_mention", () => {
   const opts = { requireMention: true };
-  assert(!shouldHandle(msg({}), BOT_ID, "issues", opts));
-  assert(shouldHandle(msg({ mentions: [{ id: BOT_ID }] }), BOT_ID, "issues", opts));
+  assert(!shouldHandle(msg({}), BOT_ID, { name: "issues" }, opts));
+  assert(shouldHandle(msg({ mentions: [{ id: BOT_ID }] }), BOT_ID, { name: "issues" }, opts));
 });
 
 Deno.test("shouldHandle: DMs skip the channel filter and the mention gate", () => {
@@ -57,13 +66,14 @@ Deno.test("shouldHandle: DMs skip the channel filter and the mention gate", () =
 
 Deno.test("shouldHandle: from_users matches by id or username, drops everyone else", () => {
   const opts = { fromUsers: ["user-1", "amin"] };
-  assert(shouldHandle(msg({}), BOT_ID, "issues", opts)); // by id
-  assert(shouldHandle(msg({ author: { id: "u-9", username: "amin" } }), BOT_ID, "issues", opts));
+  const issues = { name: "issues" };
+  assert(shouldHandle(msg({}), BOT_ID, issues, opts)); // by id
+  assert(shouldHandle(msg({ author: { id: "u-9", username: "amin" } }), BOT_ID, issues, opts));
   assert(
-    !shouldHandle(msg({ author: { id: "u-9", username: "someone" } }), BOT_ID, "issues", opts),
+    !shouldHandle(msg({ author: { id: "u-9", username: "someone" } }), BOT_ID, issues, opts),
   );
   // empty list behaves like no filter
-  assert(shouldHandle(msg({ author: { id: "u-9" } }), BOT_ID, "issues", { fromUsers: [] }));
+  assert(shouldHandle(msg({ author: { id: "u-9" } }), BOT_ID, issues, { fromUsers: [] }));
 });
 
 Deno.test("splitMessage: respects the 2000-char cap on line boundaries", () => {

@@ -66,7 +66,7 @@ Every key is optional; the defaults give you a bot that listens everywhere it's 
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `channels` | all channels | Channel names or ids to listen in. DMs skip this filter. |
+| `channels` | all channels | Channel names or ids to listen in. A thread counts as the channel it lives under, so listing `general` also covers its threads. DMs skip this filter. |
 | `require_mention` | `false` | Only respond when the bot is @-mentioned. A DM always addresses the bot, so it passes. |
 | `from_users` | anyone | Only handle messages from these authors (user ids or usernames). The filter runs before the model is called, so everyone else's messages cost no tokens. |
 | `token_env` | `DISCORD_BOT_TOKEN` | The env var holding the bot token. |

@@ -49,6 +49,18 @@ export interface DiscordMessage {
   mentions?: { id: string }[];
 }
 
+/**
+ * What the filter knows about a channel (from `/channels/<id>`). A thread's
+ * `channel_id` is the thread's own id and its `name` is the thread's title, so
+ * the parent channel's id and name ride along — a filter naming `#general`
+ * matches the threads under it too.
+ */
+export interface DiscordChannelInfo {
+  name?: string;
+  parentId?: string;
+  parentName?: string;
+}
+
 /** Message filters shared by {@linkcode shouldHandle} and {@linkcode DiscordTriggerOptions}. */
 export interface DiscordFilterOptions {
   /** Channel names or ids to listen in; empty/undefined = all channels. DMs always pass. */
@@ -63,7 +75,7 @@ export interface DiscordFilterOptions {
 export function shouldHandle(
   msg: DiscordMessage,
   botUserId: string,
-  channelName: string | undefined,
+  channel: DiscordChannelInfo | undefined,
   opts: DiscordFilterOptions,
 ): boolean {
   if (msg.author.bot || msg.author.id === botUserId) return false;
@@ -78,9 +90,8 @@ export function shouldHandle(
   // gate only apply to guild messages (DMs carry no guild_id).
   const isDM = !msg.guild_id;
   if (!isDM && opts.channels?.length) {
-    const match = opts.channels.includes(msg.channel_id) ||
-      (channelName !== undefined && opts.channels.includes(channelName));
-    if (!match) return false;
+    const ids = [msg.channel_id, channel?.name, channel?.parentId, channel?.parentName];
+    if (!opts.channels.some((c) => ids.includes(c))) return false;
   }
   if (!isDM && opts.requireMention && !msg.mentions?.some((m) => m.id === botUserId)) return false;
   return true;
@@ -136,7 +147,7 @@ export class DiscordTrigger implements Trigger {
   #stopped = false;
   #botUserId = "";
   #applicationId = "";
-  #channelNames = new Map<string, string | undefined>();
+  #channelInfos = new Map<string, DiscordChannelInfo | undefined>();
   #reconnectDelayMs = 1_000;
 
   /** Create the trigger; nothing connects until {@linkcode start}. */
@@ -155,14 +166,30 @@ export class DiscordTrigger implements Trigger {
     });
   }
 
-  async #channelName(channelId: string): Promise<string | undefined> {
-    if (!this.#channelNames.has(channelId)) {
+  async #channelInfo(channelId: string): Promise<DiscordChannelInfo | undefined> {
+    if (!this.#channelInfos.has(channelId)) {
       const res = await this.#api(`/channels/${channelId}`);
-      const name = res.ok ? (await res.json()).name : undefined;
-      if (!res.ok) await res.body?.cancel();
-      this.#channelNames.set(channelId, name);
+      if (!res.ok) {
+        await res.body?.cancel();
+        this.#channelInfos.set(channelId, undefined);
+      } else {
+        const { name, parent_id, type } = await res.json();
+        // A thread (types 10–12) reports its title as `name` and its channel
+        // as `parent_id`; resolving the parent lets the channels filter match
+        // either. For non-threads, parent_id is the category — not a channel
+        // anyone lists in the filter, so it stays out of the info.
+        const isThread = type === 10 || type === 11 || type === 12;
+        const parentName = isThread && parent_id
+          ? (await this.#channelInfo(parent_id))?.name
+          : undefined;
+        this.#channelInfos.set(channelId, {
+          name,
+          parentId: isThread ? parent_id : undefined,
+          parentName,
+        });
+      }
     }
-    return this.#channelNames.get(channelId);
+    return this.#channelInfos.get(channelId);
   }
 
   /** Proactive send (agent-created schedules): "discord:<channelId>" keys are ours. */
@@ -357,10 +384,10 @@ export class DiscordTrigger implements Trigger {
           }
           if (payload.t === "MESSAGE_CREATE") {
             const msg = payload.d as DiscordMessage;
-            const channelName = this.#opts.channels?.length
-              ? await this.#channelName(msg.channel_id)
+            const channel = this.#opts.channels?.length
+              ? await this.#channelInfo(msg.channel_id)
               : undefined;
-            if (!shouldHandle(msg, this.#botUserId, channelName, this.#opts)) break;
+            if (!shouldHandle(msg, this.#botUserId, channel, this.#opts)) break;
             const stopTyping = this.#opts.showTyping
               ? typingLoop(() => {
                 this.#api(`/channels/${msg.channel_id}/typing`, { method: "POST" })
