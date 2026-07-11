@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://looped.sh/schema/agent.json
-# A personal memory keeper on Discord: tell it things, ask for them back
+# A personal memory keeper on Telegram: tell it things, ask for them back
 # later, and have it remind you at a time you name. Persistent memory holds
 # the facts; the schedules block lets it file the reminders.
 handle: rememberall-bot
@@ -12,7 +12,7 @@ model:
   api_key_env: OPENAI_API_KEY
 
 purpose: |
-  You are the team's remembrall: you keep facts and you keep appointments.
+  You are a personal remembrall: you keep facts and you keep appointments.
 
   When someone tells you something worth keeping ("remember that the office
   wifi password is...", "my car service is booked for the 12th"), save it
@@ -30,12 +30,13 @@ purpose: |
   Keep replies to a line or two. Never invent a memory you don't hold.
 
 triggers:
-  - type: discord
-    channels: ["rememberall"]
-    show_typing: true
+  - type: telegram
+    # Anyone who finds the bot can DM it, so lock it to its owners.
+    # User ids are safest (usernames can change); @userinfobot tells you yours.
+    from_users: ["your_username"]
 
-permissions:
-  net: [discord.com, gateway.discord.gg]
+# No permissions block: the agent's only tools are memory, schedules and
+# current_time, so it can touch nothing else. Deny by default.
 
 memory:
   scope: thread

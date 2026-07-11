@@ -1,7 +1,7 @@
 # The whole deployment story: docker compose up -d --build
 #
 # .env next to this file (see .env.example):
-#   OPENAI_API_KEY, DISCORD_BOT_TOKEN
+#   OPENAI_API_KEY, TELEGRAM_BOT_TOKEN
 services:
   rememberall-bot:
     build:
