@@ -19,7 +19,7 @@ permissions:
 
 - **`net`** - hosts, matched exactly; `*.example.com` matches subdomains, and the apex needs its own entry.
 - **`run`** - executables, matched by basename.
-- **`read` / `write`** - path prefixes: granting `/workspace` grants everything beneath it. Paths are normalized before the check, so `..` traversal cannot step outside the allowlist.
+- **`read` / `write`** - path prefixes: granting `/workspace` grants everything beneath it. A path is normalized and its symlinks are expanded before the check, so neither `..` traversal nor a link pointing out of the root steps outside the allowlist. The tools then act on the resolved path, so what was authorized is what gets opened. A symlink that stays inside the root is fine, which means an allowed root can itself be a link, the way `/tmp` is on macOS.
 
 Tools follow permissions: `run_bash` only exists for the agent if `run:` grants something, `http_request` only if `net:` does and `read_file`/`write_file` only if `read:`/`write:` do. This means that no unused tool schema takes up context. The full toolset is in [Tools](tools.md).
 

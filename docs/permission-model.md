@@ -63,6 +63,14 @@ With this block, `read_file` can open `/workspace/notes.md` and `write_file` can
 attempt `/workspace/../etc/passwd`, because paths are normalized before the check. Writes
 outside `/workspace/out` are denied, including the rest of `/workspace`.
 
+A prefix covers everything beneath it, so `read: [/workspace]` grants every file in every
+subdirectory. What it does not grant is a file that merely looks like it lives there. The
+tools resolve a path's symlinks before authorizing it, and they act on the resolved path,
+so a link at `/workspace/escape` pointing at `/etc` gives the agent no more reach than it
+already had: `/workspace/escape/passwd` is checked as `/etc/passwd`, and denied. Links
+that stay inside the root keep working, which is what lets an allowed root be a symlink
+itself, the way `/tmp` is on macOS.
+
 An agent with an empty `permissions:` block carries only `current_time`, plus
 `read_skill` if it has [skills](skills.md). The full toolset and what makes each tool
 appear is in [Tools](tools.md); syntax, matching rules and secrets are in
@@ -118,6 +126,21 @@ permission engine's allowlists.
 **`run` matches by basename.** `run: [gh]` allows any executable named `gh`, wherever it
 lives. Inside the hardened base image that is fine in practice; if you derive an image
 that widens the writable paths, keep in mind that the container is the backstop.
+
+**Path grants are enforced in the engine, and only there.** Deno's `--allow-read=/workspace`
+follows a symlink out of `/workspace` as readily as the tools once did, so the runtime
+layer is not a second opinion on where a path leads. The engine resolves symlinks and
+authorizes the destination, and the container is the layer that decides whether the
+destination exists in the agent's filesystem at all. If a path must be unreachable, do not
+mount it.
+
+**Resolving a path and opening it are two steps.** The tools resolve, authorize, then act
+on the resolved path, so a link cannot redirect a call that was already checked. What
+remains is the classic gap between those steps: a component swapped for a symlink in the
+microseconds between them would be followed. Tool calls within a run are serialized, so an
+agent cannot race itself, and closing the gap properly needs `openat2`-style syscalls that
+Deno does not expose. An attacker who can already write to the agent's allowed root to win
+that race has the box.
 
 The result is that you can run an agent unattended and know its worst case in advance:
 the agent can reach exactly what its grants say, the runtime and the container hold that

@@ -1,5 +1,5 @@
-import { resolve } from "@std/path";
 import type { Permissions } from "../config/schema.ts";
+import { realPathSync } from "./paths.ts";
 
 /** The permission axis a decision applies to. */
 export type PermissionKind = "net" | "run" | "read" | "write";
@@ -47,11 +47,28 @@ function pathMatches(prefix: string, path: string): boolean {
 export class PermissionEngine {
   #permissions: Permissions;
   #audit?: AuditSink;
+  #realPrefixes = new Map<string, string>();
 
   /** Create an engine over the config's allowlists; undefined permissions deny everything. */
   constructor(permissions: Permissions | undefined, audit?: AuditSink) {
     this.#permissions = permissions ?? {};
     this.#audit = audit;
+  }
+
+  /**
+   * An allowed root, with its own symlinks expanded. Both sides of the
+   * comparison have to speak in real paths: a root reached through a symlink
+   * (`/tmp` on macOS, a symlinked data volume) would otherwise never match
+   * the resolved path of a file inside it. Cached — roots don't move under a
+   * running agent, and every file check consults them.
+   */
+  #realPrefix(prefix: string): string {
+    let real = this.#realPrefixes.get(prefix);
+    if (real === undefined) {
+      real = realPathSync(prefix);
+      this.#realPrefixes.set(prefix, real);
+    }
+    return real;
   }
 
   #decide(kind: PermissionKind, subject: string, allowed: boolean, hint: string) {
@@ -85,17 +102,24 @@ export class PermissionEngine {
     return this.#decide("run", executable, allowed, "permissions.run");
   }
 
-  /** Check whether `path` (already resolved) is under a read allowlist prefix. */
+  /**
+   * Check whether `path` is under a read allowlist prefix. Pass a path with
+   * its symlinks already expanded ({@linkcode realPath}) — the file tools do
+   * this, and a lexical path checked here is a path that can lie about where
+   * it leads.
+   */
   read(path: string): PermissionDecision {
-    // Prefixes may be relative (resolved against cwd) — the checked path
-    // arrives already resolved, so both sides normalize before matching.
-    const allowed = (this.#permissions.read ?? []).some((p) => pathMatches(resolve(p), path));
+    const allowed = (this.#permissions.read ?? []).some((p) =>
+      pathMatches(this.#realPrefix(p), path)
+    );
     return this.#decide("read", path, allowed, "permissions.read");
   }
 
-  /** Check whether `path` (already resolved) is under a write allowlist prefix. */
+  /** Check whether `path` (symlinks already expanded) is under a write allowlist prefix. */
   write(path: string): PermissionDecision {
-    const allowed = (this.#permissions.write ?? []).some((p) => pathMatches(resolve(p), path));
+    const allowed = (this.#permissions.write ?? []).some((p) =>
+      pathMatches(this.#realPrefix(p), path)
+    );
     return this.#decide("write", path, allowed, "permissions.write");
   }
 }
