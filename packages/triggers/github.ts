@@ -1,3 +1,4 @@
+import { logError, logInfo } from "@looped/core";
 import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 
 // The GitHub trigger: a repository or organization webhook POSTs events here,
@@ -266,7 +267,7 @@ export class GithubTrigger implements Trigger {
     this.#server = Deno.serve({
       port,
       onListen: this.#opts.onListen ?? ((addr) => {
-        console.log(`github trigger listening on :${addr.port}${path}`);
+        logInfo(`github trigger listening on :${addr.port}${path}`);
       }),
     }, async (req) => {
       const url = new URL(req.url);
@@ -310,10 +311,10 @@ export class GithubTrigger implements Trigger {
         conversationKey: githubConversationKey(payload),
       }).then((result) => {
         if (result.status !== "ok") {
-          console.error(`github: run for ${eventName} (${deliveryId}) ended ${result.status}`);
+          logError(`github: run for ${eventName} (${deliveryId}) ended ${result.status}`);
         }
       }).catch((err) => {
-        console.error(`github: processing failed: ${(err as Error).message}`);
+        logError(`github: processing failed: ${(err as Error).message}`);
       });
       this.#inflight.add(task);
       task.finally(() => this.#inflight.delete(task));

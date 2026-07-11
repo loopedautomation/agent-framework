@@ -80,6 +80,13 @@ export interface RunOptions {
    * the loop stops at the next boundary, so the transcript stays well-formed.
    */
   signal?: AbortSignal;
+  /**
+   * Scrubs known secret values from anything that leaves the loop: tool
+   * results before they enter the transcript, the run's reply, and every
+   * emitted event. {@linkcode AgentService} passes the agent's redactor;
+   * a loop run without one redacts nothing.
+   */
+  redact?: (text: string) => string;
 }
 
 /**
@@ -94,13 +101,30 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     : () => opts.tools as NativeTool[] ?? [];
   const messages: Message[] = [...(opts.history ?? []), { role: "user", content: input }];
   const usage: Usage = { inputTokens: 0, outputTokens: 0 };
-  const emit = opts.onEvent ?? (() => {});
+  const redact = opts.redact ?? ((text: string) => text);
+  // Every event carries text a secret could ride out on: a tool result, the
+  // model's own commentary, the arguments it built. Redact at the one gate.
+  const listener = opts.onEvent;
+  const emit = listener
+    ? (event: RunEvent) => {
+      switch (event.type) {
+        case "assistant":
+          return listener({ ...event, content: redact(event.content) });
+        case "tool_call":
+          return listener({ ...event, arguments: redact(event.arguments) });
+        case "tool_result":
+          return listener({ ...event, content: redact(event.content) });
+        default:
+          return listener(event);
+      }
+    }
+    : () => {};
   let steps = 0;
   let contextTokens: number | undefined;
 
   const finish = (status: RunStatus, reply: string): RunResult => ({
     status,
-    reply,
+    reply: redact(reply),
     steps,
     usage,
     contextTokens,
@@ -157,9 +181,14 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       const tool = toolsByName.get(call.name);
       emit({ type: "tool_call", name: call.name, arguments: call.arguments });
       const startedAt = performance.now();
-      const result = tool
-        ? await tool.execute(call.arguments)
-        : `unknown tool: ${call.name}. Available tools: ${[...toolsByName.keys()].join(", ")}`;
+      // A permitted CLI or MCP server can always echo a credential back. The
+      // result is scrubbed here, before it becomes a message the model reads
+      // and the store keeps.
+      const result = redact(
+        tool
+          ? await tool.execute(call.arguments)
+          : `unknown tool: ${call.name}. Available tools: ${[...toolsByName.keys()].join(", ")}`,
+      );
       emit({
         type: "tool_result",
         name: call.name,

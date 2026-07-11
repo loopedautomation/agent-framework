@@ -1,3 +1,4 @@
+import { logError, logInfo } from "@looped/core";
 import type { AgentEvent, CommandSpec, RunResult, Trigger } from "@looped/core";
 import { isSilence, NO_REPLY, splitMessage } from "./text.ts";
 
@@ -202,7 +203,7 @@ export class DiscordTrigger implements Trigger {
         body: JSON.stringify({ content: part }),
       });
       if (!res.ok) {
-        console.error(`discord: deliver failed (${res.status}): ${await res.text()}`);
+        logError(`discord: deliver failed (${res.status}): ${await res.text()}`);
       } else {
         await res.body?.cancel();
       }
@@ -244,7 +245,7 @@ export class DiscordTrigger implements Trigger {
         ),
       });
       if (!res.ok) {
-        console.error(`discord: reply failed (${res.status}): ${await res.text()}`);
+        logError(`discord: reply failed (${res.status}): ${await res.text()}`);
       } else {
         await res.body?.cancel();
       }
@@ -275,7 +276,7 @@ export class DiscordTrigger implements Trigger {
       }))),
     });
     if (!res.ok) {
-      console.error(`discord: command registration failed (${res.status}): ${await res.text()}`);
+      logError(`discord: command registration failed (${res.status}): ${await res.text()}`);
     } else {
       await res.body?.cancel();
     }
@@ -303,7 +304,7 @@ export class DiscordTrigger implements Trigger {
       body: JSON.stringify({ type: 5 }), // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
     });
     if (!ack.ok) {
-      console.error(`discord: interaction ack failed (${ack.status}): ${await ack.text()}`);
+      logError(`discord: interaction ack failed (${ack.status}): ${await ack.text()}`);
       return;
     }
     await ack.body?.cancel();
@@ -326,7 +327,7 @@ export class DiscordTrigger implements Trigger {
         })
         : await this.#api(webhook, { method: "POST", body: JSON.stringify({ content: part }) });
       if (!res.ok) {
-        console.error(`discord: interaction reply failed (${res.status}): ${await res.text()}`);
+        logError(`discord: interaction reply failed (${res.status}): ${await res.text()}`);
       } else {
         await res.body?.cancel();
       }
@@ -375,11 +376,11 @@ export class DiscordTrigger implements Trigger {
           if (payload.t === "READY") {
             this.#botUserId = payload.d.user.id;
             this.#reconnectDelayMs = 1_000;
-            console.log(`discord trigger connected as ${payload.d.user.username}`);
+            logInfo(`discord trigger connected as ${payload.d.user.username}`);
           }
           if (payload.t === "INTERACTION_CREATE") {
             this.#handleInteraction(payload.d as DiscordInteraction, emit).catch((err) =>
-              console.error(`discord: interaction handling failed: ${err}`)
+              logError(`discord: interaction handling failed: ${err}`)
             );
           }
           if (payload.t === "MESSAGE_CREATE") {
@@ -421,7 +422,7 @@ export class DiscordTrigger implements Trigger {
       if (this.#stopped) return;
       const delay = this.#reconnectDelayMs;
       this.#reconnectDelayMs = Math.min(delay * 2, 60_000);
-      console.log(`discord: gateway closed, reconnecting in ${delay}ms`);
+      logInfo(`discord: gateway closed, reconnecting in ${delay}ms`);
       setTimeout(() => this.#connect(gatewayUrl, emit), delay);
     };
     ws.onerror = () => ws.close();

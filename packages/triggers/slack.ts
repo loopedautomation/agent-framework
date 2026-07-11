@@ -1,3 +1,4 @@
+import { logError, logInfo } from "@looped/core";
 import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 import { NO_REPLY, splitMessage } from "./text.ts";
 
@@ -159,7 +160,7 @@ export class SlackTrigger implements Trigger {
         text: part,
         ...(threadTs ? { thread_ts: threadTs } : {}),
       });
-      if (!res.ok) console.error(`slack: reply failed: ${res.error}`);
+      if (!res.ok) logError(`slack: reply failed: ${res.error}`);
     }
   }
 
@@ -177,7 +178,7 @@ export class SlackTrigger implements Trigger {
         text: part,
         ...(match[2] ? { thread_ts: match[2] } : {}),
       });
-      if (!res.ok) console.error(`slack: deliver failed: ${res.error}`);
+      if (!res.ok) logError(`slack: deliver failed: ${res.error}`);
     }
     return true;
   }
@@ -224,7 +225,7 @@ export class SlackTrigger implements Trigger {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ response_type: "in_channel", text: part }),
       });
-      if (!res.ok) console.error(`slack: slash command reply failed (${res.status})`);
+      if (!res.ok) logError(`slack: slash command reply failed (${res.status})`);
       await res.body?.cancel();
     }
   }
@@ -237,7 +238,7 @@ export class SlackTrigger implements Trigger {
     }
     this.#botUserId = auth.user_id;
     await this.#connect(emit);
-    console.log(`slack trigger connected as ${auth.user}`);
+    logInfo(`slack trigger connected as ${auth.user}`);
   }
 
   async #connect(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
@@ -268,7 +269,7 @@ export class SlackTrigger implements Trigger {
           // app_mention duplicates the message event; handling both would double-run.
           if (event?.type === "message") {
             this.#handle(event as SlackMessage, emit).catch((err) =>
-              console.error(`slack: handling failed: ${err}`)
+              logError(`slack: handling failed: ${err}`)
             );
           }
           break;
@@ -278,7 +279,7 @@ export class SlackTrigger implements Trigger {
           // reply follows via response_url.
           ws.send(JSON.stringify({ envelope_id: payload.envelope_id }));
           this.#handleSlashCommand(payload.payload as SlackSlashCommand, emit).catch((err) =>
-            console.error(`slack: slash command handling failed: ${err}`)
+            logError(`slack: slash command handling failed: ${err}`)
           );
           break;
         }
@@ -293,7 +294,7 @@ export class SlackTrigger implements Trigger {
     if (this.#stopped) return;
     const delay = this.#reconnectDelayMs;
     this.#reconnectDelayMs = Math.min(delay * 2, 60_000);
-    console.log(`slack: ${why}, reconnecting in ${delay}ms`);
+    logInfo(`slack: ${why}, reconnecting in ${delay}ms`);
     setTimeout(() => {
       this.#connect(emit).catch((err) => this.#reconnect(emit, `reconnect failed (${err})`));
     }, delay);

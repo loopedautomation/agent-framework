@@ -122,7 +122,7 @@ env:
   GITHUB_TOKEN: ${GITHUB_TOKEN}
 ```
 
-The `env:` block grants environment variables to tools and MCP servers — and only those; subprocesses never inherit the agent process's ambient environment. Values may be `${VAR}` references, resolved at startup from the process env, then from `/run/secrets/<VAR>` (Docker Compose file secrets). A missing reference fails at startup, before any event is handled. Secrets never enter the model's context — the full story is in [Permissions](permissions.md#secrets).
+The `env:` block grants environment variables to tools and MCP servers — and only those; subprocesses never inherit the agent process's ambient environment. Values may be `${VAR}` references, resolved at startup from the process env, then from `/run/secrets/<VAR>` (Docker Compose file secrets). A missing reference fails at startup, before any event is handled. The value is scoped to the tools that need it, and any tool output quoting it back is scrubbed. The full story is in [Secrets](secrets.md).
 
 ## The blocks with their own pages
 
@@ -130,6 +130,8 @@ The `env:` block grants environment variables to tools and MCP servers — and o
 - **`skills:`** — markdown files that teach the agent how to use something well; capability stays with the config. → [Skills](skills.md)
 - **`tools:`** — capability beyond the natives: MCP servers, and tool search to keep their schemas out of context. → [Tools](tools.md)
 - **`permissions:`** — deny-by-default allowlists for hosts, executables, and paths. Omit the block and the agent can touch nothing. → [Permissions](permissions.md)
+- **`http:`** - credentials the runtime attaches to outbound `http_request` calls, so an authenticated API needs no key in a model-visible header. → [Secrets](secrets.md)
+- **`redact:`** - extra secret values and header names to scrub, on top of the ones the config already names. → [Secrets](secrets.md)
 - **`memory:`** — conversation history (`scope`), facts that survive across conversations and restarts (`persistent`), and auto-compaction (`compact_at_tokens`). → [Memory](memory.md)
 - **`schedules:`** — the agent files future work for itself: reminders and recurring runs it creates in conversation. → [Scheduling](scheduling.md)
 - **`commands:`** — operator-defined slash commands, alongside the built-ins `/help`, `/status`, `/reset`, `/compact` and `/new`. → [Slash commands](slash-commands.md)

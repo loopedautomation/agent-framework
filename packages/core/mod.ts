@@ -17,6 +17,8 @@ export {
   type EmailTriggerConfig,
   type GithubTriggerConfig,
   type GmailEmailTriggerConfig,
+  type HttpAuthConfig,
+  type HttpConfig,
   type ImapEmailTriggerConfig,
   type LimitsConfig,
   type McpServerConfig,
@@ -24,6 +26,7 @@ export {
   type ModelConfig,
   type OutlookEmailTriggerConfig,
   type Permissions,
+  type RedactConfig,
   type ResendEmailTriggerConfig,
   type SlackTriggerConfig,
   type TelegramTriggerConfig,
@@ -37,7 +40,23 @@ export {
   parseAgentConfig,
   resolveAgentConfig,
 } from "./config/load.ts";
-export { resolveEnv, type ResolveEnvOptions } from "./config/env.ts";
+export {
+  envRefsIn,
+  expandEnvRefs,
+  lookupSecret,
+  resolveEnv,
+  type ResolveEnvOptions,
+} from "./config/env.ts";
+export {
+  defaultRedactor,
+  REDACTED,
+  Redactor,
+  redactorForConfig,
+  type RedactorOptions,
+  redactText,
+  setDefaultRedactor,
+} from "./redact/redact.ts";
+export { logError, logInfo, logWarn } from "./runtime/log.ts";
 export {
   AnthropicProvider,
   type Completion,
@@ -64,7 +83,11 @@ export {
 export { defineTool, type NativeTool, type ToolArgs, type ToolSchema } from "./tools/types.ts";
 export { currentTimeTool } from "./tools/time.ts";
 export { createRunBashTool, extractExecutables, type RunBashOptions } from "./tools/bash.ts";
-export { createHttpRequestTool, type HttpRequestOptions } from "./tools/http.ts";
+export {
+  createHttpRequestTool,
+  type HttpCredential,
+  type HttpRequestOptions,
+} from "./tools/http.ts";
 export { createReadFileTool, createWriteFileTool } from "./tools/files.ts";
 export { SEARCH_AUTO_THRESHOLD, ToolRegistry } from "./tools/registry.ts";
 export {
@@ -91,7 +114,7 @@ export {
   type ParsedCommand,
 } from "./runtime/commands.ts";
 export { startStatusServer, type StatusServerOptions } from "./runtime/status.ts";
-export { type AuditRecord, type RunRecord, Store } from "./store/store.ts";
+export { type AuditRecord, type RunRecord, Store, type StoreOptions } from "./store/store.ts";
 export {
   type AgentEvent,
   AgentService,

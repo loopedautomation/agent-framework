@@ -64,7 +64,9 @@ env:
   GITHUB_TOKEN: ${GITHUB_TOKEN}
 ```
 
-The value resolves from the process environment first, then from `/run/secrets/<NAME>` (Docker Compose file secrets). A missing reference fails at startup, before any event is handled. Secrets are injected into tools server side and never enter the model's context; the model can use `GITHUB_TOKEN` without ever seeing it.
+The value resolves from the process environment first, then from `/run/secrets/<NAME>` (Docker Compose file secrets). A missing reference fails at startup, before any event is handled. The value is scoped to the tools that need it, so the model can use `GITHUB_TOKEN` without ever seeing it.
+
+That covers the way in. A permitted CLI or MCP server can also echo a secret back at you in its output, so tool results, transcripts, records, logs and traces are scrubbed of known secret values on the way out. For an authenticated API, `http.auth` lets the runtime attach the credential to the request itself. Both are covered in [Secrets](secrets.md).
 
 ## The layers
 

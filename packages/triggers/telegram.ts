@@ -1,3 +1,4 @@
+import { logError, logInfo } from "@looped/core";
 import type { AgentEvent, CommandSpec, RunResult, Trigger } from "@looped/core";
 import { NO_REPLY, splitMessage } from "./text.ts";
 
@@ -114,7 +115,7 @@ export class TelegramTrigger implements Trigger {
     for (const part of splitMessage(text, LIMIT)) {
       const res = await this.#api("sendMessage", { chat_id: match[1], text: part });
       if (!res.ok) {
-        console.error(`telegram: deliver failed (${res.status}): ${await res.text()}`);
+        logError(`telegram: deliver failed (${res.status}): ${await res.text()}`);
       } else {
         await res.body?.cancel();
       }
@@ -152,7 +153,7 @@ export class TelegramTrigger implements Trigger {
           : {}),
       });
       if (!res.ok) {
-        console.error(`telegram: reply failed (${res.status}): ${await res.text()}`);
+        logError(`telegram: reply failed (${res.status}): ${await res.text()}`);
       } else {
         await res.body?.cancel();
       }
@@ -177,12 +178,12 @@ export class TelegramTrigger implements Trigger {
         })),
       });
       if (!set.ok) {
-        console.error(`telegram: setMyCommands failed (${set.status}): ${await set.text()}`);
+        logError(`telegram: setMyCommands failed (${set.status}): ${await set.text()}`);
       } else {
         await set.body?.cancel();
       }
     }
-    console.log(`telegram trigger connected as @${me.username}`);
+    logInfo(`telegram trigger connected as @${me.username}`);
     this.#poll(me.username, emit); // long-poll loop runs for the service's lifetime
   }
 
@@ -218,14 +219,14 @@ export class TelegramTrigger implements Trigger {
           })
             .then((result) => this.#reply(msg, result))
             .catch((err) => {
-              console.error(`telegram: run failed: ${(err as Error).message}`);
+              logError(`telegram: run failed: ${(err as Error).message}`);
             });
         }
       } catch (err) {
         if (this.#stopped) return;
         const delay = this.#backoffMs;
         this.#backoffMs = Math.min(delay * 2, 60_000);
-        console.log(`telegram: poll error (${(err as Error).message}), retrying in ${delay}ms`);
+        logInfo(`telegram: poll error (${(err as Error).message}), retrying in ${delay}ms`);
         await new Promise((r) => setTimeout(r, delay));
       }
     }

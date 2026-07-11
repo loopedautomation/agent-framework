@@ -8,6 +8,7 @@ import {
   type StopReason,
   type ToolCall,
 } from "./types.ts";
+import { redactText } from "../redact/redact.ts";
 import { withRetry } from "./retry.ts";
 
 export interface AnthropicOptions {
@@ -122,7 +123,7 @@ export class AnthropicProvider implements Provider {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new ProviderError(
-        `provider returned ${res.status}: ${text.slice(0, 300)}`,
+        `provider returned ${res.status}: ${redactText(text.slice(0, 300))}`,
         errorKindForStatus(res.status),
         res.status,
       );
