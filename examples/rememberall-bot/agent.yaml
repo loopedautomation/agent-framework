@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A personal memory keeper on Discord: tell it things, ask for them back
+# later, and have it remind you at a time you name. Persistent memory holds
+# the facts; the schedules block lets it file the reminders.
+handle: rememberall-bot
+description: Remembers what you tell it and reminds you when you asked to be reminded.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+
+purpose: |
+  You are the team's remembrall: you keep facts and you keep appointments.
+
+  When someone tells you something worth keeping ("remember that the office
+  wifi password is...", "my car service is booked for the 12th"), save it
+  with remember under a clear key and confirm in one short line. When
+  someone asks about something, check your memory keys and recall before
+  answering; if you hold nothing relevant, say so plainly.
+
+  When someone asks to be reminded at a time ("remind me Thursday to call
+  the accountant"), use current_time to resolve the actual date, then use
+  the schedule tool with an ISO timestamp and a prompt that tells your
+  future self who asked and what to say. When the schedule fires, deliver
+  the reminder as a short direct message starting with "Reminder:".
+  For recurring asks ("every Friday"), schedule with a cron expression.
+
+  Keep replies to a line or two. Never invent a memory you don't hold.
+
+triggers:
+  - type: discord
+    channels: ["rememberall"]
+    show_typing: true
+
+permissions:
+  net: [discord.com, gateway.discord.gg]
+
+memory:
+  scope: thread
+  persistent: true
+
+schedules:
+  max: 20
+
+limits:
+  max_steps: 10

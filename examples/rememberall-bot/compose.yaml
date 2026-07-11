@@ -1,0 +1,25 @@
+# The whole deployment story: docker compose up -d --build
+#
+# .env next to this file (see .env.example):
+#   OPENAI_API_KEY, DISCORD_BOT_TOKEN
+services:
+  rememberall-bot:
+    build:
+      context: ../..
+      dockerfile: examples/rememberall-bot/Dockerfile
+    env_file: .env
+    volumes:
+      # Memories, schedules and conversation history all live here. Lose
+      # the volume and the remembrall forgets everything, reminders included.
+      - rememberall-bot-data:/data
+    ports:
+      # Status surface: curl localhost:9093/healthz
+      # 9093 on the host so this can run next to the other examples.
+      - "127.0.0.1:9093:9090"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  rememberall-bot-data:
