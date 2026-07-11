@@ -1,4 +1,5 @@
 import type { Permissions } from "../config/schema.ts";
+import { denoNetHosts } from "./hermetic.ts";
 import { realPathSync } from "./paths.ts";
 
 /** The permission axis a decision applies to. */
@@ -128,14 +129,21 @@ export class PermissionEngine {
  * Compile the declarative permissions to Deno CLI flags — enforcement layer 1
  * (the container is layer 2; see Plan 1). run_bash subprocesses escape Deno's
  * sandbox, so `run` permissions also compile to --allow-run.
+ *
+ * `--allow-net` matches exact hosts, so a `*.example.com` pattern has no
+ * equivalent and is left out rather than approximated: the compiled flags are
+ * always a subset of what the config allows, never a superset. The flags an
+ * agent actually runs under come from {@linkcode hermeticPlan}, which refuses
+ * to narrow a config it cannot express in full.
  */
 export function permissionsToDenoFlags(permissions: Permissions | undefined): string[] {
   const p = permissions ?? {};
   const flags: string[] = [];
-  if (p.net?.includes("*")) {
+  const { hosts, open } = denoNetHosts(p.net);
+  if (open) {
     flags.push("--allow-net");
-  } else if (p.net?.length) {
-    flags.push(`--allow-net=${p.net.map((h) => h.replace(/^\*\./, "")).join(",")}`);
+  } else if (hosts.length) {
+    flags.push(`--allow-net=${hosts.join(",")}`);
   }
   if (p.run?.includes("*")) flags.push("--allow-run");
   else if (p.run?.length) flags.push(`--allow-run=${p.run.join(",")}`);

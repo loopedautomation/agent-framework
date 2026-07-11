@@ -87,8 +87,9 @@ layer assumes the one inside it can fail.
    needs: in the base image, reads scoped to `/agent`, `/skills`, `/data` and
    `/run/secrets`, writes to `/data` and subprocess spawning to `bash` alone. The runtime
    enforces this underneath the framework's own code, so a bug in the framework can't
-   grant an access the runtime was never given. `af flags agent.yaml` prints the compiled
-   flag set for a config.
+   grant an access the runtime was never given. An agent that spawns nothing runs under a
+   tighter set still, with its net allowlist compiled into `--allow-net` ([hermetic
+   mode](#hermetic-mode)). `af flags agent.yaml` prints the flags a config runs under.
 3. **The container.** This is the outer wall and the unit of isolation. `bash`
    subprocesses escape the Deno sandbox by design, and the container is what contains
    them. That is also why there is no "run on the host" mode: the framework refuses to
@@ -97,6 +98,45 @@ layer assumes the one inside it can fail.
 Subprocesses and MCP servers receive only the env vars their config block grants, plus
 `PATH`/`HOME`, and secret values are injected server side, so they never enter the
 model's context.
+
+## Hermetic mode
+
+The subprocess escape hatch only exists when your config asks for it. If an agent has no
+`permissions.run` grants and no stdio MCP servers, then nothing runs outside the Deno
+sandbox, and every byte the agent sends leaves through the runtime. That means the runtime
+itself can hold the whole net allowlist, and it does.
+
+When an agent like that starts, the container entrypoint reads the config and re-execs
+itself with `--allow-net` narrowed to the hosts the agent is actually allowed to reach,
+before it has connected to anything. You don't turn this on. It's what qualifying agents
+get, and `af flags` shows you the flags they run under:
+
+```
+$ af flags agent.yaml
+--allow-env --allow-read=/agent,/skills,/data,/looped,/deno-dir,/run/secrets \
+  --allow-write=/data --allow-net=0.0.0.0:9090,api.anthropic.com,api.github.com
+```
+
+The framework works out the hosts it needs for itself, and they all come from the config:
+the model endpoint, the hosts each trigger talks to (Discord's API and its gateway, the
+Telegram bot API, your IMAP and SMTP servers), the URL of every HTTP MCP server, and the
+ports the status server and any webhook trigger listen on. Everything else in
+`permissions.net` is yours. A host that appears in neither is refused by the runtime, so a
+prompt injection that talks an MCP client or a provider SDK into calling an attacker's
+endpoint doesn't get out.
+
+Two things will keep an agent out of hermetic mode, and `af validate` names them:
+
+- **A subprocess.** Any `permissions.run` entry, or an MCP server declared with `command:`
+  rather than `url:`. Both spawn a process that leaves the Deno sandbox, and once it has,
+  the runtime cannot hold it. The container is that agent's egress boundary.
+- **A wildcard host.** Deno's `--allow-net` matches exact hosts and has no wildcard form,
+  so `*.example.com` has no equivalent. We refuse to approximate it: narrowing it to the
+  apex would deny the agent traffic its own config allows. Such an agent keeps the image's
+  flags, and the permission engine still enforces the pattern for `http_request`.
+
+The tradeoff is deliberate. Hermetic mode rewards the absence of subprocesses; it doesn't
+forbid their presence. The CLI-plus-skill pattern is half of what this framework is for.
 
 ## Where the boundaries stop today
 
@@ -111,17 +151,13 @@ does not exist for the agent), the `readonly:` flag and the scoped `env:` block,
 every MCP call lands in the audit trail; the server's own egress is bounded by the
 container.
 
-**Network egress is open below the app layer.** The container runs with Deno's network
-permission unrestricted, so per-host enforcement happens only in the permission engine.
-Anything that runs outside the engine, a `bash` subprocess or an MCP server process, can
-reach any host the container can. A `gh` you allowed will talk to whatever it wants. If
-egress matters for an agent, restrict it at the container layer with your network
-setup.
+**Network egress is open below the app layer for an agent that spawns things.** If your
+agent has `permissions.run` grants or a stdio MCP server, something runs outside the Deno
+sandbox, and per-host enforcement happens only in the permission engine. A `gh` you
+allowed will talk to whatever it wants. If egress matters for that agent, restrict it at
+the container layer with your network setup.
 
-**The image's sandbox flags are shared.** The published image launches every agent with
-the same Deno flag set, and the per-agent compiled flags from `af flags` apply when you
-build your own entrypoint. Inside the shipped container, what varies per agent is the
-permission engine's allowlists.
+Agents that spawn nothing don't have this problem. See below.
 
 **`run` matches by basename.** `run: [gh]` allows any executable named `gh`, wherever it
 lives. Inside the hardened base image that is fine in practice; if you derive an image

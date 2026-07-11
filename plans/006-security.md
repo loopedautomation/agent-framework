@@ -2,17 +2,19 @@
 
 The permission model promises that the agent file completely defines what an agent is allowed to do. For the native tools that promise holds today. For anything that runs outside the agent process, a bash subprocess or an MCP server, the network half of the promise does not hold yet. This plan records where enforcement actually stands, where the gaps are and the design for closing them.
 
-Status: design accepted; implementation has not started. `docs/permission-model.md` ("Where the boundaries stop today") is the user-facing statement of the same gaps and must stay consistent with this plan.
+Status: hermetic mode has shipped (step 1 of the sequencing below); the rest is design accepted. `docs/permission-model.md` ("Where the boundaries stop today", "Hermetic mode") is the user-facing statement of the same gaps and must stay consistent with this plan.
 
 ## Where enforcement stands today
 
 Enforcement nests in three layers, and each layer assumes the one inside it can fail.
 
 1. **The permission engine** (`packages/core/permissions/engine.ts`). App-level checks on every native tool call: `net` per host for `http_request`, `run` per executable (static analysis of pipes and chains, command substitution rejected), `read`/`write` per normalized path prefix. Every decision lands in the audit trail. Deny by default; a denial returns to the model as a tool result.
-2. **The Deno sandbox.** The published image (`images/agent/Dockerfile`) launches the runtime with one fixed flag set: reads scoped to `/agent`, `/skills`, `/data`, `/looped`, `/deno-dir` and `/run/secrets`, writes to `/data`, subprocess spawning to `bash` alone, and `--allow-net` open. The per-agent compiled flags exist (`permissionsToDenoFlags()`, printed by `af flags`) but the shipped container does not use them, because the entrypoint flags are baked at image build time, before any agent.yaml is known.
+2. **The Deno sandbox.** The published image (`images/agent/Dockerfile`) launches the runtime with one fixed flag set: reads scoped to `/agent`, `/skills`, `/data`, `/looped`, `/deno-dir` and `/run/secrets`, writes to `/data`, subprocess spawning to `bash` alone, and `--allow-net` open. Those flags are baked at image build time, before any agent.yaml is known, so they are the widest an agent runs under. An agent that spawns nothing re-execs into narrower ones, its whole net allowlist compiled into `--allow-net` (hermetic mode, below); an agent that spawns something keeps them, and gap 1 is its reality.
 3. **The container.** The outer wall. `bash` subprocesses escape the Deno sandbox by design and the container is what contains them; that is why there is no run-on-the-host mode.
 
 ## The gaps
+
+The gaps as they stood when this plan was written. Hermetic mode closes 1 and 3 for agents that spawn nothing; for agents that spawn something they stand as written.
 
 **1. Network enforcement stops at the agent process.** `permissions.net` gates only the native `http_request` tool. A bash subprocess or an MCP server makes whatever outbound calls it wants, because the Deno layer allows all net in the container and the engine never sees traffic it didn't originate. In practice, an entry in `permissions.run` for a network-capable binary is an implicit `net: ["*"]` for that agent: `run: [gh]` lets `gh` reach any host.
 
@@ -25,6 +27,13 @@ The threat this enables is prompt injection plus exfiltration. A hostile Discord
 **4. `run` matches by basename.** `run: [gh]` allows any executable named `gh` anywhere on disk. Fine inside the hardened base image; a derived image that widens writable paths should know the container is the backstop.
 
 **5. Static analysis stops at the head of each segment.** `extractExecutables` (`packages/core/tools/bash.ts`) checks the first word of each pipe/chain segment and can't see into arguments. Granting a program that runs other programs (`bash`, `sh`, `python`, `node`, `env`, `xargs`, `find` with `-exec`) collapses the allowlist: `bash -c '<anything>'` passes with the inner command carried as an opaque string. Nothing warns about this today; `docs/permissions.md` documents it and the `af validate` warning below is the enforcement direction.
+
+## Shipped: hermetic mode
+
+`packages/core/permissions/hermetic.ts` decides eligibility and compiles the flags; `packages/cli/local.ts` re-execs into them before the service is constructed. Two notes on what the design met on contact with the runtime:
+
+- **Auto-detected, no config key.** A qualifying agent gets hermetic mode and says so at startup; `af flags` and `af validate` print the flags and the hosts. Adding `run:` later moves the agent back behind the container boundary, and both commands name the grant that did it. The open question below is settled that way: an opt-in nobody sets protects nobody.
+- **Wildcard hosts disqualify an agent.** `--allow-net` matches exact hosts and has no wildcard form, so `*.example.com` has no compiled equivalent. `permissionsToDenoFlags()` used to strip the `*.` and emit the apex, which denies the subdomains the config allows and allows the apex it doesn't; that was harmless while the flags were informational and would have become a live bug the moment they were real. The flags now omit what they cannot express, and hermetic mode refuses to be the enforcement boundary for a config it can only partly express.
 
 ## Design: hermetic mode
 
@@ -65,7 +74,7 @@ Gap 2 has two halves. Where a server can *talk to* is a network question, deferr
 
 ## Sequencing
 
-1. **Hermetic mode.** Small, no new infrastructure, makes the common agent shape airtight. Entrypoint re-exec plus host derivation from config.
+1. ~~**Hermetic mode.**~~ Shipped. Entrypoint re-exec plus host derivation from config.
 2. **`af validate` warnings (#48).** Flag `run:` entries that defeat the model: shells and interpreters, wrappers, network-capable binaries.
 3. **MCP permission axis.** Design first; likely its own plan or an amendment here.
 
@@ -73,6 +82,6 @@ Per-agent egress enforcement lands with Looped Agents (Plan 5), on the platform'
 
 ## Open questions
 
-- Is hermetic mode auto-detected, opt-in, or auto-detected with an opt-out? Auto-detection is the better default posture, but a config that later adds `run:` would silently change enforcement layers.
+- ~~Is hermetic mode auto-detected, opt-in, or auto-detected with an opt-out?~~ Auto-detected. A change of enforcement layer is never silent: startup, `af flags` and `af validate` each name the grant that caused it.
 - Should `af validate` refuse, or only warn loudly, on shells and interpreters (bash, sh, python, node) in `permissions.run`, which collapse the allowlist entirely (gap 5)?
 - When the platform enforces `permissions.net` at its network layer, where do denied egress attempts land? They should reach the same audit trail as engine denials.
