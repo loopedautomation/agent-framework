@@ -7,13 +7,13 @@
 # .env next to this file (see .env.example):
 #   OPENAI_API_KEY, IMAP_PASSWORD
 services:
-  helpdesk-bot:
+  imap-bot:
     image: ghcr.io/loopedautomation/agent:latest
     env_file: .env
     volumes:
       - ./agent.yaml:/agent/agent.yaml:ro
       # The team's knowledge base, conversation history and audit trail.
-      - helpdesk-bot-data:/data
+      - imap-bot-data:/data
     ports:
       # Status surface: curl localhost:9095/healthz
       # 9095 on the host so this can run next to the other examples.
@@ -24,4 +24,4 @@ services:
       - /tmp
 
 volumes:
-  helpdesk-bot-data:
+  imap-bot-data:
