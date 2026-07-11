@@ -1,0 +1,46 @@
+---
+title: "Observer agents"
+description: "Turn a chat trigger into an observer: watch channels, react to specific people and report elsewhere."
+---
+
+A chat trigger normally behaves like a chatbot: someone writes a message, the agent replies to it, in the same place. Some jobs want a different shape. A review bot that watches a channel and only speaks up when something needs fixing. A moderation assistant that reports to a private channel the rest of the team can't see. A coach that gives one person feedback on their messages. In all of these the agent watches a conversation it isn't really part of, and that's what we call an observer.
+
+The [Discord](discord.md), [Slack](slack.md) and [Telegram](telegram.md) triggers all support this. Three optional keys together make the switch:
+
+- `from_users` - handle only these authors. The filter runs *before* the model is called: everyone else's messages are dropped in the trigger and never reach the provider, so they cost no tokens.
+- `reply_channel` (`reply_chat` on Telegram) - deliver replies to a dedicated channel instead of the source. Out-of-channel replies quote the triggering message and link back to it.
+- `allow_silence` - let the agent say nothing. Instruct it in `purpose` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message. An empty reply also stays silent. On Discord, stray punctuation or whitespace around the sentinel is tolerated (cheap models like to add a trailing period); a sentinel buried in real content still posts.
+
+You can use any of the three on their own. `from_users` alone gives you a bot that only listens to certain people; `allow_silence` alone gives you a chatbot that can decline to answer. An observer usually wants all three.
+
+## Example
+
+A review bot that watches the `pull-requests` channel on Discord, reads Happy's messages, and posts feedback to a review channel when it has any:
+
+```yaml
+handle: review-bot
+description: Reviews Happy's PR summaries and flags anything risky.
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+purpose: |
+  You watch PR summaries from Happy. If a summary mentions a risky change
+  (migrations, auth, deletes), post a short note about what to double-check.
+  If there is nothing to flag, reply with exactly __NO_REPLY__.
+triggers:
+  - type: discord
+    channels: ["pull-requests"]
+    from_users: ["happy"]
+    reply_channel: "1522..."   # the review channel's id
+    allow_silence: true
+```
+
+The same shape works on Slack (with Slack user ids in `from_users`) and on Telegram (with `reply_chat` instead of `reply_channel`).
+
+## Keep the typing indicator off
+
+Discord's trigger can show a "typing…" indicator while a run is in flight (`show_typing`). Leave it off for an observer: an indicator that ends in no message reads as the bot changing its mind, and an observer stays silent most of the time.
+
+## Silent runs still leave a trace
+
+Every run - replied or silent - lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps and tokens. When you're tuning the `purpose` to get the silence threshold right, the history is where you see what the agent decided on the messages it didn't answer.
