@@ -17,6 +17,8 @@ Tools follow permissions. A native tool exists for the agent only when the [perm
 | `read_file` | `permissions.read` grants paths | capped at 8k chars |
 | `write_file` | `permissions.write` grants paths | creates parent directories |
 | `read_skill` | `skills:` lists any | [progressive disclosure](skills.md#progressive-disclosure) |
+| `remember` / `recall` / `list_memories` / `forget` | `memory.persistent: true` | [persistent memory](memory.md#persistent-memory-persistent) |
+| `schedule` / `list_schedules` / `unschedule` | `schedules:` block present | [agent-created schedules](scheduling.md), capped at `schedules.max` |
 | `search_tools` | tool search is deferring | see below |
 
 An agent with no `permissions:` block gets `current_time`, plus `read_skill` if it has skills. Nothing else.

@@ -34,6 +34,15 @@ class GatedProvider implements Provider {
     });
   }
 
+  releaseTool(name: string, args: unknown) {
+    this.#pending.shift()!.resolve({
+      content: "",
+      toolCalls: [{ id: crypto.randomUUID(), name, arguments: JSON.stringify(args) }],
+      stopReason: "tool_calls",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    });
+  }
+
   fail(message: string) {
     this.#pending.shift()!.reject(new ProviderError(message, "overloaded"));
   }
@@ -319,5 +328,122 @@ Deno.test("service: compact_at_tokens false never auto-compacts", async () => {
   await exchange(service, provider, 4);
   await tick();
   assertEquals(provider.calls.length, 4); // one call per run, none for compaction
+  await service.stop();
+});
+
+// --- Agent-created schedules (the schedule tools + ScheduleRunner) ---
+
+/** A chat-shaped trigger that records deliveries for its keys. */
+class FakeChatTrigger {
+  readonly name = "fakechat";
+  delivered: { key: string; text: string }[] = [];
+  start(_emit: (event: AgentEvent) => Promise<unknown>): Promise<void> {
+    return Promise.resolve();
+  }
+  stop(): Promise<void> {
+    return Promise.resolve();
+  }
+  deliver(conversationKey: string, text: string): Promise<boolean> {
+    if (!conversationKey.startsWith("fakechat:")) return Promise.resolve(false);
+    this.delivered.push({ key: conversationKey, text });
+    return Promise.resolve(true);
+  }
+}
+
+Deno.test("service: a scheduled one-shot fires, runs, delivers, and retires", async () => {
+  const { service, provider } = await makeService("schedules:\n  max: 5\n");
+  const chat = new FakeChatTrigger();
+  await service.start([chat]);
+
+  // The model files a reminder ~150ms out, tied to this conversation.
+  const p = service.handle(event("1", "remind me soon", { conversationKey: "fakechat:9" }));
+  await until(() => provider.calls.length === 1, "the run to start");
+  const at = new Date(Date.now() + 150).toISOString();
+  provider.releaseTool("schedule", { prompt: "Reminder for Ratul: do the thing.", at });
+  await until(() => provider.calls.length === 2, "the tool result round-trip");
+  provider.release("Scheduled it.");
+  assertEquals((await p).reply, "Scheduled it.");
+  assertEquals(service.store.countSchedules(), 1);
+
+  // The firing runs the scheduled prompt through the normal path...
+  await until(() => provider.calls.length === 3, "the schedule to fire");
+  assertEquals(provider.calls[2].messages.at(-1)?.content, "Reminder for Ratul: do the thing.");
+  provider.release("Hey, do the thing!");
+
+  // ...and the reply lands in the conversation that created it.
+  await until(() => chat.delivered.length === 1, "delivery");
+  assertEquals(chat.delivered[0], { key: "fakechat:9", text: "Hey, do the thing!" });
+  await until(() => service.store.countSchedules() === 0, "the one-shot to retire");
+
+  const runs = service.store.recentRuns();
+  assertEquals(runs.length, 2);
+  assertEquals(runs[0].trigger, "schedule");
+  const audit = service.store.recentAudit().filter((a) => a.kind === "schedule");
+  assertEquals(audit.length, 1);
+  assert((audit[0].detail_json as string).includes('"action":"create"'));
+  await service.stop();
+});
+
+Deno.test("service: unschedule disarms the live job and the row", async () => {
+  const { service, provider } = await makeService("schedules:\n  max: 5\n");
+  const p1 = service.handle(event("1", "schedule it", { conversationKey: "k" }));
+  await until(() => provider.calls.length === 1, "run 1");
+  provider.releaseTool("schedule", { prompt: "later", cron: "0 9 * * *" });
+  await until(() => provider.calls.length === 2, "tool round-trip");
+  provider.release("done");
+  await p1;
+  assertEquals(service.store.countSchedules(), 1);
+
+  const p2 = service.handle(event("2", "cancel it", { conversationKey: "k" }));
+  await until(() => provider.calls.length === 3, "run 2");
+  provider.releaseTool("unschedule", { id: 1 });
+  await until(() => provider.calls.length === 4, "tool round-trip 2");
+  provider.release("cancelled");
+  await p2;
+  assertEquals(service.store.countSchedules(), 0);
+  await service.stop();
+});
+
+Deno.test("service: persisted schedules survive a restart, and a missed one-shot fires late", async () => {
+  const dataDir = await Deno.makeTempDir();
+  // A previous life persisted two schedules, one of them already due.
+  {
+    const first = new AgentService({
+      config: makeConfig("schedules:\n  max: 5\n"),
+      provider: new GatedProvider(),
+      dataDir,
+    });
+    first.store.setIdentity("name", "Tester");
+    first.store.createSchedule({
+      at: new Date(Date.now() - 60_000).toISOString(), // missed while down
+      prompt: "overdue reminder",
+    });
+    first.store.createSchedule({
+      at: new Date(Date.now() + 120).toISOString(),
+      prompt: "upcoming reminder",
+    });
+    first.store.close();
+  }
+
+  const provider = new GatedProvider();
+  const service = new AgentService({
+    config: makeConfig("schedules:\n  max: 5\n"),
+    provider,
+    dataDir,
+  });
+  service.store.setIdentity("name", "Tester");
+  await service.init(); // arms persisted schedules; fires the overdue one now
+
+  await until(() => provider.calls.length >= 1, "the overdue one-shot to fire");
+  provider.release("did the overdue thing");
+  await until(() => provider.calls.length >= 2, "the upcoming one-shot to fire");
+  provider.release("did the upcoming thing");
+  await until(() => service.store.countSchedules() === 0, "both one-shots to retire");
+
+  // runAgent mutates the request's array in place, so read the first
+  // message (the scheduled prompt), which no later push can displace.
+  const inputs = provider.calls.map((c) => c.messages[0]?.content);
+  assert(inputs.includes("overdue reminder"));
+  assert(inputs.includes("upcoming reminder"));
   await service.stop();
 });

@@ -20,6 +20,13 @@ import {
   withMcpAudit,
 } from "../tools/mcp.ts";
 import { SEARCH_AUTO_THRESHOLD, ToolRegistry } from "../tools/registry.ts";
+import {
+  createScheduleTools,
+  type ScheduleEvent,
+  schedulesPromptSection,
+} from "../tools/schedule.ts";
+import { ScheduleRunner } from "./schedules.ts";
+import type { ScheduleRecord } from "../store/store.ts";
 import { compactTranscript, isNothingToCompact } from "../loop/compact.ts";
 import { ProviderError } from "../providers/types.ts";
 import {
@@ -77,6 +84,14 @@ export interface Trigger {
   start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void>;
   /** Disconnect and stop emitting. */
   stop(): Promise<void>;
+  /**
+   * Proactively send a message to a conversation this trigger owns — the
+   * delivery path for agent-created schedules. Resolves true when the key
+   * is this trigger's and the send happened; false hands the key to the
+   * next trigger. Optional: triggers without an outbound surface (webhook)
+   * simply don't implement it.
+   */
+  deliver?(conversationKey: string, text: string): Promise<boolean>;
 }
 
 /** Options for constructing an {@linkcode AgentService}. */
@@ -120,6 +135,7 @@ export class AgentService {
   #wrapTool: (tool: NativeTool) => NativeTool;
   #startedAtMs = Date.now();
   #scheduler: RunScheduler;
+  #scheduleRunner?: ScheduleRunner;
 
   /** Resolves env references, opens the store, and builds the provider. */
   constructor(opts: AgentServiceOptions) {
@@ -153,11 +169,21 @@ export class AgentService {
     engine: PermissionEngine,
     onMemoryEvent: (event: MemoryEvent) => void,
     onMcpCall: (call: McpCallRecord) => void,
+    conversationKey?: string,
+    onScheduleEvent?: (event: ScheduleEvent) => void,
   ): () => NativeTool[] {
     const always: NativeTool[] = [currentTimeTool, ...this.#extraTools];
     if (this.#skills?.length) always.push(createSkillTool(this.#skills));
     if (this.config.memory?.persistent) {
       always.push(...createMemoryTools(this.store, onMemoryEvent));
+    }
+    if (this.config.schedules) {
+      always.push(...createScheduleTools({
+        store: this.store,
+        max: this.config.schedules.max,
+        conversationKey,
+        onEvent: onScheduleEvent,
+      }));
     }
     if (this.config.permissions?.run?.length) {
       always.push(createRunBashTool({ permissions: engine, env: this.#env }));
@@ -198,7 +224,71 @@ export class AgentService {
       ? await connectMcpServers(this.config)
       : { tools: [], close: () => Promise.resolve() };
     this.#identity ??= await ensureIdentity(this.config, this.#provider, this.store);
+    this.#startSchedules();
     return this.#identity;
+  }
+
+  /**
+   * Arm every persisted schedule (idempotent; init runs before every event).
+   * Lives in init rather than start so trigger-less surfaces like the REPL
+   * run schedules too. A one-shot that came due while the agent was down
+   * fires immediately: for a reminder, late beats never.
+   */
+  #startSchedules() {
+    if (!this.config.schedules || this.#scheduleRunner) return;
+    this.#scheduleRunner = new ScheduleRunner((s) => void this.#fireSchedule(s));
+    for (const schedule of this.store.listSchedules()) {
+      if (schedule.at !== undefined && new Date(schedule.at).getTime() <= Date.now()) {
+        void this.#fireSchedule(schedule);
+      } else {
+        this.#scheduleRunner.add(schedule);
+      }
+    }
+  }
+
+  /**
+   * One schedule firing: run the prompt through the normal event path, then
+   * deliver the reply to the conversation that created the schedule. A
+   * keyed firing joins its conversation's lane (ordered with the chat); a
+   * keyless one gets a per-schedule serial lane so it never overlaps itself.
+   * One-shots retire after the run completes, so a crash mid-run replays
+   * the reminder on restart instead of losing it.
+   */
+  async #fireSchedule(schedule: ScheduleRecord): Promise<void> {
+    try {
+      const result = await this.handle({
+        id: crypto.randomUUID(),
+        trigger: "schedule",
+        input: schedule.prompt,
+        conversationKey: schedule.conversationKey,
+        serialKey: schedule.conversationKey === undefined ? `schedule:${schedule.id}` : undefined,
+      });
+      if (schedule.at !== undefined) {
+        this.store.deleteSchedule(schedule.id);
+        this.#scheduleRunner?.remove(schedule.id);
+      }
+      await this.#deliver(schedule, result);
+    } catch (err) {
+      console.error(`schedule #${schedule.id}: run failed: ${(err as Error).message}`);
+    }
+  }
+
+  /** Route a schedule's reply to its conversation; the log is the fallback. */
+  async #deliver(schedule: ScheduleRecord, result: RunResult): Promise<void> {
+    const text = (result.reply ?? "").trim();
+    if (schedule.conversationKey !== undefined && result.status === "ok" && text) {
+      for (const trigger of this.#triggers) {
+        try {
+          if (await trigger.deliver?.(schedule.conversationKey, text)) return;
+        } catch (err) {
+          console.error(
+            `schedule #${schedule.id}: delivery via ${trigger.name} failed: ` +
+              `${(err as Error).message}`,
+          );
+        }
+      }
+    }
+    console.log(`schedule #${schedule.id}: ${result.status} — ${text.slice(0, 200)}`);
   }
 
   /**
@@ -446,6 +536,13 @@ export class AgentService {
       decisions.push(e.decision);
     });
     const memoryEvents: MemoryEvent[] = [];
+    const scheduleEvents: ScheduleEvent[] = [];
+    const onScheduleEvent = (e: ScheduleEvent) => {
+      scheduleEvents.push(e);
+      // Arm or disarm the live job now — the row is already persisted.
+      if (e.action === "create") this.#scheduleRunner?.add(e.schedule);
+      else this.#scheduleRunner?.remove(e.schedule.id);
+    };
 
     const useSessions = this.config.memory?.scope === "thread" && event.conversationKey;
     const sessionId = useSessions ? this.store.sessionFor(event.conversationKey!) : undefined;
@@ -458,10 +555,19 @@ export class AgentService {
         purpose: this.config.purpose +
           skillsPromptSection(this.#skills ?? []) +
           memoryPromptSection(memories) +
+          (this.config.schedules
+            ? schedulesPromptSection(this.store.countSchedules(), this.config.schedules.max)
+            : "") +
           identityNote(this.config, identity.name),
       },
       provider: this.#provider,
-      tools: this.#buildTools(engine, (e) => memoryEvents.push(e), (call) => mcpCalls.push(call)),
+      tools: this.#buildTools(
+        engine,
+        (e) => memoryEvents.push(e),
+        (call) => mcpCalls.push(call),
+        event.conversationKey,
+        onScheduleEvent,
+      ),
       input: event.input,
       history,
       onEvent: opts?.onEvent,
@@ -483,6 +589,18 @@ export class AgentService {
     }
     for (const memoryEvent of memoryEvents) {
       this.store.recordAudit({ runId, kind: "memory", detail: memoryEvent });
+    }
+    for (const scheduleEvent of scheduleEvents) {
+      this.store.recordAudit({
+        runId,
+        kind: "schedule",
+        detail: {
+          action: scheduleEvent.action,
+          id: scheduleEvent.schedule.id,
+          when: scheduleEvent.schedule.cron ?? scheduleEvent.schedule.at,
+          prompt: scheduleEvent.schedule.prompt,
+        },
+      });
     }
     for (const call of mcpCalls) {
       this.store.recordAudit({ runId, kind: "mcp", detail: call });
@@ -515,8 +633,9 @@ export class AgentService {
     }
   }
 
-  /** Stop triggers, close MCP connections, and close the store. */
+  /** Stop triggers and schedules, close MCP connections, and close the store. */
   async stop() {
+    this.#scheduleRunner?.stop();
     for (const trigger of this.#triggers) await trigger.stop();
     await this.#mcp?.close();
     this.store.close();

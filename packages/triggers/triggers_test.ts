@@ -11,6 +11,9 @@ import {
 } from "@looped/core";
 import { CronTrigger } from "./cron.ts";
 import { WebhookTrigger } from "./webhook.ts";
+import { TelegramTrigger } from "./telegram.ts";
+import { DiscordTrigger } from "./discord.ts";
+import { SlackTrigger } from "./slack.ts";
 import { triggersFromConfig } from "./mod.ts";
 
 function scripted(script: Partial<Completion>[]): Provider {
@@ -262,4 +265,52 @@ limits:
   assertEquals(service.store.recentRuns().length, 1);
   assertEquals(service.store.recentAudit().filter((a) => a.kind === "queue").length, 1);
   await service.stop();
+});
+
+Deno.test("deliver: each trigger claims only its own conversation keys", async () => {
+  const telegram = new TelegramTrigger({ token: "t" });
+  const discord = new DiscordTrigger({ token: "d" });
+  const slack = new SlackTrigger({ token: "xoxb", appToken: "xapp" });
+
+  // Foreign keys are handed back untouched — no network call happens.
+  assertEquals(await telegram.deliver("discord:1", "hi"), false);
+  assertEquals(await discord.deliver("telegram:1", "hi"), false);
+  assertEquals(await slack.deliver("webhook:abc", "hi"), false);
+});
+
+Deno.test("deliver: telegram posts to the chat behind the key", async () => {
+  const sent: { url: string; body: Record<string, unknown> }[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+    sent.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+    return Promise.resolve(new Response(JSON.stringify({ ok: true })));
+  }) as typeof fetch;
+  try {
+    const trigger = new TelegramTrigger({ token: "t0k" });
+    assertEquals(await trigger.deliver("telegram:12345", "Reminder: do the thing."), true);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assertEquals(sent.length, 1);
+  assert(sent[0].url.endsWith("/bott0k/sendMessage"));
+  assertEquals(sent[0].body.chat_id, "12345");
+  assertEquals(sent[0].body.text, "Reminder: do the thing.");
+});
+
+Deno.test("deliver: slack threads when the key carries a thread ts", async () => {
+  const sent: Record<string, unknown>[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = ((_url: string | URL | Request, init?: RequestInit) => {
+    sent.push(JSON.parse(String(init?.body)));
+    return Promise.resolve(new Response(JSON.stringify({ ok: true })));
+  }) as typeof fetch;
+  try {
+    const trigger = new SlackTrigger({ token: "xoxb", appToken: "xapp" });
+    await trigger.deliver("slack:C123:1712.345", "in the thread");
+    await trigger.deliver("slack:D999", "flat dm");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assertEquals(sent[0], { channel: "C123", text: "in the thread", thread_ts: "1712.345" });
+  assertEquals(sent[1], { channel: "D999", text: "flat dm" });
 });

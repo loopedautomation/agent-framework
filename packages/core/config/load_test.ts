@@ -46,6 +46,13 @@ Deno.test("memory: compact_at_tokens defaults on, takes a value, and false disab
   );
 });
 
+Deno.test("schedules: block presence enables, max defaults and validates", () => {
+  assertEquals(parseAgentConfig(MINIMAL).schedules, undefined);
+  assertEquals(parseAgentConfig(MINIMAL + "schedules: {}\n").schedules, { max: 20 });
+  assertEquals(parseAgentConfig(MINIMAL + "schedules:\n  max: 3\n").schedules, { max: 3 });
+  assertThrows(() => parseAgentConfig(MINIMAL + "schedules:\n  max: 0\n"), ConfigError);
+});
+
 Deno.test("config commands cannot shadow the compaction built-ins", () => {
   for (const name of ["compact", "new"]) {
     assertThrows(
