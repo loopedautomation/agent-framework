@@ -1,0 +1,29 @@
+# The whole deployment story: docker compose up -d
+#
+# No Dockerfile: the agent needs no binaries beyond the base image, so the
+# stock image runs with the config mounted.
+#
+# .env next to this file (see .env.example):
+#   OPENAI_API_KEY, RESEND_API_KEY, RESEND_WEBHOOK_SECRET
+services:
+  invoice-inbox:
+    image: ghcr.io/loopedautomation/agent:latest
+    env_file: .env
+    volumes:
+      - ./agent.yaml:/agent/agent.yaml:ro
+      # The recorded invoices, conversation history and audit trail.
+      - invoice-inbox-data:/data
+    ports:
+      # The email trigger's webhook endpoint. Resend needs to reach it over
+      # HTTPS, so put a TLS-terminating proxy or tunnel in front.
+      - "8080:8080"
+      # Status surface: curl localhost:9092/healthz
+      # 9092 on the host so this can run next to the other examples.
+      - "127.0.0.1:9092:9090"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  invoice-inbox-data:
