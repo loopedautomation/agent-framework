@@ -1,0 +1,31 @@
+# The whole deployment story: docker compose up -d
+#
+# .env next to this file (see .env.example):
+#   OPENAI_API_KEY, TELEGRAM_BOT_TOKEN
+#
+# Inside a container, "localhost" is the container itself. Before running
+# this, change the two localhost references in agent.yaml (purpose and
+# permissions.net) to host.docker.internal, which resolves to the host
+# machine where qBittorrent listens.
+services:
+  qbit-bot:
+    image: ghcr.io/loopedautomation/agent:latest
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./agent.yaml:/agent/agent.yaml:ro
+      # agent.yaml references the skill as ../../skills/qbittorrent.md,
+      # which resolves to /skills inside the container.
+      - ../../skills/qbittorrent.md:/skills/qbittorrent.md:ro
+      - qbit-bot-data:/data
+    ports:
+      # Status surface: curl localhost:9094/healthz
+      - "127.0.0.1:9094:9090"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  qbit-bot-data:
