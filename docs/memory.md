@@ -22,7 +22,7 @@ This is the entire transcript, replayed verbatim — expensive in context, but c
 
 ## Compaction
 
-A thread that never ends has a cost that never stops growing. Every run replays the full transcript, so each message in a long-lived conversation costs a little more than the last, and eventually the transcript outgrows the model's context window entirely. Compaction is the pressure valve: the agent asks a model to write a summary of the older turns, and the transcript becomes that summary plus the most recent two turns kept verbatim. The summary is written by `model.small` when you've set one, which is exactly the kind of cheap internal call that role exists for.
+Thread history has a cost that grows with the thread. Every run replays the full transcript, so each message in a long-lived conversation costs a little more than the last, and eventually the transcript outgrows the model's context window entirely. Compaction is how a conversation gets smaller without ending: the agent asks a model to write a summary of the older turns, and the transcript becomes that summary plus the most recent two turns kept verbatim. The summary is written by `model.small` when you've set one, which is the kind of cheap internal call that role exists for.
 
 You can trigger it by hand with [`/compact`](slash-commands.md), and the agent runs it on its own once a conversation crosses `compact_at_tokens`:
 
@@ -36,7 +36,7 @@ The threshold is the input token count the provider reported for the run's last 
 
 Compaction spends a model call, and the spend stays visible: each auto-compaction is recorded as its own run with `compaction` as the trigger, and it shows up in `/status` totals and the runs table like any other call. If the summarize call fails, the transcript stays exactly as it was and the failure lands in the [audit trail](docker-run.md#persistence-the-data-volume).
 
-Be aware of what you're trading. A summary is lossy: the exact wording of older turns is gone from the agent's working memory once they're folded in, and only the last two exchanges survive verbatim. Facts that must outlive any transcript belong in persistent memory, which compaction never touches.
+There is a trade here, and it's worth knowing what you're giving up. A summary is lossy: once the older turns are folded in, their exact wording is gone from the agent's working memory, and only the last two exchanges survive verbatim. A fact that has to outlive any transcript belongs in persistent memory, which compaction never touches.
 
 ### `/new` and `/reset`: starting over
 
