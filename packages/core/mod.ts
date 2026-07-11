@@ -109,4 +109,4 @@ export {
 } from "./eval/eval.ts";
 
 /** The @looped/core package version. */
-export const VERSION = "0.5.0";
+export const VERSION = "0.6.0";
