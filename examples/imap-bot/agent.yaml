@@ -3,7 +3,7 @@
 # answers what it knows from persistent memory, and the team teaches it
 # by emailing it facts. No webhook, no domain setup; any mailbox that
 # issues an app password works.
-handle: helpdesk-bot
+handle: imap-bot
 description: Answers mail to a helpdesk address from a memory the team maintains by email.
 
 model:

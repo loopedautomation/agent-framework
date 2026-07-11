@@ -1,4 +1,4 @@
-# Deploying helpdesk-bot
+# Deploying imap-bot
 
 Goal: a mailbox that answers itself. The agent signs into `helpdesk@example.com` over IMAP, and mail from the team wakes it: questions get answered from its [persistent memory](../../docs/memory.md), and mail that teaches it something ("remember: the wifi password is...") updates that memory for the next person who asks. Budget ~15 minutes; the mailbox is the whole integration.
 
@@ -38,13 +38,13 @@ curl -s localhost:9095/healthz   # identity JSON
 Then teach it something and ask for it back, from two different people if you can:
 
 > **Ratul:** remember: the office wifi password is duckling-crumpet-42
-> **helpdesk-bot:** Saved under "office wifi password".
+> **imap-bot:** Saved under "office wifi password".
 >
 > **Happy:** what's the wifi password?
-> **helpdesk-bot:** duckling-crumpet-42.
+> **imap-bot:** duckling-crumpet-42.
 >
 > **Gwinyai:** how do I claim expenses?
-> **helpdesk-bot:** I don't have anything on expenses yet. If you find out, mail it to me and I'll have it for the next person.
+> **imap-bot:** I don't have anything on expenses yet. If you find out, mail it to me and I'll have it for the next person.
 
 Persistent memory is visible from every conversation, so what Ratul teaches it, Amin gets back. Automated notices and misdirected threads produce no reply at all: the purpose tells the agent to answer `__NO_REPLY__` and `allow_silence: true` makes that real.
 
@@ -52,5 +52,5 @@ Persistent memory is visible from every conversation, so what Ratul teaches it, 
 
 - The mailbox is the cursor. A restarted container picks up where it left off with no local state, and a crash between the run and the read-mark costs one duplicate reply.
 - Reminder of what the fences are: `from_addresses` runs before the model is called, auto-generated mail (out-of-office replies, list mail) is dropped by the trigger, and the `limits` block caps what any one run can spend.
-- The knowledge base, history and audit trail all live in the `helpdesk-bot-data` volume; the mailbox itself holds only the correspondence. Deleting the volume deletes what the team taught it.
+- The knowledge base, history and audit trail all live in the `imap-bot-data` volume; the mailbox itself holds only the correspondence. Deleting the volume deletes what the team taught it.
 - There is no `permissions:` block, and the mailbox credentials belong to the trigger, so the model never sees them. The worst a crafted mail can do is write a junk memory or ask for one back, and the purpose tells the agent to keep memories to the questions they answer.

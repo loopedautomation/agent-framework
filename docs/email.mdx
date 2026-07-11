@@ -49,7 +49,7 @@ triggers:
 configs:
   agent-yaml:
     content: |
-      handle: invoice-bot
+      handle: resend-bot
       description: Files invoices that arrive at invoices@example.com.
       model:
         provider: openai-compatible
@@ -66,7 +66,7 @@ configs:
           allow_silence: true
 
 services:
-  invoice-bot:
+  resend-bot:
     image: ghcr.io/loopedautomation/agent:latest
     configs:
       - source: agent-yaml
@@ -75,10 +75,10 @@ services:
     ports:
       - "8080:8080"  # put a TLS-terminating proxy in front
     volumes:
-      - invoice-bot-data:/data
+      - resend-bot-data:/data
     restart: unless-stopped
 volumes:
-  invoice-bot-data:
+  resend-bot-data:
 ```
 
 </Tab>
@@ -209,4 +209,4 @@ One honest caveat: a `From` header is an assertion. Resend checks SPF and DKIM o
 
 ## Give an agent its own address
 
-The Resend transport shines when the agent owns an address outright: point `invoices@example.com` at Resend, route it to the agent, done. It also works for personal mail you'd rather keep at arm's length: a Gmail or Fastmail filter that forwards matching messages ("from my accountant", "subject contains invoice") to the agent's address puts exactly the mail you choose in front of it, and the agent's read-state never touches your own mailbox. The pulled transports remove the forwarding step when you're comfortable letting the agent mark mail read in a folder or label of its own. Both shapes ship as runnable examples: [invoice-bot](https://github.com/loopedautomation/agent-framework/tree/main/examples/invoice-bot) is a Resend address that files what arrives, and [helpdesk-bot](https://github.com/loopedautomation/agent-framework/tree/main/examples/helpdesk-bot) is an IMAP mailbox the agent owns and answers. The [email assistant guide](email-assistant.mdx) composes the trigger with cron and a calendar feed into a personal assistant.
+The Resend transport shines when the agent owns an address outright: point `invoices@example.com` at Resend, route it to the agent, done. It also works for personal mail you'd rather keep at arm's length: a Gmail or Fastmail filter that forwards matching messages ("from my accountant", "subject contains invoice") to the agent's address puts exactly the mail you choose in front of it, and the agent's read-state never touches your own mailbox. The pulled transports remove the forwarding step when you're comfortable letting the agent mark mail read in a folder or label of its own. Both shapes ship as runnable examples: [resend-bot](https://github.com/loopedautomation/agent-framework/tree/main/examples/resend-bot) is a Resend address that files what arrives, and [imap-bot](https://github.com/loopedautomation/agent-framework/tree/main/examples/imap-bot) is an IMAP mailbox the agent owns and answers. The [email assistant guide](email-assistant.mdx) composes the trigger with cron and a calendar feed into a personal assistant.
