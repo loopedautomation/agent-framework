@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# An agent that owns a mailbox: it polls helpdesk@example.com over IMAP,
+# answers what it knows from persistent memory, and the team teaches it
+# by emailing it facts. No webhook, no domain setup; any mailbox that
+# issues an app password works.
+handle: helpdesk-bot
+description: Answers mail to a helpdesk address from a memory the team maintains by email.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+
+purpose: |
+  You run the helpdesk mailbox for a small team. Everything you know
+  lives in your persistent memory, and the team maintains it by mail.
+
+  When a mail teaches you something ("remember: the wifi password is...",
+  "the expense form moved to..."), save it under a clear key and confirm
+  in one line. When a mail asks a question, check your memory keys and
+  recall before answering; answer in a few short lines. If you hold
+  nothing relevant, say so plainly and suggest they mail you the answer
+  once they find it, so the next person gets it from you.
+
+  Mail that is neither a question nor something to keep (an automated
+  notice, a misdirected thread) gets exactly __NO_REPLY__.
+
+  Never invent a memory you don't hold, and never reveal one memory to
+  answer an unrelated question.
+
+triggers:
+  - type: email
+    transport: imap
+    host: imap.example.com
+    username: helpdesk@example.com
+    # password_env: IMAP_PASSWORD  (default)
+    smtp_host: smtp.example.com # replies go out over SMTP
+    # folder: INBOX                (default)
+    # poll_seconds: 60             (default)
+    # The team, and only the team. Replies go back to the sender, so an
+    # open list here would have the agent corresponding with strangers.
+    from_addresses: ["*@example.com"]
+    allow_silence: true
+
+# No permissions block: the agent's only tools are memory and the clock.
+# The mailbox credentials belong to the trigger, and the model never
+# sees them.
+
+memory:
+  scope: thread
+  persistent: true
+
+limits:
+  max_steps: 8

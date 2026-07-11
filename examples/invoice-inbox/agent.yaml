@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# An address that does something: mail arriving at invoices@example.com
+# wakes the agent, it extracts the invoice's details into persistent
+# memory and confirms in one line. The Resend transport is the inbound
+# mailbox; the action is whatever the purpose says.
+handle: invoice-inbox
+description: Files invoices that arrive at invoices@example.com.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+
+purpose: |
+  Mail arriving here is an invoice or it isn't.
+
+  If it is, extract the vendor, amount, currency and due date, and
+  remember them under the key invoice:<vendor>:<date received>. Reply
+  with a one-line confirmation naming the vendor and amount. If a field
+  is missing from the mail, record what you have and say which field
+  you couldn't find.
+
+  If it isn't an invoice, reply with exactly __NO_REPLY__.
+
+  When someone asks what's outstanding ("what's due this month?"),
+  answer from your invoice memories in one line per invoice.
+
+triggers:
+  - type: email
+    transport: resend
+    # The check runs on the webhook metadata before the model is called.
+    # Widen to ["*"] if the world may send invoices here, and the spam
+    # your address collects becomes model calls; keep it to your own
+    # domain or your vendors' domains where you can.
+    from_addresses: ["*@example.com"]
+    allow_silence: true
+
+# No permissions block: the agent's only tools are memory and the clock,
+# so a message that fools it can write a bad memory and nothing more.
+
+memory:
+  scope: thread
+  persistent: true
+
+limits:
+  max_steps: 8
