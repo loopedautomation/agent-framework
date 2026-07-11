@@ -46,7 +46,7 @@ const DiscordTriggerSchema = z.strictObject({
     "Channel id to post replies into instead of the source channel. Out-of-channel replies quote the triggering message and link back.",
   ),
   allow_silence: z.boolean().default(false).describe(
-    "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+    "Post nothing when the agent replies with __NO_REPLY__ (or nothing); punctuation and whitespace around the sentinel are tolerated. Instruct the sentinel in purpose.",
   ),
   show_typing: z.boolean().default(false).describe(
     "Show the typing indicator in the source channel while the agent works. Looks odd with allow_silence: typing may end in no message.",
@@ -473,7 +473,7 @@ export interface DiscordTriggerConfig {
   from_users?: string[];
   /** Channel id to post replies into instead of the source channel. */
   reply_channel?: string;
-  /** Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
+  /** Post nothing when the agent replies with __NO_REPLY__ (punctuation/whitespace tolerated) or nothing. */
   allow_silence: boolean;
   /** Show the typing indicator in the source channel while the agent works. */
   show_typing: boolean;

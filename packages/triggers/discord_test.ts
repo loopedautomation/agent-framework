@@ -4,10 +4,12 @@ import {
   fetchApplicationId,
   INVITE_PERMISSIONS,
   inviteUrl,
+  NO_REPLY,
   shouldHandle,
   splitMessage,
   typingLoop,
 } from "./discord.ts";
+import { isSilence } from "./text.ts";
 
 const BOT_ID = "bot-1";
 
@@ -105,4 +107,16 @@ Deno.test("fetchApplicationId: returns id, throws readable error on bad token", 
     ((_url: RequestInfo | URL, _init?: RequestInit) =>
       Promise.resolve(new Response("{}", { status: 401 }))) as typeof fetch;
   await assertRejects(() => fetchApplicationId("bad", unauthorized), Error, "check the bot token");
+});
+
+Deno.test("isSilence: tolerates punctuation and whitespace around the sentinel", () => {
+  assert(isSilence(""));
+  assert(isSilence(NO_REPLY));
+  assert(isSilence(`${NO_REPLY}.`));
+  assert(isSilence(`"${NO_REPLY}".`));
+  assert(isSilence(`  ${NO_REPLY} \n`));
+  // the sentinel embedded in real content still posts
+  assert(!isSilence(`${NO_REPLY} but here is my actual answer`));
+  assert(!isSilence(`I would reply ${NO_REPLY} to this`));
+  assert(!isSilence("a normal reply."));
 });

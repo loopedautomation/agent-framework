@@ -1,5 +1,5 @@
 import type { AgentEvent, CommandSpec, RunResult, Trigger } from "@looped/core";
-import { NO_REPLY, splitMessage } from "./text.ts";
+import { isSilence, NO_REPLY, splitMessage } from "./text.ts";
 
 // A deliberately minimal Discord gateway client: identify, heartbeat,
 // MESSAGE_CREATE, reconnect-with-backoff. No library — the framework's
@@ -187,7 +187,7 @@ export class DiscordTrigger implements Trigger {
     const reply = (result.reply ?? "").trim();
 
     // The agent had nothing to say — with allow_silence, say nothing.
-    if (this.#opts.allowSilence && (reply === NO_REPLY || reply === "")) return;
+    if (this.#opts.allowSilence && isSilence(reply)) return;
 
     // Where to post: a dedicated reply channel, else the source channel.
     const target = this.#opts.replyChannel ?? msg.channel_id;

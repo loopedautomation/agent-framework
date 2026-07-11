@@ -110,7 +110,7 @@
               },
               "allow_silence": {
                 "default": false,
-                "description": "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+                "description": "Post nothing when the agent replies with __NO_REPLY__ (or nothing); punctuation and whitespace around the sentinel are tolerated. Instruct the sentinel in purpose.",
                 "type": "boolean"
               },
               "show_typing": {
