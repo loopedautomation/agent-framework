@@ -59,7 +59,7 @@ Every run reports its status, steps and tokens, and [`limits`](agent-file.md#lim
 
 A schedule never overlaps itself. If a tick fires while the previous run is still going, the new firing waits for it to finish, and at most one firing waits; anything past that is skipped with `status: rejected`. A 6am summary that runs long produces a single catch-up run, and the skipped ticks stay visible in the audit trail.
 
-A cron trigger is the operator's schedule: written in the config, reviewed like code, surviving a wiped data volume. The agent can also create schedules of its own in conversation ("remind me Thursday") when the [`schedules:`](scheduling.md) block is on.
+A cron trigger is the operator's schedule: it lives in the config, gets reviewed like code and survives a wiped data volume. When the [`schedules:`](scheduling.md) block is on, the agent can also create schedules of its own in conversation ("remind me Thursday").
 
 ## Multiple triggers
 
