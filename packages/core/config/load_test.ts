@@ -231,13 +231,13 @@ purpose: test
   assertEquals(collectEnvRefs(openrouter), ["OPENROUTER_API_KEY"]);
 });
 
-Deno.test("the shipped gh-issues-cli example is a valid agent definition", async () => {
-  const path = new URL("../../../examples/gh-issues-cli/agent.yaml", import.meta.url);
+Deno.test("the shipped gh-issues-bot example is a valid agent definition", async () => {
+  const path = new URL("../../../examples/gh-issues-bot/agent.yaml", import.meta.url);
   const config = parseAgentConfig(
     await Deno.readTextFile(path),
-    "examples/gh-issues-cli/agent.yaml",
+    "examples/gh-issues-bot/agent.yaml",
   );
-  assertEquals(config.handle, "gh-issues-cli");
+  assertEquals(config.handle, "gh-issues-bot");
   assertEquals(collectEnvRefs(config), ["GITHUB_TOKEN", "OPENAI_API_KEY"]);
 });
 
@@ -311,10 +311,10 @@ Deno.test("tools.custom is rejected loudly until implemented", () => {
   assert(err.message.includes("not implemented"));
 });
 
-Deno.test("the shipped agent-zero example is a valid agent definition", async () => {
-  const path = new URL("../../../examples/agent-zero/agent.yaml", import.meta.url);
-  const config = parseAgentConfig(await Deno.readTextFile(path), "examples/agent-zero");
-  assertEquals(config.handle, "agent-zero");
+Deno.test("the shipped agent-zero-bot example is a valid agent definition", async () => {
+  const path = new URL("../../../examples/agent-zero-bot/agent.yaml", import.meta.url);
+  const config = parseAgentConfig(await Deno.readTextFile(path), "examples/agent-zero-bot");
+  assertEquals(config.handle, "agent-zero-bot");
   assertEquals(config.permissions?.write, ["agents"]);
 });
 

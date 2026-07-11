@@ -46,7 +46,7 @@ tools:
 - Each server sees only its own `env:` block (values may be `${VAR}` references); the agent's own environment stays private.
 - Results are truncated at 8k chars; servers connect at startup and close on shutdown.
 
-For a sense of when to skip the MCP route entirely: the [gh-issues-cli example](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-cli) covers a full GitHub integration with the `gh` CLI and a skill, and the same block above is what its config would grow if the CLI ever stopped being enough.
+For a sense of when to skip the MCP route entirely: the [gh-issues-bot example](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-bot) covers a full GitHub integration with the `gh` CLI and a skill, and the same block above is what its config would grow if the CLI ever stopped being enough.
 
 ## Tool search
 

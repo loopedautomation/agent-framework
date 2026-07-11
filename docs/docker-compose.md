@@ -9,23 +9,23 @@ Docker Compose is how you run one or many agents as a fleet. Each agent is one s
 
 ```yaml
 services:
-  gh-issues-cli:
+  gh-issues-bot:
     image: ghcr.io/loopedautomation/agent:latest
     volumes:
       - ./agent.yaml:/agent/agent.yaml:ro
-      - gh-issues-cli-data:/data
+      - gh-issues-bot-data:/data
     env_file: .env
     restart: unless-stopped
 volumes:
-  gh-issues-cli-data:
+  gh-issues-bot-data:
 ```
 
 `af init --deploy compose` generates this shape, plus a Dockerfile when the agent needs [extra CLIs in the image](docker-run.md#the-custom-image-story). The generated examples also add `read_only: true` and a tmpfs, which is hardening on top of what [the base image already gives you](docker-run.md#what-the-base-image-gives-you).
 
-[`examples/gh-issues-cli`](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-cli) is the complete pattern:
+[`examples/gh-issues-bot`](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-bot) is the complete pattern:
 
 ```sh
-cd examples/gh-issues-cli && cp .env.example .env  # fill in your keys
+cd examples/gh-issues-bot && cp .env.example .env  # fill in your keys
 docker compose up -d
 ```
 

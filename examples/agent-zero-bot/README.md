@@ -1,4 +1,4 @@
-# agent-zero
+# agent-zero-bot
 
 The meta-agent: describe an agent in one Discord message, receive a scaffolded, validated, ready-to-deploy agent project in `agents/`.
 
@@ -10,7 +10,7 @@ How it stays reliable on a mini model: it doesn't hand-write boilerplate. It dri
 export OPENAI_API_KEY=...
 export DISCORD_BOT_TOKEN=...   # bot invited to your server, Message Content Intent on
 mkdir -p agents
-deno task af run examples/agent-zero/agent.yaml
+deno task af run examples/agent-zero-bot/agent.yaml
 ```
 
 Then in your `#agents` channel:

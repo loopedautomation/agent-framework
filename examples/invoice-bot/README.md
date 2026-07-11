@@ -1,4 +1,4 @@
-# Deploying invoice-inbox
+# Deploying invoice-bot
 
 Goal: an email address that does something. Mail sent or forwarded to `invoices@agents.example.com` wakes the agent, it pulls the vendor, amount, currency and due date out of the message into [persistent memory](../../docs/memory.md), and a one-line confirmation comes back. Ask it "what's due this month?" and it answers from what it has filed. Budget ~15 minutes plus DNS propagation.
 
@@ -38,10 +38,10 @@ curl -s localhost:9092/healthz   # identity JSON
 Then email the address something invoice-shaped:
 
 > **Amin:** *(forwards a hosting invoice)*
-> **invoice-inbox:** Filed: CloudHost, $42.00, due 2026-08-01.
+> **invoice-bot:** Filed: CloudHost, $42.00, due 2026-08-01.
 >
 > **Amin:** what's due this month?
-> **invoice-inbox:** CloudHost - $42.00 due 2026-08-01.
+> **invoice-bot:** CloudHost - $42.00 due 2026-08-01.
 
 Mail that isn't an invoice produces no reply at all: the purpose tells the agent to answer `__NO_REPLY__` and `allow_silence: true` makes the trigger send nothing. The run still lands in the run history (`curl -s localhost:9092/runs`), so you can see what it decided and why.
 
@@ -49,5 +49,5 @@ Mail that isn't an invoice produces no reply at all: the purpose tells the agent
 
 - The trigger acknowledges each webhook immediately and runs the agent afterwards, because Resend retries slow endpoints and a retried webhook would mean a duplicate run. The reply email is the delivery channel.
 - Attachments don't reach the agent yet; it sees filenames and sizes only. An invoice that lives entirely in an attached PDF gets filed with whatever the covering mail says.
-- Every filed invoice is a memory write in the [audit trail](../../docs/docker-run.md), and the `invoice-inbox-data` volume is where all of it lives. Deleting the volume deletes the ledger.
+- Every filed invoice is a memory write in the [audit trail](../../docs/docker-run.md), and the `invoice-bot-data` volume is where all of it lives. Deleting the volume deletes the ledger.
 - There is no `permissions:` block, so the worst a crafted mail can do is write a junk memory you can ask the agent to forget.

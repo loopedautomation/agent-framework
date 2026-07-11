@@ -6,13 +6,13 @@
 # .env next to this file (see .env.example):
 #   OPENAI_API_KEY, RESEND_API_KEY, RESEND_WEBHOOK_SECRET
 services:
-  invoice-inbox:
+  invoice-bot:
     image: ghcr.io/loopedautomation/agent:latest
     env_file: .env
     volumes:
       - ./agent.yaml:/agent/agent.yaml:ro
       # The recorded invoices, conversation history and audit trail.
-      - invoice-inbox-data:/data
+      - invoice-bot-data:/data
     ports:
       # The email trigger's webhook endpoint. Resend needs to reach it over
       # HTTPS, so put a TLS-terminating proxy or tunnel in front.
@@ -26,4 +26,4 @@ services:
       - /tmp
 
 volumes:
-  invoice-inbox-data:
+  invoice-bot-data:

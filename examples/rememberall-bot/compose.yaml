@@ -2,7 +2,7 @@
 #
 # No Dockerfile: this agent needs no binaries beyond the base image, so the
 # stock image runs with the config mounted. (When an agent does need its
-# own layer, gh-issues-cli shows the Dockerfile shape.)
+# own layer, gh-issues-bot shows the Dockerfile shape.)
 #
 # .env next to this file (see .env.example):
 #   OPENAI_API_KEY, TELEGRAM_BOT_TOKEN
