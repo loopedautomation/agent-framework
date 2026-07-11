@@ -239,6 +239,25 @@ const EmailTriggerSchema = z.discriminatedUnion("transport", [
   "Wake on inbound email. transport picks how mail arrives: resend (pushed webhooks for the agent's own address), or imap / gmail / outlook (poll an existing mailbox).",
 );
 
+const GithubTriggerSchema = z.strictObject({
+  type: z.literal("github"),
+  path: z.string().startsWith("/").default("/github").describe(
+    "HTTP path GitHub POSTs webhook deliveries to.",
+  ),
+  port: z.number().int().min(1).max(65535).default(8080).describe("Port to listen on."),
+  secret_env: z.string().min(1).default("GITHUB_WEBHOOK_SECRET").describe(
+    "Env var holding the webhook secret. Every delivery's X-Hub-Signature-256 is verified before parsing; unsigned POSTs get a 401.",
+  ),
+  events: z.array(z.string().min(1)).min(1).describe(
+    'Events that wake the agent: an event name ("pull_request"), an event.action pair ("pull_request.opened"), or "*" for every event the webhook sends. Required — GitHub sends many event types down one hook.',
+  ),
+  repos: z.array(z.string().min(1)).optional().describe(
+    "Repositories the agent handles: owner/repo or owner/* patterns. Omit to accept any repository the webhook covers (useful for org-level hooks).",
+  ),
+}).describe(
+  "Wake on GitHub webhook events (pull requests, issues, pushes, releases and the rest). No reply channel: the agent acts through its permissions, typically the gh CLI.",
+);
+
 const CronTriggerSchema = z.strictObject({
   type: z.literal("cron"),
   schedule: z.string().min(1).describe('Cron expression, e.g. "0 9 * * 1" for Mondays 09:00.'),
@@ -251,6 +270,7 @@ const TriggerSchema = z.discriminatedUnion("type", [
   TelegramTriggerSchema,
   WebhookTriggerSchema,
   EmailTriggerSchema,
+  GithubTriggerSchema,
   CronTriggerSchema,
 ]).describe("An event source that wakes the agent.");
 
@@ -640,6 +660,22 @@ export interface CronTriggerConfig {
   prompt: string;
 }
 
+/** A GitHub trigger: repository or organization webhook deliveries wake the agent. */
+export interface GithubTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "github";
+  /** HTTP path GitHub POSTs webhook deliveries to. */
+  path: string;
+  /** Port to listen on. */
+  port: number;
+  /** Env var holding the webhook secret; every delivery's signature is verified. */
+  secret_env: string;
+  /** Events that wake the agent: "pull_request", "pull_request.opened", or "*". */
+  events: string[];
+  /** Repositories the agent handles: owner/repo or owner/* patterns. Omit for all. */
+  repos?: string[];
+}
+
 /** An event source that wakes the agent, discriminated on `type`. */
 export type TriggerConfig =
   | DiscordTriggerConfig
@@ -647,6 +683,7 @@ export type TriggerConfig =
   | TelegramTriggerConfig
   | WebhookTriggerConfig
   | EmailTriggerConfig
+  | GithubTriggerConfig
   | CronTriggerConfig;
 
 /** A Model Context Protocol server providing tools to the agent. */

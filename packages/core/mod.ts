@@ -15,6 +15,7 @@ export {
   type CronTriggerConfig,
   type DiscordTriggerConfig,
   type EmailTriggerConfig,
+  type GithubTriggerConfig,
   type GmailEmailTriggerConfig,
   type ImapEmailTriggerConfig,
   type LimitsConfig,

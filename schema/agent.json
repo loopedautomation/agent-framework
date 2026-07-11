@@ -557,6 +557,57 @@
             "properties": {
               "type": {
                 "type": "string",
+                "const": "github"
+              },
+              "path": {
+                "default": "/github",
+                "description": "HTTP path GitHub POSTs webhook deliveries to.",
+                "type": "string",
+                "pattern": "^\\/.*"
+              },
+              "port": {
+                "default": 8080,
+                "description": "Port to listen on.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "secret_env": {
+                "default": "GITHUB_WEBHOOK_SECRET",
+                "description": "Env var holding the webhook secret. Every delivery's X-Hub-Signature-256 is verified before parsing; unsigned POSTs get a 401.",
+                "type": "string",
+                "minLength": 1
+              },
+              "events": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Events that wake the agent: an event name (\"pull_request\"), an event.action pair (\"pull_request.opened\"), or \"*\" for every event the webhook sends. Required — GitHub sends many event types down one hook."
+              },
+              "repos": {
+                "description": "Repositories the agent handles: owner/repo or owner/* patterns. Omit to accept any repository the webhook covers (useful for org-level hooks).",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "type",
+              "events"
+            ],
+            "additionalProperties": false,
+            "description": "Wake on GitHub webhook events (pull requests, issues, pushes, releases and the rest). No reply channel: the agent acts through its permissions, typically the gh CLI."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "cron"
               },
               "schedule": {
