@@ -32,6 +32,10 @@ export const BUILTIN_COMMANDS: CommandSpec[] = [
     name: "new",
     description: "Start a fresh conversation; the old thread is archived.",
   },
+  {
+    name: "stop",
+    description: "Stop the run currently in progress in this conversation.",
+  },
 ];
 
 /** A recognized slash command, split into name and trailing arguments. */

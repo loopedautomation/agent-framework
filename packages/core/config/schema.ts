@@ -345,7 +345,7 @@ const SchedulesConfigSchema = z.strictObject({
 );
 
 /** Built-in command names a config-defined command may not shadow. */
-const RESERVED_COMMAND_NAMES = ["help", "status", "reset", "compact", "new"];
+const RESERVED_COMMAND_NAMES = ["help", "status", "reset", "compact", "new", "stop"];
 
 const CommandConfigSchema = z.strictObject({
   name: z

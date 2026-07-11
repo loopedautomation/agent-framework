@@ -210,3 +210,51 @@ Deno.test("history carries across runs", async () => {
   assertEquals(second.messages.length, 4); // user, assistant, user, assistant
   assertEquals(provider.requests[0].messages.length, 3); // history + new user msg
 });
+
+Deno.test("an abort mid-step stops before further tools and provider calls", async () => {
+  const provider = scripted([
+    {
+      toolCalls: [
+        { id: "c1", name: "echo", arguments: '{"message":"hi"}' },
+        { id: "c2", name: "echo", arguments: '{"message":"again"}' },
+      ],
+    },
+    { content: "never reached" },
+  ]);
+  const controller = new AbortController();
+  const result = await runAgent({
+    config: CONFIG,
+    provider,
+    tools: [echoTool],
+    input: "go",
+    signal: controller.signal,
+    onEvent: (e) => {
+      if (e.type === "tool_result") controller.abort();
+    },
+  });
+
+  assertEquals(result.status, "aborted");
+  assertEquals(result.steps, 1);
+  assertEquals(provider.requests.length, 1); // no second LLM call
+  // The first tool ran; the second got a placeholder so the transcript
+  // stays well-formed for the next run over this history.
+  const toolMsgs = result.messages.filter((m) => m.role === "tool");
+  assertEquals(toolMsgs.length, 2);
+  assertEquals(toolMsgs[0].content, "echo: hi");
+  assertEquals(toolMsgs[1].content, "(not run: run stopped)");
+});
+
+Deno.test("a pre-aborted signal ends the run before any provider call", async () => {
+  const provider = scripted([{ content: "never reached" }]);
+  const controller = new AbortController();
+  controller.abort();
+  const result = await runAgent({
+    config: CONFIG,
+    provider,
+    input: "go",
+    signal: controller.signal,
+  });
+  assertEquals(result.status, "aborted");
+  assertEquals(result.steps, 0);
+  assertEquals(provider.requests.length, 0);
+});

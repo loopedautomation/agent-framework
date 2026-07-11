@@ -70,7 +70,15 @@ Deno.test("commandSpecs: built-ins first, then configured commands", () => {
   const specs = commandSpecs([
     { name: "standup", description: "Summarize the day", prompt: "..." },
   ]);
-  assertEquals(specs.map((s) => s.name), ["help", "status", "reset", "compact", "new", "standup"]);
+  assertEquals(specs.map((s) => s.name), [
+    "help",
+    "status",
+    "reset",
+    "compact",
+    "new",
+    "stop",
+    "standup",
+  ]);
 });
 
 Deno.test("helpText: one line per command", () => {

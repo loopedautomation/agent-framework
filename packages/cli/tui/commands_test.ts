@@ -12,7 +12,7 @@ const COMMANDS = replCommands([
 Deno.test("replCommands: agent commands first, then the REPL's own", () => {
   assertEquals(
     COMMANDS.map((c) => c.name),
-    ["help", "status", "reset", "compact", "new", "standup", "clear", "exit"],
+    ["help", "status", "reset", "compact", "new", "stop", "standup", "clear", "exit"],
   );
   assertEquals(LOCAL_COMMANDS.map((c) => c.name), ["clear", "exit"]);
 });
@@ -26,6 +26,7 @@ Deno.test("replCommands: built-ins get the dropdown's terse wording", () => {
       "Clear this conversation's history",
       "Shrink history into a summary",
       "Start a fresh conversation",
+      "Stop the run in progress",
       "Summarize the last day of activity",
       "Clear the screen",
       "Leave the REPL",
@@ -36,7 +37,7 @@ Deno.test("replCommands: built-ins get the dropdown's terse wording", () => {
 Deno.test("completions: prefix-filtered, exact match included, args close it", () => {
   assertEquals(completions("/", COMMANDS).length, COMMANDS.length);
   assertEquals(completions("/re", COMMANDS).map((c) => c.name), ["reset"]);
-  assertEquals(completions("/st", COMMANDS).map((c) => c.name), ["status", "standup"]);
+  assertEquals(completions("/st", COMMANDS).map((c) => c.name), ["status", "stop", "standup"]);
   assertEquals(completions("/help", COMMANDS).map((c) => c.name), ["help"]);
   assertEquals(completions("/HE", COMMANDS).map((c) => c.name), ["help"]); // case-insensitive
   assertEquals(completions("/help ", COMMANDS), []); // arguments began

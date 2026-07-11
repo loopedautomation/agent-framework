@@ -11,7 +11,7 @@ Parsing is strict on purpose. The message has to be a `/` followed by an exact k
 
 ## Built-ins
 
-Every agent answers five commands with no configuration:
+Every agent answers six commands with no configuration:
 
 | Command | What it does |
 | --- | --- |
@@ -20,8 +20,11 @@ Every agent answers five commands with no configuration:
 | `/reset` | Clear the conversation history for the thread it was typed in. Persistent memories survive. |
 | `/compact` | Summarize the conversation and replace its history with the summary plus the most recent turns. The one built-in that costs a model call. See [Memory](memory.md#compaction). |
 | `/new` | Start a fresh conversation under the same channel or thread. The old history stays archived in the agent's data volume. |
+| `/stop` | Stop the run currently in progress in this conversation. If nothing is running, it says so. |
 
 `/reset`, `/compact` and `/new` are scoped to one conversation key, so running them in a Discord channel touches nothing else. They only apply when [`memory.scope: thread`](memory.md) is on; an agent that keeps no history says so and does nothing. The difference between the three is what happens to the transcript: `/reset` deletes it, `/compact` shrinks it and keeps the conversation going, and `/new` retires it and starts over.
+
+`/stop` is the one command that skips the conversation's queue. Messages in a conversation normally run one at a time in arrival order, so a queued `/stop` would wait behind the very run it is meant to stop. Instead it is handled the moment it arrives: it fires an abort signal at the run in flight and replies right away, and the stopped run sends its own reply once it halts. The stop is cooperative. A provider call or tool that is already underway runs to completion, and the run ends at the next step boundary, so a long tool call can hold the stop up for as long as it takes to return. The partial transcript stays in the conversation's history, and events already waiting in the queue still run when their turn comes.
 
 ## Config-defined commands
 
