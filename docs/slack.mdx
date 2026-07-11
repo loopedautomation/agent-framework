@@ -17,6 +17,20 @@ triggers:
     # allow_silence: true       # a reply of exactly __NO_REPLY__ posts nothing
 ```
 
+## Options
+
+Every key is optional; the defaults give you a bot that answers everyone, in every channel it has been invited to.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `channels` | all channels | Channel names or ids to listen in. DMs always pass. |
+| `require_mention` | `false` | Only respond when the bot is @-mentioned. Gates channels only; a DM always addresses the bot. |
+| `from_users` | anyone | Only handle messages from these Slack user ids (the `U…` kind — display names don't match). The filter runs before the model is called, so everyone else's messages cost no tokens. |
+| `token_env` | `SLACK_BOT_TOKEN` | The env var holding the bot token (`xoxb-…`) — reads channel info, posts replies. |
+| `app_token_env` | `SLACK_APP_TOKEN` | The env var holding the app-level token (`xapp-…`, scope `connections:write`) that opens the Socket Mode connection. |
+| `reply_channel` | the source thread | Channel id to post replies into. Out-of-channel replies quote the triggering message and link back to it. |
+| `allow_silence` | `false` | Post nothing when the agent replies with exactly `__NO_REPLY__`, or with nothing at all. Tell the agent about the sentinel in `purpose`. |
+
 ## Setup
 
 Setting up the Slack app takes about 10 minutes:
