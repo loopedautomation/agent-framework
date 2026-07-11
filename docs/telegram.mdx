@@ -16,6 +16,19 @@ triggers:
     # allow_silence: true        # a reply of exactly __NO_REPLY__ posts nothing
 ```
 
+## Options
+
+Every key is optional; the defaults give you a bot that answers everyone, in every chat it can see.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `chats` | all chats | Chat ids, group titles, or public `@usernames` to listen in. This filter applies to private chats too: a private chat's id is the sender's user id, so list that id to keep DMs. |
+| `require_mention` | `false` | Only respond when the bot is @-mentioned. Gates groups only; a private chat always addresses the bot. Pair it with privacy mode (see Setup). |
+| `from_users` | anyone | Only handle messages from these authors (user ids or usernames, no `@`). The filter runs before the model is called, so everyone else's messages cost no tokens. |
+| `token_env` | `TELEGRAM_BOT_TOKEN` | The env var holding the bot token from @BotFather. |
+| `reply_chat` | the source chat | Chat id to post replies into. Out-of-chat replies quote the triggering message, and link back to it when the source is a supergroup. |
+| `allow_silence` | `false` | Post nothing when the agent replies with exactly `__NO_REPLY__`, or with nothing at all. Tell the agent about the sentinel in `purpose`. |
+
 ## Setup
 
 This is the fastest channel to set up — about 2 minutes:
