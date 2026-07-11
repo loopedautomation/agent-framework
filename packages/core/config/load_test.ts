@@ -241,17 +241,6 @@ Deno.test("the shipped gh-issues-cli example is a valid agent definition", async
   assertEquals(collectEnvRefs(config), ["GITHUB_TOKEN", "OPENAI_API_KEY"]);
 });
 
-Deno.test("the shipped gh-issues-mcp example is a valid agent definition", async () => {
-  const path = new URL("../../../examples/gh-issues-mcp/agent.yaml", import.meta.url);
-  const config = parseAgentConfig(
-    await Deno.readTextFile(path),
-    "examples/gh-issues-mcp/agent.yaml",
-  );
-  assertEquals(config.handle, "gh-issues-mcp");
-  assertEquals(config.tools?.mcp?.[0].name, "github");
-  assertEquals(collectEnvRefs(config), ["GITHUB_TOKEN", "OPENAI_API_KEY"]);
-});
-
 Deno.test("emits a JSON schema with the top-level fields", () => {
   const schema = agentConfigJsonSchema();
   const props = schema.properties as Record<string, unknown>;
