@@ -6,6 +6,20 @@
  */
 export const NO_REPLY = "__NO_REPLY__";
 
+/**
+ * True when a reply means "stay silent": empty, or the NO_REPLY sentinel
+ * surrounded by nothing but punctuation and whitespace. Cheap models often
+ * append a trailing period or wrap the sentinel in quotes; that still counts.
+ * A sentinel embedded in real content does not.
+ */
+export function isSilence(reply: string): boolean {
+  if (reply === "") return true;
+  const at = reply.indexOf(NO_REPLY);
+  if (at === -1) return false;
+  const rest = reply.slice(0, at) + reply.slice(at + NO_REPLY.length);
+  return /^[\s\p{P}]*$/u.test(rest);
+}
+
 /** Chat platforms cap message length; split on line boundaries where possible. */
 export function splitMessage(text: string, limit = 2000): string[] {
   if (text.length <= limit) return [text];

@@ -96,7 +96,7 @@ Three optional keys together turn the trigger from a chatbot into an observer �
 
 - `from_users` — handle only these authors. The filter runs *before* the model is called: everyone else's messages are dropped in the trigger and never reach the provider.
 - `reply_channel` — deliver replies to a dedicated channel instead of the source. Out-of-channel replies quote the triggering message and link back to it.
-- `allow_silence` — let the agent say nothing. Instruct it in `purpose` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message.
+- `allow_silence` — let the agent say nothing. Instruct it in `purpose` to answer with exactly `__NO_REPLY__` when it has no feedback; the trigger then posts nothing instead of a "looks fine" reply on every message. An empty reply also stays silent, and stray punctuation or whitespace around the sentinel is tolerated. A sentinel buried in real content still posts.
 
 Leave `show_typing` off for an observer. A typing indicator that ends in no message reads as the bot changing its mind, and an observer stays silent most of the time.
 
