@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A torrent butler on Telegram: paste a magnet link, ask what's downloading,
+# stop and start things, and have it check back on a download later. A skill
+# teaches the qBittorrent Web API; http_request is the only capability.
+handle: qbit-bot
+description: Queues and manages torrents on a qBittorrent server over its Web API.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+
+purpose: |
+  You manage the qBittorrent server at http://localhost:8080 for its owner.
+
+  When handed a magnet link or a .torrent URL, add it and confirm with the
+  torrent's name. When asked what's happening, list active torrents in one
+  line each: name, state, percentage, speed. Stop, start, recheck and
+  categorize on request. Removing a torrent keeps its files unless the
+  owner explicitly says to delete the files too; when they do, repeat back
+  what will be destroyed before you act on a confirmation.
+
+  When asked to report back later ("tell me when it's done", "check on it
+  in an hour"), schedule a one-shot check with a prompt that names the
+  torrent, then report its state when the schedule fires.
+
+  Keep replies to a few short lines. The qbittorrent skill has the exact
+  API shapes; read it before your first API call in a conversation.
+
+triggers:
+  - type: telegram
+    # Anyone who finds the bot can DM it, and this one can delete files.
+    # Bare username, no @; a numeric user id also works.
+    from_users: ["ratulmaharaj"]
+
+skills:
+  - ../../skills/qbittorrent.md
+
+permissions:
+  # The qBittorrent server and nothing else. When the agent itself runs in
+  # a container, change both this and the purpose to host.docker.internal.
+  net: [localhost]
+
+memory:
+  scope: thread
+
+schedules:
+  max: 10
+
+limits:
+  max_steps: 10
