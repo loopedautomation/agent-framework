@@ -23,17 +23,17 @@ In this directory:
 
 ```sh
 cp .env.example .env     # fill in the two values; never commit .env
-docker compose up -d --build
+docker compose up -d
 ```
 
-The base image is pulled from `ghcr.io/loopedautomation/agent` (public, no login needed).
+There is no Dockerfile and nothing to build: the agent needs no binaries beyond the base image, so the stock `ghcr.io/loopedautomation/agent` image (public, no login needed) runs with `agent.yaml` mounted onto it. The agent is the YAML.
 
 ## 2b. Or deploy on Coolify
 
 Coolify builds this straight from the repo:
 
 1. **New Resource** → **Docker Compose** → point it at your fork or clone of this repository (public repo works without a deploy key).
-2. Set **Base Directory** to `/examples/rememberall-bot` so Coolify picks up this `compose.yaml`. The build context reaches back to the repo root, which Coolify's checkout handles.
+2. Set **Base Directory** to `/examples/rememberall-bot` so Coolify picks up this `compose.yaml`. Nothing builds; Coolify pulls the released image and mounts `agent.yaml` from the checkout.
 3. Add `OPENAI_API_KEY` and `TELEGRAM_BOT_TOKEN` as environment variables in the resource's **Environment Variables** tab; the compose file's `env_file: .env` line can be deleted in the Coolify editor if you'd rather keep everything in the UI.
 4. Deploy. The bot polls Telegram outward, so no domain, port mapping or reverse proxy is needed. Leave the `9093` status port unpublished, or map it if you want `/healthz` reachable from the Coolify host.
 
