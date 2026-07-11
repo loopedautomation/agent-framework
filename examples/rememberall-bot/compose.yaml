@@ -1,14 +1,17 @@
-# The whole deployment story: docker compose up -d --build
+# The whole deployment story: docker compose up -d
+#
+# No Dockerfile: this agent needs no binaries beyond the base image, so the
+# stock image runs with the config mounted. (When an agent does need its
+# own layer, gh-issues-cli shows the Dockerfile shape.)
 #
 # .env next to this file (see .env.example):
 #   OPENAI_API_KEY, TELEGRAM_BOT_TOKEN
 services:
   rememberall-bot:
-    build:
-      context: ../..
-      dockerfile: examples/rememberall-bot/Dockerfile
+    image: ghcr.io/loopedautomation/agent:latest
     env_file: .env
     volumes:
+      - ./agent.yaml:/agent/agent.yaml:ro
       # Memories, schedules and conversation history all live here. Lose
       # the volume and the remembrall forgets everything, reminders included.
       - rememberall-bot-data:/data
