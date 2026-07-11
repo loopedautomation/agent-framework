@@ -26,6 +26,7 @@ const REPL_DESCRIPTIONS: Record<string, string> = {
   reset: "Clear this conversation's history",
   compact: "Shrink history into a summary",
   new: "Start a fresh conversation",
+  stop: "Stop the run in progress",
 };
 
 /** Everything the dropdown offers: the agent's commands, then the REPL's own. */

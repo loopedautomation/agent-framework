@@ -136,6 +136,8 @@ export class AgentService {
   #startedAtMs = Date.now();
   #scheduler: RunScheduler;
   #scheduleRunner?: ScheduleRunner;
+  /** The in-flight run's abort controller, per scheduler lane — what /stop fires. */
+  #aborts = new Map<string, AbortController>();
 
   /** Resolves env references, opens the store, and builds the provider. */
   constructor(opts: AgentServiceOptions) {
@@ -368,6 +370,9 @@ export class AgentService {
    */
   async handle(event: AgentEvent, opts?: HandleOptions): Promise<RunResult> {
     const lane = event.conversationKey ?? event.serialKey;
+    // /stop is the one command intercepted before the queue: submitted like
+    // any other event it would wait behind the very run it is meant to stop.
+    if (parseCommand(event.input, ["stop"])) return this.#stopCommand(event, lane);
     // Conversations queue up to limits.queue_depth events; serial lanes hold
     // at most one waiting event (cron's no-overlap promise).
     const queueDepth = event.conversationKey ? this.config.limits.queue_depth : 1;
@@ -492,6 +497,46 @@ export class AgentService {
     };
   }
 
+  /**
+   * The /stop command: fire the lane's abort controller, if a run holds one.
+   * The stopped run halts at its next step boundary and replies through its
+   * own event, so /stop answers immediately with what it did. Queued events
+   * are untouched — each one still runs when its turn comes.
+   */
+  #stopCommand(event: AgentEvent, lane: string | undefined): RunResult {
+    const controller = lane ? this.#aborts.get(lane) : undefined;
+    let reply: string;
+    if (controller) {
+      controller.abort();
+      reply = "Stopping — the current run will halt at its next step.";
+    } else {
+      reply = "Nothing is running in this conversation.";
+    }
+    const useSession = this.config.memory?.scope === "thread" && event.conversationKey;
+    const runId = this.store.recordRun({
+      sessionId: useSession ? this.store.sessionFor(event.conversationKey!) : undefined,
+      trigger: event.trigger,
+      input: event.input,
+      status: "ok",
+      reply,
+      steps: 0,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      startedAt: new Date().toISOString(),
+    });
+    this.store.recordAudit({
+      runId,
+      kind: "command",
+      detail: { name: "stop", args: "", builtin: true, stopped: controller !== undefined },
+    });
+    return {
+      status: "ok",
+      reply,
+      steps: 0,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      messages: [],
+    };
+  }
+
   /** Run one event end to end: context → inner loop → persist + audit. */
   async #run(event: AgentEvent, opts?: HandleOptions): Promise<RunResult> {
     const identity = await this.init();
@@ -549,29 +594,41 @@ export class AgentService {
     const history = sessionId !== undefined ? this.store.loadMessages(sessionId) : [];
     const memories = this.config.memory?.persistent ? this.store.listMemories() : [];
 
-    const result = await runAgent({
-      config: {
-        ...this.config,
-        purpose: this.config.purpose +
-          skillsPromptSection(this.#skills ?? []) +
-          memoryPromptSection(memories) +
-          (this.config.schedules
-            ? schedulesPromptSection(this.store.countSchedules(), this.config.schedules.max)
-            : "") +
-          identityNote(this.config, identity.name),
-      },
-      provider: this.#provider,
-      tools: this.#buildTools(
-        engine,
-        (e) => memoryEvents.push(e),
-        (call) => mcpCalls.push(call),
-        event.conversationKey,
-        onScheduleEvent,
-      ),
-      input: event.input,
-      history,
-      onEvent: opts?.onEvent,
-    });
+    // Register the abort controller under this event's lane so a /stop
+    // arriving mid-run (it skips the queue) can reach into this one.
+    const lane = event.conversationKey ?? event.serialKey;
+    const controller = new AbortController();
+    if (lane) this.#aborts.set(lane, controller);
+
+    let result: RunResult;
+    try {
+      result = await runAgent({
+        signal: controller.signal,
+        config: {
+          ...this.config,
+          purpose: this.config.purpose +
+            skillsPromptSection(this.#skills ?? []) +
+            memoryPromptSection(memories) +
+            (this.config.schedules
+              ? schedulesPromptSection(this.store.countSchedules(), this.config.schedules.max)
+              : "") +
+            identityNote(this.config, identity.name),
+        },
+        provider: this.#provider,
+        tools: this.#buildTools(
+          engine,
+          (e) => memoryEvents.push(e),
+          (call) => mcpCalls.push(call),
+          event.conversationKey,
+          onScheduleEvent,
+        ),
+        input: event.input,
+        history,
+        onEvent: opts?.onEvent,
+      });
+    } finally {
+      if (lane && this.#aborts.get(lane) === controller) this.#aborts.delete(lane);
+    }
 
     if (sessionId !== undefined) this.store.saveMessages(sessionId, result.messages);
     const runId = this.store.recordRun({

@@ -6,9 +6,11 @@ import type { NativeTool } from "../tools/types.ts";
 /**
  * How a run ended: cleanly, out of steps, or on a provider failure.
  * `rejected` means no run happened — the event was refused at the queue
- * (its conversation already held too much waiting work).
+ * (its conversation already held too much waiting work). `aborted` means
+ * the run's abort signal fired (the /stop command) and the loop halted at
+ * the next step boundary.
  */
-export type RunStatus = "ok" | "error_max_steps" | "error_provider" | "rejected";
+export type RunStatus = "ok" | "error_max_steps" | "error_provider" | "rejected" | "aborted";
 
 /**
  * Injected as the final user turn of the wrap-up call when a run exhausts
@@ -72,6 +74,12 @@ export interface RunOptions {
   history?: Message[];
   /** Observes progress as the run happens; see {@linkcode RunEvent}. */
   onEvent?: (event: RunEvent) => void;
+  /**
+   * Cooperative cancellation: checked before each LLM call and between tool
+   * executions. An in-flight provider call or tool run is never severed —
+   * the loop stops at the next boundary, so the transcript stays well-formed.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -99,7 +107,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     messages,
   });
 
+  const aborted = (): RunResult => finish("aborted", `run stopped after ${steps} steps`);
+
   while (steps < config.limits.max_steps) {
+    if (opts.signal?.aborted) return aborted();
     steps++;
     emit({ type: "step", n: steps });
     // Re-resolve per iteration: a search_tools call in the previous step may
@@ -136,6 +147,13 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     if (completion.content) emit({ type: "assistant", content: completion.content });
 
     for (const call of completion.toolCalls) {
+      // On abort, requested tools stop executing, but every pending call
+      // still gets a placeholder result so the transcript stays well-formed
+      // for the next run over this history.
+      if (opts.signal?.aborted) {
+        messages.push({ role: "tool", toolCallId: call.id, content: "(not run: run stopped)" });
+        continue;
+      }
       const tool = toolsByName.get(call.name);
       emit({ type: "tool_call", name: call.name, arguments: call.arguments });
       const startedAt = performance.now();
@@ -151,6 +169,8 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       messages.push({ role: "tool", toolCallId: call.id, content: result });
     }
   }
+
+  if (opts.signal?.aborted) return aborted();
 
   // Budget exhausted with the model still calling tools. Spend one extra
   // tool-less call so the run ends with the model's own account of where it

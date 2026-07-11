@@ -178,3 +178,80 @@ Deno.test("unknown slash text falls through to the model", async () => {
   assertEquals(inputs.at(-1), "/shrug");
   await service.stop();
 });
+
+Deno.test("/stop aborts the in-flight run in its conversation", async () => {
+  const dataDir = await Deno.makeTempDir();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let calls = 0;
+  const provider: Provider = {
+    id: "mock",
+    async complete(): Promise<Completion> {
+      calls++;
+      await gate;
+      return {
+        content: "",
+        toolCalls: [{ id: "t1", name: "nonexistent", arguments: "{}" }],
+        stopReason: "tool_calls",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    },
+  };
+  const service = new AgentService({
+    config: CONFIG,
+    provider,
+    dataDir,
+    identity: { name: "Nova", isNew: false },
+  });
+
+  const running = service.handle({
+    id: "e1",
+    trigger: "cli",
+    input: "count to a million",
+    conversationKey: "k",
+  });
+  // Wait until the run holds its provider call, then stop it from outside.
+  while (calls === 0) await new Promise((r) => setTimeout(r, 5));
+  const stop = await service.handle({
+    id: "e2",
+    trigger: "cli",
+    input: "/stop",
+    conversationKey: "k",
+  });
+  assertStringIncludes(stop.reply, "Stopping");
+  release();
+
+  const result = await running;
+  assertEquals(result.status, "aborted");
+  assertEquals(calls, 1); // the loop made no further provider calls
+
+  const audit = service.store.recentAudit();
+  const cmd = audit.find((a) => a.kind === "command");
+  assert(cmd);
+  const detail = JSON.parse(cmd.detail_json as string);
+  assertEquals(detail, { name: "stop", args: "", builtin: true, stopped: true });
+
+  await service.stop();
+});
+
+Deno.test("/stop with nothing running says so", async () => {
+  const dataDir = await Deno.makeTempDir();
+  const { provider } = recordingProvider();
+  const service = new AgentService({
+    config: CONFIG,
+    provider,
+    dataDir,
+    identity: { name: "Nova", isNew: false },
+  });
+  const result = await service.handle({
+    id: "e1",
+    trigger: "cli",
+    input: "/stop",
+    conversationKey: "k",
+  });
+  assertEquals(result.status, "ok");
+  assertStringIncludes(result.reply, "Nothing is running");
+  await service.stop();
+});
