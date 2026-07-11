@@ -31,9 +31,11 @@ purpose: |
 
 triggers:
   - type: telegram
-    # Anyone who finds the bot can DM it, so lock it to its owners.
-    # User ids are safest (usernames can change); @userinfobot tells you yours.
-    from_users: ["your_username"]
+    # Anyone who finds the bot can DM it, so lock it to its owners. Bare
+    # username, no @. A numeric user id also works and survives username
+    # changes (@userinfobot tells you yours) — worth using in your own
+    # deployment, but don't publish it the way a username already is.
+    from_users: ["ratulmaharaj"]
 
 # No permissions block: the agent's only tools are memory, schedules and
 # current_time, so it can touch nothing else. Deny by default.

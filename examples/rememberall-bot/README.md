@@ -13,7 +13,7 @@ Two blocks of config do the work. [`memory.persistent`](../../docs/memory.md) gi
 ## 1. Create the Telegram bot (~2 min)
 
 1. Message [@BotFather](https://t.me/BotFather) → `/newbot` → pick a display name and a username. It replies with the token; this is `TELEGRAM_BOT_TOKEN`.
-2. Find your own user id or username and put it in `from_users` in `agent.yaml`. Anyone who finds the bot can DM it, so this list is who the remembrall belongs to; user ids are safer than usernames because usernames can change ([@userinfobot](https://t.me/userinfobot) tells you your id). Add family or teammates by adding entries.
+2. In `agent.yaml`, replace `ratulmaharaj` in `from_users` with your own username (bare, no `@`). Anyone who finds the bot can DM it, so this list is who the remembrall belongs to; add family or teammates by adding entries. A numeric user id works too and survives a username change ([@userinfobot](https://t.me/userinfobot) tells you yours) — better for your own deployment, though not something to commit to a public repo.
 
 That's the whole registration; the bot connects outward by long-polling, so Telegram never needs to reach your server.
 
