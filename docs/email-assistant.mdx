@@ -5,7 +5,7 @@ description: "Build a personal assistant that watches your mail, reads your cale
 
 The assistant most people actually want is a mundane one: something that watches the inbox, knows the calendar, sends a nudge before a meeting and deals with the mail that doesn't deserve your attention. This guide builds that agent out of pieces the framework already has. There is no assistant feature to turn on; the [email trigger](email.mdx), [cron](cron.mdx), a skill with `curl` and [persistent memory](memory.md) compose into one.
 
-The email half of the design ships in the repo as two runnable examples: [invoice-inbox](https://github.com/loopedautomation/agent-framework/tree/main/examples/invoice-inbox) for the Resend forwarding pattern this guide uses, and [helpdesk-bot](https://github.com/loopedautomation/agent-framework/tree/main/examples/helpdesk-bot) for the pulled alternative. This page walks through the rest: the calendar feed, the reminder loop and the spam list.
+The email half of the design ships in the repo as two runnable examples: [invoice-bot](https://github.com/loopedautomation/agent-framework/tree/main/examples/invoice-bot) for the Resend forwarding pattern this guide uses, and [helpdesk-bot](https://github.com/loopedautomation/agent-framework/tree/main/examples/helpdesk-bot) for the pulled alternative. This page walks through the rest: the calendar feed, the reminder loop and the spam list.
 
 ## The shape of the agent
 
@@ -90,4 +90,4 @@ Worth naming plainly:
 - **Attachments don't reach the agent yet** - it sees filenames and sizes only ([email trigger](email.mdx#what-the-agent-sees-and-how-it-answers)).
 - **The agent only sees what you route to it.** It can't search your mailbox history or notice a message you didn't forward. A [pulled transport](email.mdx#watching-a-mailbox-the-pulled-transports) trades that isolation for direct mailbox access when you want it.
 
-Ready to build it? Start from the [invoice-inbox example](https://github.com/loopedautomation/agent-framework/tree/main/examples/invoice-inbox) - its README walks through the Resend setup - then swap in the purpose from this page and add the cron triggers, the calendar skill and the `curl` permission from the sections above.
+Ready to build it? Start from the [invoice-bot example](https://github.com/loopedautomation/agent-framework/tree/main/examples/invoice-bot) - its README walks through the Resend setup - then swap in the purpose from this page and add the cron triggers, the calendar skill and the `curl` permission from the sections above.

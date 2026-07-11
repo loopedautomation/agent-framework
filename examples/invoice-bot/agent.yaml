@@ -3,7 +3,7 @@
 # wakes the agent, it extracts the invoice's details into persistent
 # memory and confirms in one line. The Resend transport is the inbound
 # mailbox; the action is whatever the purpose says.
-handle: invoice-inbox
+handle: invoice-bot
 description: Files invoices that arrive at invoices@example.com.
 
 model:

@@ -51,7 +51,7 @@ docker build -t my-agent .
 af up -d --image my-agent agent.yaml
 ```
 
-[`examples/gh-issues-cli`](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-cli) is the complete pattern, with the Dockerfile, the compose.yaml and an `.env.example`, deployed with [Docker compose](docker-compose.md).
+[`examples/gh-issues-bot`](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-bot) is the complete pattern, with the Dockerfile, the compose.yaml and an `.env.example`, deployed with [Docker compose](docker-compose.md).
 
 ## What the base image gives you
 

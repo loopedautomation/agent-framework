@@ -2,7 +2,7 @@
 # the agent. One layer adds the one binary this agent needs.
 #
 # Build from the repo root (compose.yaml does this for you):
-#   docker build -f examples/gh-issues-cli/Dockerfile -t gh-issues-cli .
+#   docker build -f examples/gh-issues-bot/Dockerfile -t gh-issues-bot .
 FROM ghcr.io/loopedautomation/agent:latest
 
 # Install gh from the official release, not apk: Alpine's github-cli package
@@ -23,4 +23,4 @@ USER looped
 
 # Self-contained artifact: config + skills baked in, deploy anywhere.
 COPY --chown=looped:looped skills/gh-issues.md /skills/gh-issues.md
-COPY --chown=looped:looped examples/gh-issues-cli/agent.yaml /agent/agent.yaml
+COPY --chown=looped:looped examples/gh-issues-bot/agent.yaml /agent/agent.yaml

@@ -1,4 +1,4 @@
-# Test cases for gh-issues-cli, run with `af test examples/gh-issues-cli/agent.yaml`.
+# Test cases for gh-issues-bot, run with `af test examples/gh-issues-bot/agent.yaml`.
 # The model call is real; run_bash is mocked so no issue is ever opened.
 cases:
   - name: creates an issue from a bug report
