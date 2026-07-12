@@ -1,0 +1,28 @@
+# Test cases for interpreter-bot, run with `af test examples/interpreter-bot/agent.yaml`.
+# The model call is real. There are no tools to mock, because the agent has
+# none: what these check is the one thing it does.
+#
+# A voice note reaches the loop as its transcript, so these text inputs are
+# exactly what a spoken turn puts in front of the model.
+#
+# reply_matches compiles to a JavaScript regex with no flags, so the
+# case-insensitivity is spelled out rather than asked for with (?i).
+cases:
+  - name: interprets into the standing language
+    input: "the export is broken on big files, I'll look at it after lunch"
+    checks:
+      - status: ok
+      # Spanish is the standing language.
+      - reply_matches: "[Ee]xportaci|[Aa]rchivos|[Aa]lmuerzo|[Cc]omer"
+
+  - name: switching the language is confirmed in the new one
+    input: "switch to French"
+    checks:
+      - status: ok
+      - reply_matches: "[Dd]'accord|[Ee]ntendu|[Bb]ien s|[Ff]ran"
+
+  - name: answers a question about itself rather than interpreting it
+    input: "what language are we in right now?"
+    checks:
+      - status: ok
+      - reply_matches: "[Ss]panish|[Ee]spa"

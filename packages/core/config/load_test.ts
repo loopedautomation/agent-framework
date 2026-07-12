@@ -268,6 +268,23 @@ Deno.test("the shipped gh-issues-bot example is a valid agent definition", async
   assertEquals(collectEnvRefs(config), ["GITHUB_TOKEN", "OPENAI_API_KEY"]);
 });
 
+Deno.test("the shipped interpreter-bot example is a valid agent definition", async () => {
+  const path = new URL("../../../examples/interpreter-bot/agent.yaml", import.meta.url);
+  const config = parseAgentConfig(
+    await Deno.readTextFile(path),
+    "examples/interpreter-bot/agent.yaml",
+  );
+  assertEquals(config.handle, "interpreter-bot");
+  // Both engines' keys, the stt default included — a key the redactor never
+  // learns about is a key it cannot scrub.
+  assertEquals(collectEnvRefs(config), ["ELEVENLABS_API_KEY", "OPENAI_API_KEY"]);
+  // The example's whole claim: the voice block is the capability, and there
+  // is nothing else. A permissions block here would make the README a lie.
+  assertEquals(config.permissions, undefined);
+  assertEquals(config.tools, undefined);
+  assertEquals(config.voice?.tts?.provider, "elevenlabs");
+});
+
 Deno.test("the shipped standup-bot example is a valid agent definition", async () => {
   const path = new URL("../../../examples/standup-bot/agent.yaml", import.meta.url);
   const config = parseAgentConfig(

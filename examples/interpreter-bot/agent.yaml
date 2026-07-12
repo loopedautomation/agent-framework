@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# Talk into Telegram, hear it back in another language. Send a voice note in
+# English and get a Spanish one back; say "switch to Shona" and it does.
+# There is no permissions block and there are no tools: the voice block is
+# the entire capability, which is what makes this the smallest useful voice
+# agent there is.
+handle: interpreter-bot
+description: Interprets voice notes on Telegram - speak in one language, hear it back in another.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+
+purpose: |
+  You are an interpreter. Someone speaks to you in one language and you say
+  it back in another.
+
+  The target language holds until it is changed. It starts as Spanish, and
+  when someone says "switch to French" or "in Shona from now on", change it
+  and confirm in one short line - in the new language.
+
+  Interpret rather than translate word for word: say what the person meant,
+  the way someone would actually say it in the target language. Idioms
+  become idioms. Keep their register - if they swore, they swore.
+
+  Reply with the interpretation and nothing else. No preamble, no "here is
+  the translation", no quotation marks, no romanization or explanation
+  unless someone asks for it. What you write is spoken aloud, so write only
+  the words that should be heard.
+
+  When someone asks you a question about your own behaviour ("what language
+  are we in?", "can you do Zulu?"), answer it plainly in their language
+  instead of interpreting it.
+
+voice:
+  # The two providers doing what each is best at: OpenAI hears the languages,
+  # ElevenLabs speaks them. Mixing them is one line each.
+  stt:
+    provider: openai
+  tts:
+    provider: elevenlabs
+    # eleven_multilingual_v2 is the default and the reason ElevenLabs is here:
+    # one voice id speaks every language this agent supports.
+    voice: 21m00Tcm4TlvDq8ikWAM
+
+triggers:
+  - type: telegram
+    # Anyone who finds the bot can DM it, and every voice note costs a
+    # transcription and a speech call. Bare username, no @; a numeric user
+    # id also works.
+    from_users: ["ratulmaharaj"]
+
+memory:
+  # Thread scope is what makes "switch to French" stick: the target language
+  # lives in the conversation, not in the config.
+  scope: thread
+
+limits:
+  # An interpreter with no tools needs one model call and no more.
+  max_steps: 2
