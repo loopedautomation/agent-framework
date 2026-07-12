@@ -155,23 +155,24 @@ function triggerHosts(trigger: TriggerConfig, listenHost: string): string[] {
 }
 
 /**
- * Deno's `--allow-net` speaks in exact hosts: it has no wildcard form, so
- * `*.example.com` cannot be compiled. Reported rather than approximated —
- * narrowing it to the apex would deny the agent traffic its own config allows,
- * and widening it isn't possible at all.
+ * Deno's `--allow-net` speaks in exact hosts and `*.example.com` wildcards
+ * (verified on Deno 2.9, the image's pin), so every pattern `permissions.net`
+ * can hold compiles. One nuance carries over from Deno's matcher: its wildcard
+ * covers the apex as well as the subdomains, so at this layer `*.example.com`
+ * reaches `example.com` too. The engine's own per-call matching still reserves
+ * the apex for an explicit entry, and a sandbox one host wide of the config
+ * beats keeping the whole net open.
  */
 export function denoNetHosts(
   patterns: string[] | undefined,
-): { hosts: string[]; open: boolean; unexpressible: string[] } {
+): { hosts: string[]; open: boolean } {
   const hosts: string[] = [];
-  const unexpressible: string[] = [];
   let open = false;
   for (const p of patterns ?? []) {
     if (p === "*") open = true;
-    else if (p.startsWith("*.")) unexpressible.push(p);
     else hosts.push(p);
   }
-  return { hosts, open, unexpressible };
+  return { hosts, open };
 }
 
 /** Every host the agent itself needs, derived from the config it declares. */
@@ -221,12 +222,6 @@ export function hermeticPlan(
   }
 
   const net = denoNetHosts(config.permissions?.net);
-  for (const pattern of net.unexpressible) {
-    blockers.push(
-      `permissions.net entry "${pattern}" has no --allow-net equivalent — Deno matches exact hosts`,
-    );
-  }
-
   const hosts = [...new Set([...derivedHosts(config, env), ...net.hosts])];
   if (blockers.length) return { eligible: false, blockers, flags: IMAGE_FLAGS, hosts };
 
