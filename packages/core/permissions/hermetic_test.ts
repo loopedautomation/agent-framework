@@ -75,10 +75,12 @@ Deno.test("hermetic/an HTTP MCP server keeps the agent hermetic and joins the al
   assert(plan.hosts.includes("mcp.linear.app"));
 });
 
-Deno.test("hermetic/a wildcard host disqualifies the agent — Deno cannot express it", () => {
+Deno.test("hermetic/a wildcard host compiles and the agent stays hermetic", () => {
   const plan = hermeticPlan(agent({ permissions: { net: ["*.example.com"] } }), env);
-  assert(!plan.eligible);
-  assert(plan.blockers[0].includes("no --allow-net equivalent"));
+  assert(plan.eligible);
+  assertEquals(plan.blockers, []);
+  assert(plan.hosts.includes("*.example.com"));
+  assert(plan.flags.includes("--allow-net=0.0.0.0:9090,api.anthropic.com,*.example.com"));
 });
 
 Deno.test("hermetic/net: ['*'] stays hermetic — open web, everything else still shut", () => {

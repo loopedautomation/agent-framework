@@ -125,15 +125,18 @@ ports the status server and any webhook trigger listen on. Everything else in
 prompt injection that talks an MCP client or a provider SDK into calling an attacker's
 endpoint doesn't get out.
 
-Two things will keep an agent out of hermetic mode, and `af validate` names them:
+One thing will keep an agent out of hermetic mode, and `af validate` names it: a
+subprocess. Any `permissions.run` entry, or an MCP server declared with `command:` rather
+than `url:`, spawns a process that leaves the Deno sandbox, and once it has, the runtime
+cannot hold it. The container is that agent's egress boundary.
 
-- **A subprocess.** Any `permissions.run` entry, or an MCP server declared with `command:`
-  rather than `url:`. Both spawn a process that leaves the Deno sandbox, and once it has,
-  the runtime cannot hold it. The container is that agent's egress boundary.
-- **A wildcard host.** Deno's `--allow-net` matches exact hosts and has no wildcard form,
-  so `*.example.com` has no equivalent. We refuse to approximate it: narrowing it to the
-  apex would deny the agent traffic its own config allows. Such an agent keeps the image's
-  flags, and the permission engine still enforces the pattern for `http_request`.
+Wildcard hosts compile. Deno's `--allow-net` accepts `*.example.com`, so a config that
+grants subdomains still qualifies for hermetic mode. One nuance is worth knowing about:
+Deno's wildcard also covers the apex, which means at the sandbox layer `*.example.com`
+reaches `example.com` too. The permission engine keeps enforcing the stricter
+subdomains-only pattern for every `http_request` call; the wider match applies to the
+runtime's own clients, and we took that one extra host over leaving the whole net open
+for wildcard configs.
 
 The tradeoff is deliberate. Hermetic mode rewards the absence of subprocesses; it doesn't
 forbid their presence. The CLI-plus-skill pattern is half of what this framework is for.

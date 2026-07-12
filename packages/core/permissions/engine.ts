@@ -130,11 +130,12 @@ export class PermissionEngine {
  * (the container is layer 2; see Plan 1). run_bash subprocesses escape Deno's
  * sandbox, so `run` permissions also compile to --allow-run.
  *
- * `--allow-net` matches exact hosts, so a `*.example.com` pattern has no
- * equivalent and is left out rather than approximated: the compiled flags are
- * always a subset of what the config allows, never a superset. The flags an
- * agent actually runs under come from {@linkcode hermeticPlan}, which refuses
- * to narrow a config it cannot express in full.
+ * `--allow-net` accepts exact hosts and `*.example.com` wildcards, so the
+ * whole net list compiles. Deno's wildcard covers the apex as well as the
+ * subdomains, which puts the compiled flags one host wide of the engine's
+ * own matching per wildcard; the engine still gates every http_request call
+ * by the config's stricter pattern. The flags an agent actually runs under
+ * come from {@linkcode hermeticPlan}.
  */
 export function permissionsToDenoFlags(permissions: Permissions | undefined): string[] {
   const p = permissions ?? {};
