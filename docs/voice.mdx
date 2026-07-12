@@ -1,40 +1,32 @@
 ---
 title: "Voice"
-description: "Voice notes on chat triggers: transcription in, spoken replies out, via OpenAI or ElevenLabs."
+description: "Voice notes and live spoken conversation: transcription in, spoken replies out, and an agent you can talk to in a Discord voice channel."
 ---
 
-Someone sends your agent a voice note and the agent can only apologize: the trigger hands the model a line saying an audio file arrived that it cannot listen to ([Attachments](attachments.md) covers that honesty). The `voice` block turns the apology into a conversation, on the chat triggers that carry voice notes: Telegram and Discord.
+Someone sends your agent a voice note and the agent can only apologize: the trigger hands the model a line saying an audio file arrived that it cannot listen to ([Attachments](attachments.md) covers that honesty). The `voice` block turns the apology into a conversation.
 
-It works with two engines at the trigger's edge. `stt` turns an incoming voice note into a transcript, and the transcript runs through the normal loop like any typed message. `tts` is optional: with it configured, the reply to a voice note comes back as a voice note in the same chat. Text messages get text replies either way, and the loop itself stays text end to end - the audio never reaches the model.
+There are two ways to have that conversation, and they share one config block. Voice notes are turn-based: a clip arrives, the transcript runs through the normal loop, and with `tts` the reply comes back as a clip. Live voice is a real conversation: the agent sits in a Discord voice channel and you talk to it out loud.
 
 ```yaml
 voice:
-  stt:
+  stt:                            # voice notes in (telegram, discord)
     provider: openai              # or elevenlabs
     # model: gpt-4o-mini-transcribe (default)
     # api_key_env: OPENAI_API_KEY (default)
-  tts:                            # omit this block for text replies to voice notes
+  tts:                            # omit for text replies to voice notes
     provider: elevenlabs
     # model: eleven_multilingual_v2 (default)
     # voice: 21m00Tcm4TlvDq8ikWAM (default: Rachel)
-    # api_key_env: ELEVENLABS_API_KEY (default)
+  live:                           # live conversation in a discord voice channel
+    provider: openai
+    # model: gpt-realtime-2.1 (default)
+    # voice: marin (default)
+    # idle_seconds: 60 (default)
 ```
 
-The block sits at the top level of the agent file because the engines are shared: every voice-capable trigger in the file transcribes and speaks through the same pair. Mixing providers is fine - transcribe with OpenAI and speak with ElevenLabs, or the other way around.
+Each part is optional, and you can run any combination. The block sits at the top level because the engines are shared: every voice-capable trigger in the file speaks and listens through the same ones. Mixing providers is fine - transcribe with OpenAI and speak with ElevenLabs, or the other way around.
 
-## Options
-
-| Key | Default | What it does |
-| --- | --- | --- |
-| `stt.provider` | required | `openai` or `elevenlabs`. |
-| `stt.model` | per provider | `gpt-4o-mini-transcribe` for openai, `scribe_v2` for elevenlabs. |
-| `stt.api_key_env` | per provider | The env var holding the key: `OPENAI_API_KEY` or `ELEVENLABS_API_KEY`. A reference; the value stays out of the file and is redacted everywhere it could surface ([Secrets](secrets.md)). |
-| `tts.provider` | required in `tts` | `openai` or `elevenlabs`. |
-| `tts.model` | per provider | `gpt-4o-mini-tts` for openai, `eleven_multilingual_v2` for elevenlabs. |
-| `tts.voice` | per provider | The voice to speak with: a voice name for openai (`alloy`), a voice id for elevenlabs (Rachel's premade voice). |
-| `tts.api_key_env` | per provider | Same defaults as `stt.api_key_env`. Each engine resolves its own key, so mixed providers each find theirs. |
-
-## What happens to a voice note
+## Voice notes
 
 The trigger downloads the audio, sends it to the transcription API and emits the transcript as the event's input. From there it is an ordinary run: same purpose, same tools, same memory, same audit trail. When the run finishes and `tts` is configured, the trigger asks the speech API for Ogg Opus and posts it as a real voice note, the kind that renders with a play button and a waveform.
 
@@ -42,10 +34,59 @@ Some replies stay text on purpose. A reply longer than 4000 characters reads bet
 
 One gate to know about: `require_mention`. A voice note has no text to carry an @-mention, so in a mention-gated group voice notes drop before the model is called. Private chats and DMs always address the bot, and that's where voice conversations naturally live.
 
+| Key | Default | What it does |
+| --- | --- | --- |
+| `stt.provider` | required in `stt` | `openai` or `elevenlabs`. |
+| `stt.model` | per provider | `gpt-4o-mini-transcribe` for openai, `scribe_v2` for elevenlabs. |
+| `stt.api_key_env` | per provider | The env var holding the key: `OPENAI_API_KEY` or `ELEVENLABS_API_KEY`. A reference; the value stays out of the file and is redacted everywhere it could surface ([Secrets](secrets.md)). |
+| `tts.provider` | required in `tts` | `openai` or `elevenlabs`. Needs `stt`, since it speaks the replies to what `stt` hears. |
+| `tts.model` | per provider | `gpt-4o-mini-tts` for openai, `eleven_multilingual_v2` for elevenlabs. |
+| `tts.voice` | per provider | A voice name for openai (`alloy`), a voice id for elevenlabs (Rachel's premade voice). |
+| `tts.api_key_env` | per provider | Same defaults as `stt.api_key_env`. Each engine resolves its own key, so mixed providers each find theirs. |
+
+## Live voice in a Discord voice channel
+
+Add `voice.live` and point a discord trigger at a voice channel, and the agent joins it at startup and stays:
+
+```yaml
+voice:
+  live:
+    provider: openai
+
+triggers:
+  - type: discord
+    voice_channels: ["standup"]   # names or ids
+```
+
+Talk to it and it talks back, with the interruptions and half-second pauses of an actual conversation. You can cut it off mid-sentence and it stops.
+
+The way that works is worth understanding, because it shapes what the agent can do. A realtime speech-to-speech model holds the conversation: it hears you, decides when you have finished a thought, and speaks. It is fast and it is good at talking, and it knows nothing about your systems. So it has exactly one tool, `ask_agent`, and when you ask for something real it hands the request to your agent - the same loop, the same tools, the same permissions, the same audit trail - and speaks the answer when the run comes back. The voice model is the mouth and ears. Your agent is still the one doing the work, and it is still the only thing that can touch anything.
+
+That split is also the safety story. Nothing the voice model says to itself can call a tool. Every consequential action goes through a normal run, which means the permission engine sees it and the audit trail records it, exactly as it would for a message typed into a text channel. Spoken conversations get their own conversation key (`discord-voice:<guild>`), so what you say out loud stays out of your text channels' history.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `live.provider` | required in `live` | `openai`. The one dialect today; when the gpt-live models reach the API, they are a change of `model` and nothing else. |
+| `live.model` | `gpt-realtime-2.1` | The realtime model that holds the conversation. |
+| `live.voice` | `marin` | The voice it speaks with. |
+| `live.idle_seconds` | `60` | Close the realtime session after this much silence. It reopens the moment someone speaks. |
+| `live.api_key_env` | `OPENAI_API_KEY` | The env var holding the key. |
+| `voice_channels` | none | On the discord trigger: which voice channels to join. Without it the bot never joins one. |
+
+**A live session bills by the audio minute, including the minutes nobody is talking.** That is what `idle_seconds` is for: the session closes after a minute of silence and reopens on the next word, so a bot sitting in an empty channel costs nothing. Set it higher if the reopening pause bothers you, and know what you are paying for.
+
+Setup is two things beyond the [Discord](discord.md) setup you already did. Re-run `af discord-invite agent.yaml` and open the URL - the invite now asks for the permissions to connect to a voice channel and speak in it. Then give the agent an `OPENAI_API_KEY`, even if its `model:` block runs on something else entirely; the realtime session is a separate connection with a separate key.
+
 ## Keys and the sandbox
 
-Both API keys resolve at startup from the env vars the config names, and a missing key stops the agent right there with the var's name in the error. Under [hermetic mode](permission-model.md) the engines' hosts join the derived allowlist on their own: `api.openai.com` or `api.elevenlabs.io`. The audio files themselves download from hosts each trigger already lists. Nothing to declare in `permissions.net`.
+Every API key resolves at startup from the env var the config names, and a missing key stops the agent right there with the var's name in the error. Under [hermetic mode](permission-model.md) the engines' hosts join the derived allowlist on their own, so there is nothing to declare in `permissions.net`.
+
+Live voice is the exception, and it is a real one. Voice media travels over UDP to a media server Discord picks per session, and Deno's sandbox cannot hold a permission for an address it does not know in advance. An agent with `voice_channels` therefore runs outside hermetic mode, with the container as its egress boundary. `af validate` says so plainly. If hermetic mode is load-bearing for you, keep live voice on an agent that does not need it.
 
 ## What this doesn't cover
 
-A voice note is still a turn: audio in, one run, audio out. Joining a Discord voice channel and holding a live spoken conversation is a different mechanism, and this block does not provide it. Slack is absent here too, because Slack gives bots no voice-message surface to read or post. And the waveform Discord shows on the agent's voice replies is a placeholder shape; drawing the real envelope would mean decoding Opus inside the trigger, which we decided isn't worth it for a preview.
+Slack is absent from this whole page, because Slack gives bots no voice surface at all - no voice messages to read or post, no huddle audio to join. Telegram stops at voice notes; live calls there need a user account, which a bot is not.
+
+Two smaller things we decided against. The waveform Discord draws on the agent's voice replies is a placeholder shape, since drawing the real envelope would mean decoding the Opus we just encoded. And live voice does not yet know who is speaking: it hears the channel as one voice, so `from_users` does not apply to it.
+
+There is one risk worth naming. Discord is moving voice to end-to-end encryption (DAVE), and this bridge negotiates the older transport-encrypted path. Voice servers still accept it. When they stop, live voice needs the new protocol, and that is a change we will have to make rather than a knob you can turn.

@@ -52,7 +52,7 @@ Deno.test("transcribe: openai gets a multipart upload with the default model", a
     new Response(JSON.stringify({ text: " hello there " })),
   );
   const engines = voiceFromConfig({ stt: { provider: "openai" } }, () => "sk-1", fetchFn);
-  assertEquals(await engines.transcribe(clip), "hello there"); // trimmed
+  assertEquals(await engines!.transcribe(clip), "hello there"); // trimmed
   assertEquals(calls[0].url, "https://api.openai.com/v1/audio/transcriptions");
   const headers = calls[0].init?.headers as Record<string, string>;
   assertEquals(headers.authorization, "Bearer sk-1");
@@ -70,7 +70,7 @@ Deno.test("transcribe: elevenlabs authenticates with xi-api-key and model_id", a
     () => "el-1",
     fetchFn,
   );
-  assertEquals(await engines.transcribe(clip), "hi");
+  assertEquals(await engines!.transcribe(clip), "hi");
   assertEquals(calls[0].url, "https://api.elevenlabs.io/v1/speech-to-text");
   const headers = calls[0].init?.headers as Record<string, string>;
   assertEquals(headers["xi-api-key"], "el-1");
@@ -85,7 +85,7 @@ Deno.test("speak: openai asks for Ogg Opus with the default voice", async () => 
     () => "sk-1",
     fetchFn,
   );
-  const out = await engines.speak!("hello");
+  const out = await engines!.speak!("hello");
   assertEquals(out.mimeType, "audio/ogg");
   assertEquals(out.audio.length, 2);
   assertEquals(calls[0].url, "https://api.openai.com/v1/audio/speech");
@@ -105,7 +105,7 @@ Deno.test("speak: elevenlabs addresses the voice id and asks for opus", async ()
     (n) => n === "ELEVENLABS_API_KEY" ? "el-1" : "sk-1",
     fetchFn,
   );
-  const out = await engines.speak!("hello");
+  const out = await engines!.speak!("hello");
   assertEquals(out.mimeType, "audio/ogg");
   assertEquals(
     calls[0].url,
@@ -117,7 +117,17 @@ Deno.test("speak: elevenlabs addresses the voice id and asks for opus", async ()
 
 Deno.test("voiceFromConfig: no tts block means no speak engine", () => {
   const engines = voiceFromConfig({ stt: { provider: "openai" } }, () => "sk-1");
-  assertEquals(engines.speak, undefined);
+  assertEquals(engines!.speak, undefined);
+});
+
+Deno.test("voiceFromConfig: a live-only block builds no note engines", () => {
+  const live = {
+    provider: "openai" as const,
+    model: "gpt-realtime-2.1",
+    voice: "marin",
+    idle_seconds: 60,
+  };
+  assertEquals(voiceFromConfig({ live }, () => "sk-1"), undefined);
 });
 
 // --- Ogg parsing ---

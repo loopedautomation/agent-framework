@@ -200,6 +200,50 @@ triggers:
   );
 });
 
+Deno.test("triggersFromConfig: live voice resolves its key at startup and needs a channel", () => {
+  const config = parseAgentConfig(`
+handle: live-bot
+description: live voice test agent
+model:
+  provider: openai-compatible
+  id: test-model
+purpose: You answer questions out loud.
+voice:
+  live:
+    provider: openai
+triggers:
+  - type: discord
+    voice_channels: ["lounge"]
+`);
+  const env: Record<string, string> = { DISCORD_BOT_TOKEN: "d0k", OPENAI_API_KEY: "sk-1" };
+  assertEquals(triggersFromConfig(config, (n) => env[n]).map((t) => t.name), ["discord"]);
+  // A missing key strands the bot in the channel with nothing behind it; fail first.
+  assertThrows(
+    () => triggersFromConfig(config, (n) => n === "OPENAI_API_KEY" ? undefined : env[n]),
+    Error,
+    "OPENAI_API_KEY",
+  );
+});
+
+Deno.test("parseAgentConfig: voice_channels without voice.live is a config error", () => {
+  assertThrows(
+    () =>
+      parseAgentConfig(`
+handle: live-bot
+description: live voice test agent
+model:
+  provider: openai-compatible
+  id: test-model
+purpose: test
+triggers:
+  - type: discord
+    voice_channels: ["lounge"]
+`),
+    Error,
+    "voice_channels requires the top-level voice.live block",
+  );
+});
+
 Deno.test("cron trigger fires with its configured prompt on a stable serial lane", async () => {
   const events: { input: string; serialKey?: string }[] = [];
   const results: string[] = [];

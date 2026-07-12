@@ -205,6 +205,33 @@ purpose: test
   assertEquals(collectEnvRefs(claude), ["ANTHROPIC_API_KEY"]);
 });
 
+Deno.test("collectEnvRefs picks up the voice engines' keys, defaults included", () => {
+  const voice = parseAgentConfig(`
+handle: voice-bot
+description: voice keys
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+purpose: test
+voice:
+  stt:
+    provider: openai
+  tts:
+    provider: elevenlabs
+  live:
+    provider: openai
+    api_key_env: LIVE_KEY
+`);
+  // A key the redactor never learns about is a key it cannot scrub, so the
+  // defaults have to resolve here and not just at the engine.
+  assertEquals(collectEnvRefs(voice), [
+    "ANTHROPIC_API_KEY",
+    "ELEVENLABS_API_KEY",
+    "LIVE_KEY",
+    "OPENAI_API_KEY",
+  ]);
+});
+
 Deno.test("collectEnvRefs skips the key env for keyless base_url endpoints", () => {
   const local = parseAgentConfig(`
 handle: local-bot

@@ -171,6 +171,34 @@ Deno.test("hermetic/voice engines contribute their hosts", () => {
   assert(!telegramOnly.includes("api.openai.com"));
 });
 
+Deno.test("hermetic/live voice reaches the realtime API and the voice servers", () => {
+  const live = {
+    voice: {
+      live: { provider: "openai", model: "gpt-realtime-2.1", voice: "marin", idle_seconds: 60 },
+    },
+    triggers: [
+      {
+        type: "discord",
+        token_env: "DISCORD_BOT_TOKEN",
+        allow_silence: false,
+        show_typing: false,
+        voice_channels: ["lounge"],
+      },
+    ],
+  } as unknown as Partial<AgentConfig>;
+  const hosts = derivedHosts(agent(live), env);
+  assert(hosts.includes("api.openai.com"));
+  // Voice servers live at per-session hostnames; the wildcard is what makes
+  // them expressible at all.
+  assert(hosts.includes("*.discord.media"));
+
+  // …but the media itself is UDP, which Deno cannot hold — so the agent runs
+  // under the image's flags, with the container as its egress boundary.
+  const plan = hermeticPlan(agent(live), env);
+  assert(!plan.eligible);
+  assert(plan.blockers[0].includes("UDP"));
+});
+
 Deno.test("hermetic/imap mail hosts come from the config, ports and all", () => {
   const hosts = derivedHosts(
     agent({

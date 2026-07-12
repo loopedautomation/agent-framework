@@ -125,10 +125,16 @@ ports the status server and any webhook trigger listen on. Everything else in
 prompt injection that talks an MCP client or a provider SDK into calling an attacker's
 endpoint doesn't get out.
 
-One thing will keep an agent out of hermetic mode, and `af validate` names it: a
-subprocess. Any `permissions.run` entry, or an MCP server declared with `command:` rather
-than `url:`, spawns a process that leaves the Deno sandbox, and once it has, the runtime
-cannot hold it. The container is that agent's egress boundary.
+Two things will keep an agent out of hermetic mode, and `af validate` names them:
+
+- **A subprocess.** Any `permissions.run` entry, or an MCP server declared with `command:`
+  rather than `url:`, spawns a process that leaves the Deno sandbox, and once it has, the
+  runtime cannot hold it.
+- **Live voice.** A discord trigger with `voice_channels` sends audio over UDP to a media
+  server Discord assigns per session, and Deno cannot hold a permission for an address
+  nobody knows in advance ([Voice](voice.md)).
+
+Either way the container is that agent's egress boundary.
 
 Wildcard hosts compile. Deno's `--allow-net` accepts `*.example.com`, so a config that
 grants subdomains still qualifies for hermetic mode. One nuance is worth knowing about:

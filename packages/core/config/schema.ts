@@ -51,6 +51,11 @@ const DiscordTriggerSchema = z.strictObject({
   show_typing: z.boolean().default(false).describe(
     "Show the typing indicator in the source channel while the agent works. Looks odd with allow_silence: typing may end in no message.",
   ),
+  voice_channels: z.array(z.string().min(1)).optional().describe(
+    "Voice channel names or ids to join for live spoken conversations. Requires the top-level " +
+      "voice.live block; the bot joins at startup and stays. Live voice media rides UDP, which " +
+      "keeps the agent out of hermetic mode — the container is its egress boundary.",
+  ),
 }).describe("Listen to Discord messages via the gateway; replies go in-channel by default.");
 
 const SlackTriggerSchema = z.strictObject({
@@ -303,14 +308,49 @@ const VoiceTtsSchema = z.strictObject({
   "How replies to voice notes become speech. Omit this block and voice notes get text replies.",
 );
 
-const VoiceConfigSchema = z.strictObject({
-  stt: VoiceSttSchema,
-  tts: VoiceTtsSchema.optional(),
+const LiveVoiceSchema = z.strictObject({
+  provider: z.literal("openai").describe(
+    "Realtime speech-to-speech provider. openai is the only dialect today: the Realtime API now, " +
+      "the gpt-live models the day their API opens.",
+  ),
+  model: z.string().min(1).default("gpt-realtime-2.1").describe(
+    "Realtime model that holds the live conversation.",
+  ),
+  voice: z.string().min(1).default("marin").describe("Voice the session speaks with."),
+  api_key_env: z.string().min(1).optional().describe(
+    "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY.",
+  ),
+  idle_seconds: z.number().int().positive().default(60).describe(
+    "Close the realtime session after this much silence; it reopens on the next voice activity. " +
+      "Live sessions bill by the audio minute, so idle time is money.",
+  ),
 }).describe(
-  "Voice notes on chat triggers (telegram, discord). stt transcribes an incoming voice note and " +
-    "the transcript runs through the normal text loop; with tts the reply comes back as a voice " +
-    "note too. Omit the block and voice notes are ignored.",
+  "Live voice in Discord voice channels (plan 15): a realtime model holds the conversation and " +
+    "delegates real work to the agent loop through a single tool. Pair with a discord trigger's " +
+    "voice_channels.",
 );
+
+const VoiceConfigSchema = z.strictObject({
+  stt: VoiceSttSchema.optional(),
+  tts: VoiceTtsSchema.optional(),
+  live: LiveVoiceSchema.optional(),
+}).describe(
+  "Voice on chat triggers. stt transcribes an incoming voice note (telegram, discord) and the " +
+    "transcript runs through the normal text loop; with tts the reply comes back as a voice note " +
+    "too. live holds spoken conversations in Discord voice channels. Omit the block and voice " +
+    "notes are ignored.",
+).superRefine((v, ctx) => {
+  if (!v.stt && !v.tts && !v.live) {
+    ctx.addIssue({ code: "custom", message: "an empty voice block configures nothing" });
+  }
+  if (v.tts && !v.stt) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["tts"],
+      message: "voice.tts speaks replies to voice notes, which voice.stt transcribes — add stt",
+    });
+  }
+});
 
 const McpServerSchema = z
   .strictObject({
@@ -542,7 +582,19 @@ const agentConfigSchema = z.strictObject({
   }),
 }).describe(
   "A Looped AF agent: one job, one file. https://github.com/loopedautomation/agent-framework",
-);
+).superRefine((config, ctx) => {
+  // voice_channels without voice.live would join a channel and sit mute — the
+  // kind of silent no-op this schema treats as an error everywhere else.
+  (config.triggers ?? []).forEach((t, i) => {
+    if (t.type === "discord" && t.voice_channels?.length && !config.voice?.live) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["triggers", i, "voice_channels"],
+        message: "voice_channels requires the top-level voice.live block",
+      });
+    }
+  });
+});
 
 // The exported types below are written out by hand so the public API carries
 // explicit types (JSR's no-slow-types rule; z.infer of a schema is not one).
@@ -586,6 +638,8 @@ export interface DiscordTriggerConfig {
   allow_silence: boolean;
   /** Show the typing indicator in the source channel while the agent works. */
   show_typing: boolean;
+  /** Voice channel names or ids to join for live spoken conversations; requires voice.live. */
+  voice_channels?: string[];
 }
 
 /** A Slack trigger: listen to messages via Socket Mode. */
@@ -797,12 +851,28 @@ export interface VoiceTtsConfig {
   api_key_env?: string;
 }
 
-/** Voice notes on chat triggers: stt transcribes them in; tts speaks the replies back. */
+/** Live voice in Discord voice channels: the realtime model and its budget (plan 15). */
+export interface LiveVoiceConfig {
+  /** Realtime speech-to-speech provider; openai is the only dialect today. */
+  provider: "openai";
+  /** Realtime model that holds the live conversation. */
+  model: string;
+  /** Voice the session speaks with. */
+  voice: string;
+  /** Name of the env var holding the API key. Defaults to OPENAI_API_KEY. */
+  api_key_env?: string;
+  /** Close the realtime session after this much silence; it reopens on the next voice activity. */
+  idle_seconds: number;
+}
+
+/** Voice on chat triggers: stt transcribes voice notes, tts speaks replies, live holds conversations. */
 export interface VoiceConfig {
   /** How incoming voice notes become text. */
-  stt: VoiceSttConfig;
+  stt?: VoiceSttConfig;
   /** How replies become speech. Omit and voice notes get text replies. */
   tts?: VoiceTtsConfig;
+  /** Live voice in Discord voice channels. */
+  live?: LiveVoiceConfig;
 }
 
 /** A Model Context Protocol server providing tools to the agent. */
