@@ -117,6 +117,14 @@
                 "default": false,
                 "description": "Show the typing indicator in the source channel while the agent works. Looks odd with allow_silence: typing may end in no message.",
                 "type": "boolean"
+              },
+              "voice_channels": {
+                "description": "Voice channel names or ids to join for live spoken conversations. Requires the top-level voice.live block; the bot joins at startup and stays. Live voice media rides UDP, which keeps the agent out of hermetic mode — the container is its egress boundary.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
               }
             },
             "required": [
@@ -696,13 +704,49 @@
           ],
           "additionalProperties": false,
           "description": "How replies to voice notes become speech. Omit this block and voice notes get text replies."
+        },
+        "live": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "const": "openai",
+              "description": "Realtime speech-to-speech provider. openai is the only dialect today: the Realtime API now, the gpt-live models the day their API opens."
+            },
+            "model": {
+              "default": "gpt-realtime-2.1",
+              "description": "Realtime model that holds the live conversation.",
+              "type": "string",
+              "minLength": 1
+            },
+            "voice": {
+              "default": "marin",
+              "description": "Voice the session speaks with.",
+              "type": "string",
+              "minLength": 1
+            },
+            "api_key_env": {
+              "description": "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY.",
+              "type": "string",
+              "minLength": 1
+            },
+            "idle_seconds": {
+              "default": 60,
+              "description": "Close the realtime session after this much silence; it reopens on the next voice activity. Live sessions bill by the audio minute, so idle time is money.",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "provider"
+          ],
+          "additionalProperties": false,
+          "description": "Live voice in Discord voice channels (plan 15): a realtime model holds the conversation and delegates real work to the agent loop through a single tool. Pair with a discord trigger's voice_channels."
         }
       },
-      "required": [
-        "stt"
-      ],
       "additionalProperties": false,
-      "description": "Voice notes on chat triggers (telegram, discord). stt transcribes an incoming voice note and the transcript runs through the normal text loop; with tts the reply comes back as a voice note too. Omit the block and voice notes are ignored."
+      "description": "Voice on chat triggers. stt transcribes an incoming voice note (telegram, discord) and the transcript runs through the normal text loop; with tts the reply comes back as a voice note too. live holds spoken conversations in Discord voice channels. Omit the block and voice notes are ignored."
     },
     "skills": {
       "description": "Paths to skill markdown files (relative to this config). Skills carry knowledge, never capability.",

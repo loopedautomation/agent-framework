@@ -140,14 +140,16 @@ function elevenlabsSpeak(cfg: VoiceTtsConfig, key: string, fetchFn: typeof fetch
 }
 
 /**
- * Build the engines a config declares.
+ * Build the engines a config declares. A voice block holding only `live`
+ * configures no note engines, so there is nothing to build here.
  * API keys resolve from *_env here — startup, not first voice note.
  */
 export function voiceFromConfig(
   config: VoiceConfig,
   getEnv: (name: string) => string | undefined = Deno.env.get,
   fetchFn: typeof fetch = fetch,
-): VoiceEngines {
+): VoiceEngines | undefined {
+  if (!config.stt) return undefined;
   const sttKey = resolveKey(config.stt, getEnv, "stt");
   const transcribe = config.stt.provider === "openai"
     ? openaiTranscribe(config.stt, sttKey, fetchFn)

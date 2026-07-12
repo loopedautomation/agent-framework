@@ -6,6 +6,7 @@ import {
   INVITE_PERMISSIONS,
   inviteUrl,
   isVoiceMessage,
+  matchVoiceChannels,
   NO_REPLY,
   shouldHandle,
   splitMessage,
@@ -149,13 +150,14 @@ Deno.test("splitMessage: respects the 2000-char cap on line boundaries", () => {
 });
 
 Deno.test("inviteUrl: correct client_id, scope, and permissions integer", () => {
-  // VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | SEND_VOICE_MESSAGES (bit 46)
-  assertEquals(INVITE_PERMISSIONS, 68608 + 2 ** 46);
+  // VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | CONNECT | SPEAK,
+  // plus SEND_VOICE_MESSAGES at bit 46 — the voice bits ride along so a bot
+  // invited once never has to be re-invited to speak.
+  const expected = 68608 + 2 ** 20 + 2 ** 21 + 2 ** 46;
+  assertEquals(INVITE_PERMISSIONS, expected);
   assertEquals(
     inviteUrl("1234567890"),
-    `https://discord.com/oauth2/authorize?client_id=1234567890&scope=bot&permissions=${
-      68608 + 2 ** 46
-    }`,
+    `https://discord.com/oauth2/authorize?client_id=1234567890&scope=bot&permissions=${expected}`,
   );
 });
 
@@ -221,6 +223,24 @@ Deno.test("fetchApplicationId: returns id, throws readable error on bad token", 
     ((_url: RequestInfo | URL, _init?: RequestInit) =>
       Promise.resolve(new Response("{}", { status: 401 }))) as typeof fetch;
   await assertRejects(() => fetchApplicationId("bad", unauthorized), Error, "check the bot token");
+});
+
+Deno.test("matchVoiceChannels: matches voice channels by name or id, ignores the rest", () => {
+  const guild = {
+    id: "g1",
+    channels: [
+      { id: "c-text", name: "general", type: 0 }, // a text channel of the same name
+      { id: "c-voice", name: "general", type: 2 },
+      { id: "c-lounge", name: "lounge", type: 2 },
+    ],
+  };
+  assertEquals(matchVoiceChannels(guild, ["general"]), ["c-voice"]); // never the text one
+  assertEquals(matchVoiceChannels(guild, ["c-lounge"]), ["c-lounge"]); // by id
+  assertEquals(matchVoiceChannels(guild, ["nowhere"]), []);
+  // No filter, no joining: the bot never wanders into a voice channel uninvited.
+  assertEquals(matchVoiceChannels(guild, undefined), []);
+  assertEquals(matchVoiceChannels(guild, []), []);
+  assertEquals(matchVoiceChannels({ id: "g2" }, ["lounge"]), []); // a guild with no channels
 });
 
 Deno.test("isSilence: tolerates punctuation and whitespace around the sentinel", () => {

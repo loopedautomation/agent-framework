@@ -1,6 +1,11 @@
 import { parse } from "@std/yaml";
 import { z } from "zod";
-import { type AgentConfig, AgentConfigSchema, DEFAULT_API_KEY_ENV } from "./schema.ts";
+import {
+  type AgentConfig,
+  AgentConfigSchema,
+  DEFAULT_API_KEY_ENV,
+  DEFAULT_VOICE_API_KEY_ENV,
+} from "./schema.ts";
 
 /** A configuration problem: invalid YAML, schema violation, or a missing reference. */
 export class ConfigError extends Error {
@@ -119,6 +124,10 @@ const ENV_REF = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
  * base_url tolerates a missing key (local endpoints), so only an explicit
  * api_key_env counts there. codex needs no key at all — it authenticates
  * with `codex login` credentials.
+ *
+ * The voice engines are here for the same reason the model is: each resolves a
+ * default key name when the config names none, and a key this function misses
+ * is a key the redactor never learns about.
  */
 export function collectEnvRefs(config: AgentConfig): string[] {
   const refs = new Set<string>();
@@ -127,6 +136,9 @@ export function collectEnvRefs(config: AgentConfig): string[] {
     refs.add(api_key_env);
   } else if (provider !== "codex" && !(provider === "openai-compatible" && base_url)) {
     refs.add(DEFAULT_API_KEY_ENV[provider]);
+  }
+  for (const engine of [config.voice?.stt, config.voice?.tts, config.voice?.live]) {
+    if (engine) refs.add(engine.api_key_env ?? DEFAULT_VOICE_API_KEY_ENV[engine.provider]);
   }
   const scan = (env?: Record<string, string>) => {
     for (const value of Object.values(env ?? {})) {

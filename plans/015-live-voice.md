@@ -2,7 +2,7 @@
 
 Voice notes made agents hearable: a clip arrives, the transcript runs, a spoken reply posts back. It is still turn-based messaging. The next step is a live conversation — the agent sits in a Discord voice channel, you talk to it, it answers out loud, you interrupt it mid-sentence and it stops. This plan covers how that works, what it costs, and the order to build it in.
 
-Status: design. Phase 1 (the sandbox groundwork) ships with this plan; phases 2–4 have not started.
+Status: implemented, unproven against a live guild. Phases 1–4 are built (config, the realtime session, the Discord voice transport, the wiring). Phase 5 waits on OpenAI. The unit tests cover the protocol state machines and the media plumbing; nobody has yet stood in a voice channel and talked to it, and that is the gap to close before this is called done.
 
 ## The moment this is designed for
 
@@ -49,11 +49,11 @@ triggers:
 
 ## What it costs, named up front
 
-- **A codec dependency.** Discord speaks Opus and the realtime APIs speak PCM; a bridge needs libopus. There is no pure-TS implementation worth using, so this is the framework's first WASM dependency (`opusscript` or a vendored libopus build). The dependency-free principle takes its first exception here, and it should stay contained to the voice bridge module.
-- **Unstable UDP.** Voice media is UDP, which in Deno means `Deno.listenDatagram` behind `--unstable-net`. The flag lands in the image entrypoint and in `hermeticPlan`'s output for agents with a live voice config.
-- **Dynamic media hosts.** Voice servers hand back endpoints like `<node>.discord.media`, different per guild and per reconnect. This is why wildcard `--allow-net` support ships as phase 1 of this plan: `*.discord.media` joins the derived allowlist the same way fixed hosts do today, and the agent stays hermetic.
-- **The DAVE risk.** Discord is migrating voice to end-to-end encryption (DAVE, MLS-based). Bots can still negotiate non-E2EE transport today, and the voice gateway advertises protocol versions, but the downgrade path has a shelf life. When non-DAVE connections are retired, the Discord leg needs an MLS implementation or a maintained library, and that decision gets its own plan amendment.
-- **Latency budget.** Discord adds ~30–80 ms each way and the realtime model ~300–800 ms to first audio. Sub-second round trips are achievable; the bridge must stream (decode and forward frame by frame) rather than buffer utterances.
+- **A codec dependency.** Discord speaks Opus and the realtime APIs speak PCM; a bridge needs libopus. There is no pure-TS implementation worth using, so this is the framework's first WASM dependency (`opusscript`). The dependency-free principle takes its first exception here, and it stays contained to `opus.ts`.
+- **Hermetic mode, given up.** This is the real cost, and it landed harder than the design expected. Voice media is UDP, and the address comes from the voice server at session time — `Deno.listenDatagram` needs `--unstable-net` (which the workspace `deno.json` now carries) and a net permission for an address nobody can name in advance. So an agent with `voice_channels` is disqualified from hermetic mode and runs under the image's flags, with the container as its egress boundary. `hermeticPlan` says so as a blocker, beside the subprocess ones.
+- **Dynamic media hosts.** The voice *websocket* lives at `<node>.discord.media`, different per guild and per reconnect, and wildcard `--allow-net` (phase 1) is what makes it expressible in the derived allowlist at all. The wildcard was worth shipping on its own merits; it does not save hermetic mode here, because the UDP leg is the blocker.
+- **The DAVE risk.** Discord is migrating voice to end-to-end encryption (DAVE, MLS-based). We identify with `max_dave_protocol_version: 0` and take the transport-encrypted path, which voice servers still accept. When they stop accepting it, the Discord leg needs an MLS implementation or a maintained library, and that decision gets its own plan amendment.
+- **Latency budget.** Discord adds ~30–80 ms each way and the realtime model ~300–800 ms to first audio. The bridge streams frame by frame rather than buffering utterances, so the round trip stays under a second — but a delegated run adds however long the agent's own loop takes, which is why the voice model is told to say something before it calls the tool.
 
 ## What stays out
 
@@ -63,15 +63,22 @@ triggers:
 
 ## Phases
 
-1. **Sandbox groundwork (this PR).** Wildcard hosts compile into `--allow-net`; the wildcard hermetic blocker is gone. Verified against Deno 2.9 (the image's pin), including the apex nuance documented in the permission model.
-2. **The realtime session client.** A dependency-free `wss://` client for the Realtime API event protocol: session setup, audio append, response streaming, tool-call round trips, `delegate_to_agent` wired to the agent loop. Testable against a fake WebSocket server the way the Slack and Discord triggers are tested today.
-3. **The Discord voice transport.** Voice gateway handshake, UDP socket, RTP encryption, the opus bridge and the resampler. This phase needs a live guild to verify against; unit tests cover the pure parts (RTP framing, resampling, handshake state machine).
-4. **Wire and ship.** The `voice_channels` trigger option, join/leave lifecycle, invite permissions (`CONNECT`, `SPEAK`), docs, and an example agent.
-5. **GPT-Live.** When the API opens: swap the model id, adopt full-duplex turn events if the protocol grows them, and re-evaluate whether delegation stays ours or moves into the model's own background-reasoning machinery.
+1. **Sandbox groundwork.** Wildcard hosts compile into `--allow-net`; the wildcard hermetic blocker is gone. Verified against Deno 2.9 (the image's pin), including the apex nuance documented in the permission model. *Done.*
+2. **The realtime session client.** `realtime.ts`: a dependency-free `wss://` client for the Realtime API event protocol — session setup with nested audio config, server VAD, audio append, streamed output, and the `ask_agent` tool round trip. Tested against a websocket server on loopback, so the socket code under test is the real one. *Done.*
+3. **The Discord voice transport.** `rtp.ts` (header, `aead_aes256_gcm_rtpsize` seal/open over WebCrypto, IP discovery), `pcm.ts` (48 kHz stereo ⇄ 24 kHz mono), `opus.ts` (libopus via WASM), `discord_voice.ts` (voice gateway v8, UDP, the 20 ms send clock, barge-in, the lazy session and its idle close). *Done, pending a live guild.*
+4. **Wire and ship.** `voice_channels` on the discord trigger, the three-event join (GUILD_CREATE → op 4 → VOICE_STATE_UPDATE + VOICE_SERVER_UPDATE), the voice intent, `CONNECT`/`SPEAK` on the invite, and the config validation that refuses `voice_channels` without `voice.live`. *Done.*
+5. **GPT-Live.** When the API opens: change the model id, adopt full-duplex turn events if the protocol grows them, and re-evaluate whether delegation stays ours or moves into the model's own background-reasoning machinery. *Waiting on OpenAI.*
+
+## Decisions taken during implementation
+
+- **Join semantics: always-on.** The bot joins the configured channel at startup and stays. A `/join` command sounded tidier in design and turned out to be a worse experience: someone in the channel has to know the command exists, and the bot is silent until they do. Idle cost is handled where the cost actually is — the realtime session, not the channel membership.
+- **The delegate tool is `ask_agent`, and it is the only tool.** The voice model gets no other capability. Everything consequential is an ordinary run on the `discord-voice:<guild>` conversation key, so the permission engine and the audit trail see it exactly as they see a typed message.
+- **The realtime session is lazy.** It opens on first speech and closes after `idle_seconds` of silence. A bot sitting in an empty channel holds no session and bills nothing.
+- **DAVE is not implemented.** We identify with `max_dave_protocol_version: 0` and take the transport-encrypted path, which voice servers still accept. This is the feature's shelf life, and it is named in the docs rather than buried here.
 
 ## Open questions
 
-- **Join semantics.** Always-on in the configured channel, follow the first human in, or join on a `/join` command? Leaning toward command-driven with an idle timeout, so an agent is in the room because someone asked.
-- **Who may talk.** `from_users` has no obvious voice equivalent without speaker identification. The realtime transcript gives us words; mapping them to Discord user ids via RTP SSRC is possible and phase 3 should confirm it.
-- **Cost control.** A live session bills by the minute even when idle. `limits` needs a session budget (max minutes per session, per day) before this is safe to leave running unattended.
-- **Codec packaging.** npm `opusscript` versus a vendored wasm build; whichever keeps the image small and the supply chain auditable.
+- **Who is speaking.** The bridge hears the channel as one voice, so `from_users` has no meaning in a voice channel. Discord tells us the SSRC of each speaker and the gateway maps SSRC to user id — wiring that up would let the agent know who asked, and gate on it. Worth doing; not done.
+- **Cost control beyond the idle timer.** `idle_seconds` stops an empty channel from billing, but nothing caps a long conversation. `limits` should grow a voice budget (minutes per session, per day) before anyone leaves this running unattended in a busy server.
+- **Codec packaging.** `opusscript` is an npm WASM build and it works. A vendored build would be auditable in-repo; whether that is worth the maintenance is unsettled.
+- **Reconnects.** The voice websocket has a resume path (op 7, `seq_ack`) that we do not use — a dropped voice connection currently waits for the gateway to send a new voice server. Fine for a channel the bot sits in all day; worth fixing if it proves flaky.

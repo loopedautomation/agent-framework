@@ -22,6 +22,7 @@ export {
   type HttpConfig,
   type ImapEmailTriggerConfig,
   type LimitsConfig,
+  type LiveVoiceConfig,
   type McpServerConfig,
   type MemoryConfig,
   type ModelConfig,

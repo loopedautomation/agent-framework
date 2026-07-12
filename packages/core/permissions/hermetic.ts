@@ -88,15 +88,19 @@ const VOICE_PROVIDER_HOSTS: Record<"openai" | "elevenlabs", string> = {
 };
 
 /**
- * The hosts voice notes reach: each engine's API. Voice-message audio itself
- * downloads from hosts each trigger already lists (Telegram's bot API,
- * Discord's CDN — Plan 14 put the CDN there for images).
+ * The hosts voice notes and live voice reach: each engine's API, the realtime
+ * API, and the voice gateway websockets Discord assigns per session under
+ * *.discord.media (expressible since wildcard hosts compile — plan 15).
+ * Voice-note audio itself downloads from hosts each trigger already lists
+ * (Telegram's bot API, Discord's CDN — Plan 14 put the CDN there for images).
  */
 function voiceHosts(config: AgentConfig): string[] {
   const voice = config.voice;
   if (!voice) return [];
-  const hosts = [VOICE_PROVIDER_HOSTS[voice.stt.provider]];
+  const hosts: string[] = [];
+  if (voice.stt) hosts.push(VOICE_PROVIDER_HOSTS[voice.stt.provider]);
   if (voice.tts) hosts.push(VOICE_PROVIDER_HOSTS[voice.tts.provider]);
+  if (voice.live) hosts.push("api.openai.com", "*.discord.media");
   return hosts;
 }
 
@@ -219,6 +223,12 @@ export function hermeticPlan(
   }
   for (const server of (config.tools?.mcp ?? []).filter(isStdio)) {
     blockers.push(`MCP server "${server.name}" is stdio — it runs as a subprocess`);
+  }
+  if ((config.triggers ?? []).some((t) => t.type === "discord" && t.voice_channels?.length)) {
+    blockers.push(
+      "voice_channels: live voice media rides UDP to addresses assigned per session — " +
+        "Deno cannot allowlist them ahead of time",
+    );
   }
 
   const net = denoNetHosts(config.permissions?.net);

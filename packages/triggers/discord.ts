@@ -10,6 +10,7 @@ import type {
 import type { ImageContent } from "@looped/core";
 import { isSilence, NO_REPLY, splitMessage } from "./text.ts";
 import { placeholderWaveform, SPEAK_MAX_CHARS, type VoiceEngines } from "./voice.ts";
+import type { DiscordVoiceSession } from "./discord_voice.ts";
 
 // A deliberately minimal Discord gateway client: identify, heartbeat,
 // MESSAGE_CREATE, reconnect-with-backoff. No library — the framework's
@@ -17,18 +18,23 @@ import { placeholderWaveform, SPEAK_MAX_CHARS, type VoiceEngines } from "./voice
 // ~200 lines keeps the container minimal (Plan 0, principle 8).
 
 const API = "https://discord.com/api/v10";
-// GUILDS | GUILD_MESSAGES | DIRECT_MESSAGES | MESSAGE_CONTENT
-const INTENTS = (1 << 0) | (1 << 9) | (1 << 12) | (1 << 15);
+// GUILDS | GUILD_VOICE_STATES | GUILD_MESSAGES | DIRECT_MESSAGES | MESSAGE_CONTENT.
+// The voice-state intent is what lets the gateway answer a channel join with
+// the voice server to connect to (plan 15); it is not privileged.
+const INTENTS = (1 << 0) | (1 << 7) | (1 << 9) | (1 << 12) | (1 << 15);
 
 export { NO_REPLY, splitMessage };
 
 /**
- * Permission bitfield the invite URL requests:
- * VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | SEND_VOICE_MESSAGES.
- * SEND_VOICE_MESSAGES sits at bit 46, past 32-bit bitwise range — hence the
+ * Permission bitfield the invite URL requests: VIEW_CHANNEL | SEND_MESSAGES |
+ * READ_MESSAGE_HISTORY | CONNECT | SPEAK | SEND_VOICE_MESSAGES. The voice bits
+ * ride along whether or not the agent uses live voice — an invite is a one-time
+ * ceremony, and asking twice is worse than asking for two bits nobody exercises.
+ * SEND_VOICE_MESSAGES sits at bit 46, past 32-bit bitwise range, hence the
  * addition.
  */
-export const INVITE_PERMISSIONS: number = ((1 << 10) | (1 << 11) | (1 << 16)) + 2 ** 46;
+export const INVITE_PERMISSIONS: number =
+  ((1 << 10) | (1 << 11) | (1 << 16) | (1 << 20) | (1 << 21)) + 2 ** 46;
 
 /** Message flag marking a voice message (IS_VOICE_MESSAGE). */
 export const VOICE_MESSAGE_FLAG = 8192;
@@ -180,6 +186,35 @@ export interface DiscordTriggerOptions extends DiscordFilterOptions {
   media?: MediaLimits;
   /** Voice engines: transcribe incoming voice messages, and (with speak) voice the replies back. */
   voice?: VoiceEngines;
+  /** Voice channel names or ids to join for live spoken conversations. */
+  voiceChannels?: string[];
+  /**
+   * Builds the live session for a joined channel; absent means no live voice.
+   * The trigger supplies `delegate` — it is the agent loop, closed over the
+   * conversation this voice channel speaks into.
+   */
+  liveVoice?: (delegate: (prompt: string) => Promise<string>) => DiscordVoiceSession;
+}
+
+/** A guild as GUILD_CREATE describes it — enough to find the voice channels we were told to join. */
+interface DiscordGuild {
+  id: string;
+  channels?: { id: string; name?: string; type: number }[];
+}
+
+/** Discord's channel type for a guild voice channel. */
+const GUILD_VOICE_CHANNEL = 2;
+
+/** The voice channels in a guild that the filter names, by id. (pure, unit-tested) */
+export function matchVoiceChannels(
+  guild: DiscordGuild,
+  wanted: string[] | undefined,
+): string[] {
+  if (!wanted?.length) return [];
+  return (guild.channels ?? [])
+    .filter((c) => c.type === GUILD_VOICE_CHANNEL)
+    .filter((c) => wanted.some((w) => w === c.id || w === c.name))
+    .map((c) => c.id);
 }
 
 /** A Discord slash-command interaction (the fields this trigger reads). */
@@ -220,6 +255,12 @@ export class DiscordTrigger implements Trigger {
   #applicationId = "";
   #channelInfos = new Map<string, DiscordChannelInfo | undefined>();
   #reconnectDelayMs = 1_000;
+  /** Live voice sessions, by guild — one conversation per guild at a time. */
+  #voiceSessions = new Map<string, DiscordVoiceSession>();
+  /** Our own voice session id per guild, half of what the voice server needs. */
+  #voiceStates = new Map<string, string>();
+  /** Counts spoken turns, so each delegated run carries a distinct event id. */
+  #voiceTurn = 0;
 
   /** Create the trigger; nothing connects until {@linkcode start}. */
   constructor(opts: DiscordTriggerOptions) {
@@ -466,6 +507,62 @@ export class DiscordTrigger implements Trigger {
     }
   }
 
+  /**
+   * Ask the gateway to put us in the guild's voice channel. The answer comes
+   * back as two separate events, which is why the join is spread across three
+   * handlers: we hold the session id from one and the voice server from the
+   * other, and connect once we have both.
+   */
+  #joinVoice(guild: DiscordGuild, ws: WebSocket) {
+    if (!this.#opts.liveVoice) return;
+    const [channelId] = matchVoiceChannels(guild, this.#opts.voiceChannels);
+    if (!channelId) return;
+    logInfo(`discord: joining voice channel ${channelId}`);
+    ws.send(JSON.stringify({
+      op: 4, // VOICE STATE UPDATE
+      d: {
+        guild_id: guild.id,
+        channel_id: channelId,
+        self_mute: false,
+        // A deafened bot is sent no audio, and this one is here to listen.
+        self_deaf: false,
+      },
+    }));
+  }
+
+  /** The voice server named itself: open the live session behind it. */
+  #startVoiceSession(
+    server: { guild_id: string; token: string; endpoint?: string },
+    emit: (event: AgentEvent) => Promise<RunResult>,
+  ) {
+    const sessionId = this.#voiceStates.get(server.guild_id);
+    // A null endpoint means the voice server is being reassigned; the gateway
+    // sends another VOICE_SERVER_UPDATE when the new one is ready.
+    if (!this.#opts.liveVoice || !sessionId || !server.endpoint) return;
+
+    this.#voiceSessions.get(server.guild_id)?.stop();
+    // What the voice model asks for runs as an ordinary event, in a
+    // conversation of its own: spoken history stays out of the text channels'
+    // threads, and every tool call still passes the permission engine.
+    const session = this.#opts.liveVoice(async (prompt) => {
+      const result = await emit({
+        id: `voice-${server.guild_id}-${this.#voiceTurn++}`,
+        trigger: this.name,
+        input: prompt,
+        conversationKey: `discord-voice:${server.guild_id}`,
+      });
+      return (result.reply ?? "").trim() || `(the run ended: ${result.status})`;
+    });
+    this.#voiceSessions.set(server.guild_id, session);
+    session.start({
+      endpoint: server.endpoint,
+      token: server.token,
+      sessionId,
+      guildId: server.guild_id,
+      userId: this.#botUserId,
+    });
+  }
+
   /** Connect to the gateway; matching messages emit events and get replies. */
   async start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
     const res = await this.#api("/gateway/bot");
@@ -514,6 +611,18 @@ export class DiscordTrigger implements Trigger {
             this.#handleInteraction(payload.d as DiscordInteraction, emit).catch((err) =>
               logError(`discord: interaction handling failed: ${err}`)
             );
+          }
+          // The three events a live voice channel join is made of: the guild
+          // arrives with its channel list, we ask to join one, and the gateway
+          // answers with our session id and the voice server to dial.
+          if (payload.t === "GUILD_CREATE") {
+            this.#joinVoice(payload.d as DiscordGuild, ws);
+          }
+          if (payload.t === "VOICE_STATE_UPDATE" && payload.d.user_id === this.#botUserId) {
+            this.#voiceStates.set(payload.d.guild_id, payload.d.session_id);
+          }
+          if (payload.t === "VOICE_SERVER_UPDATE") {
+            this.#startVoiceSession(payload.d, emit);
           }
           if (payload.t === "MESSAGE_CREATE") {
             const msg = payload.d as DiscordMessage;
@@ -588,10 +697,12 @@ export class DiscordTrigger implements Trigger {
     ws.onerror = () => ws.close();
   }
 
-  /** Close the gateway connection and stop reconnecting. */
+  /** Close the gateway connection, leave every voice channel, and stop reconnecting. */
   stop(): Promise<void> {
     this.#stopped = true;
     clearInterval(this.#heartbeat);
+    for (const session of this.#voiceSessions.values()) session.stop();
+    this.#voiceSessions.clear();
     this.#ws?.close();
     return Promise.resolve();
   }

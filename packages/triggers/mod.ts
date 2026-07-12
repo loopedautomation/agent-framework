@@ -6,7 +6,13 @@
  * @module
  */
 
-import { type AgentConfig, commandSpecs, type Trigger } from "@looped/core";
+import {
+  type AgentConfig,
+  commandSpecs,
+  DEFAULT_VOICE_API_KEY_ENV,
+  type Trigger,
+} from "@looped/core";
+import { DiscordVoiceSession } from "./discord_voice.ts";
 import { WebhookTrigger } from "./webhook.ts";
 import { CronTrigger } from "./cron.ts";
 import { DiscordTrigger } from "./discord.ts";
@@ -31,6 +37,7 @@ export type {
   GmailEmailTriggerConfig,
   ImapEmailTriggerConfig,
   LimitsConfig,
+  LiveVoiceConfig,
   McpServerConfig,
   MemoryConfig,
   Message,
@@ -121,6 +128,13 @@ export {
   type VoiceEngines,
   voiceFromConfig,
 } from "./voice.ts";
+export {
+  DiscordVoiceSession,
+  type DiscordVoiceSessionOptions,
+  type VoiceServerInfo,
+} from "./discord_voice.ts";
+export { DELEGATE_TOOL, REALTIME_SAMPLE_RATE, RealtimeSession } from "./realtime.ts";
+export type { RealtimeSessionOptions } from "./realtime.ts";
 
 /**
  * Instantiate the triggers a config declares.
@@ -143,6 +157,19 @@ export function triggersFromConfig(
   // One set of voice engines shared by every voice-capable trigger; API keys
   // resolve here — startup, not first voice note.
   const voice = config.voice ? voiceFromConfig(config.voice, getEnv) : undefined;
+  const live = config.voice?.live;
+  // The live session's key resolves at startup too, so a misconfigured agent
+  // fails before it joins a channel and sits there mute.
+  const liveApiKey = live
+    ? getEnv(live.api_key_env ?? DEFAULT_VOICE_API_KEY_ENV[live.provider])
+    : undefined;
+  if (live && !liveApiKey) {
+    throw new Error(
+      `voice.live: API key env var ${
+        live.api_key_env ?? DEFAULT_VOICE_API_KEY_ENV[live.provider]
+      } is not set`,
+    );
+  }
   for (const t of config.triggers ?? []) {
     switch (t.type) {
       case "webhook": {
@@ -308,6 +335,18 @@ export function triggersFromConfig(
             commands,
             media,
             voice,
+            voiceChannels: t.voice_channels,
+            liveVoice: live && t.voice_channels?.length
+              ? (delegate) =>
+                new DiscordVoiceSession({
+                  config: live,
+                  apiKey: liveApiKey!,
+                  // The voice model speaks as this agent, so it gets the same
+                  // job description the text loop runs on.
+                  instructions: config.purpose,
+                  delegate,
+                })
+              : undefined,
           }),
         );
         break;
