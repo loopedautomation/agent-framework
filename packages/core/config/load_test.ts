@@ -268,6 +268,23 @@ Deno.test("the shipped gh-issues-bot example is a valid agent definition", async
   assertEquals(collectEnvRefs(config), ["GITHUB_TOKEN", "OPENAI_API_KEY"]);
 });
 
+Deno.test("the shipped standup-bot example is a valid agent definition", async () => {
+  const path = new URL("../../../examples/standup-bot/agent.yaml", import.meta.url);
+  const config = parseAgentConfig(
+    await Deno.readTextFile(path),
+    "examples/standup-bot/agent.yaml",
+  );
+  assertEquals(config.handle, "standup-bot");
+  // One key covers the model, the transcription, the speech and the realtime
+  // session — and the example would be a lie if the voice block asked for more.
+  assertEquals(collectEnvRefs(config), ["OPENAI_API_KEY"]);
+  // Live voice is the point of this example; a discord trigger with no voice
+  // channel to join would leave it demonstrating nothing.
+  assertEquals(config.voice?.live?.provider, "openai");
+  const discord = config.triggers?.[0];
+  assert(discord?.type === "discord" && discord.voice_channels?.length);
+});
+
 Deno.test("emits a JSON schema with the top-level fields", () => {
   const schema = agentConfigJsonSchema();
   const props = schema.properties as Record<string, unknown>;
