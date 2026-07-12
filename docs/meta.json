@@ -30,6 +30,7 @@
     "memory",
     "scheduling",
     "slash-commands",
+    "voice",
     "testing",
     "---Providers---",
     "models",

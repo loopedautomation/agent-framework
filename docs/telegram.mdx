@@ -45,6 +45,10 @@ The agent replies in-chat to the triggering message; conversations are keyed per
 
 `from_users`, `reply_chat` and `allow_silence` together turn the trigger from a chatbot into an observer: an agent that watches chats, reacts to specific people and reports elsewhere. [Observer agents](observer-agents.md) covers the pattern, with a full example.
 
+## Voice notes
+
+With a top-level `voice` block in the agent file, voice notes work here too: the trigger fetches the audio, transcribes it and runs the transcript through the normal loop, and with `tts` configured it answers a voice note with a voice note. [Voice](voice.md) has the setup and the fallbacks. One group-chat caveat: a voice note has no text to carry an @-mention, so with `require_mention` on, voice conversations live in private chats.
+
 ## Slash commands
 
 The trigger calls `setMyCommands` at startup, so Telegram's `/` menu lists the agent's [slash commands](slash-commands.md) with their descriptions. In groups Telegram addresses commands per-bot (`/status@your_bot`); the trigger strips the suffix before the command is parsed, so both forms work.

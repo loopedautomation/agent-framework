@@ -134,6 +134,41 @@ Deno.test("hermetic/triggers contribute the hosts they reach and the ports they 
   assert(hosts.includes("0.0.0.0:9090")); // the status server
 });
 
+Deno.test("hermetic/voice engines contribute their hosts", () => {
+  const hosts = derivedHosts(
+    agent({
+      voice: { stt: { provider: "openai" }, tts: { provider: "elevenlabs" } },
+      triggers: [
+        {
+          type: "discord",
+          token_env: "DISCORD_BOT_TOKEN",
+          allow_silence: false,
+          show_typing: false,
+        },
+      ] as AgentConfig["triggers"],
+    }),
+    env,
+  );
+  assert(hosts.includes("api.openai.com"));
+  assert(hosts.includes("api.elevenlabs.io"));
+  // The audio itself downloads from the discord trigger's own hosts (Plan 14).
+  assert(hosts.includes("cdn.discordapp.com"));
+
+  // Without a discord trigger there is no CDN; without tts, only stt's host.
+  const telegramOnly = derivedHosts(
+    agent({
+      voice: { stt: { provider: "elevenlabs" } },
+      triggers: [
+        { type: "telegram", token_env: "TELEGRAM_BOT_TOKEN", allow_silence: false },
+      ] as AgentConfig["triggers"],
+    }),
+    env,
+  );
+  assert(telegramOnly.includes("api.elevenlabs.io"));
+  assert(!telegramOnly.includes("cdn.discordapp.com"));
+  assert(!telegramOnly.includes("api.openai.com"));
+});
+
 Deno.test("hermetic/imap mail hosts come from the config, ports and all", () => {
   const hosts = derivedHosts(
     agent({

@@ -13,6 +13,7 @@ export {
   type AgentConfigValidator,
   type CommandConfig,
   type CronTriggerConfig,
+  DEFAULT_VOICE_API_KEY_ENV,
   type DiscordTriggerConfig,
   type EmailTriggerConfig,
   type GithubTriggerConfig,
@@ -31,6 +32,9 @@ export {
   type SlackTriggerConfig,
   type TelegramTriggerConfig,
   type TriggerConfig,
+  type VoiceConfig,
+  type VoiceSttConfig,
+  type VoiceTtsConfig,
   type WebhookTriggerConfig,
 } from "./config/schema.ts";
 export {
