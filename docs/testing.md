@@ -50,7 +50,7 @@ The available checks:
 | --- | --- |
 | `status: ok` | the run ended with that status (`ok`, `error_max_steps`, `error_provider`) |
 | `reply_contains: "text"` | the final reply contains the text |
-| `reply_matches: "regex"` | the final reply matches the regular expression |
+| `reply_matches: "regex"` | the final reply matches the regular expression (a JavaScript regex, compiled with no flags - write `[Ss]panish` rather than `(?i)spanish`) |
 | `tool_called: name` | the run called that tool |
 | `tool_not_called: name` | the run never called that tool |
 | `max_steps_used: 3` | the run used at most that many steps |

@@ -1,0 +1,21 @@
+# The whole deployment story: docker compose up -d
+#
+# .env next to this file (see .env.example):
+#   OPENAI_API_KEY, ELEVENLABS_API_KEY, TELEGRAM_BOT_TOKEN
+services:
+  interpreter-bot:
+    image: ghcr.io/loopedautomation/agent:latest
+    env_file: .env
+    volumes:
+      - ./agent.yaml:/agent/agent.yaml:ro
+      - interpreter-bot-data:/data
+    ports:
+      # Status surface: curl localhost:9098/healthz
+      - "127.0.0.1:9098:9090"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  interpreter-bot-data:
