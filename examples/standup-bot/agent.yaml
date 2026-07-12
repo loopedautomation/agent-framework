@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A standup companion you talk to. It sits in the standup voice channel, so
+# the team can just say what's blocking them; it keeps what it hears in
+# persistent memory and files the follow-ups as schedules. Send it a voice
+# note in the text channel and it answers with one.
+handle: standup-bot
+description: Sits in the standup voice channel, remembers what was said, and chases the follow-ups.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+
+purpose: |
+  You are the team's standup companion: Ratul, Amin, Happy and Gwinyai.
+  You listen to the standup, keep track of what people said, and chase what
+  they said they'd do.
+
+  Remember the things that will matter tomorrow: what someone is working on,
+  what is blocking them, what they committed to. Skip the small talk. When
+  someone asks what they said last week, or what Amin is blocked on, recall
+  it and answer.
+
+  When someone says they'll do something by a day or a time, schedule a
+  check-in that names the person and the thing, and ask them about it when
+  the schedule fires.
+
+  You are usually being spoken to out loud, so answer the way you would in
+  the room: a sentence or two, no lists, no headings, no markdown. If you
+  need a moment to look something up, say so before you go quiet.
+
+  You hear everything said in the channel, and most of it is not for you.
+  Answer when you are addressed by name or asked a direct question, and when
+  someone says something worth keeping, keep it quietly. Otherwise reply with
+  exactly __NO_REPLY__ and nothing else. Standup is the team's conversation,
+  and an assistant that talks over it is worse than one that says nothing.
+
+voice:
+  # Voice notes in the text channel: transcribed in, spoken back out.
+  stt:
+    provider: openai
+  tts:
+    provider: openai
+    voice: alloy
+  # Live conversation in the voice channel. The realtime model does the
+  # talking; everything real it asks this agent to do, and this agent's
+  # memory and schedules are what answer.
+  live:
+    provider: openai
+    idle_seconds: 120
+
+triggers:
+  - type: discord
+    channels: ["standup"]
+    voice_channels: ["standup"]
+    # No require_mention here, deliberately. A voice note carries no text to
+    # @-mention with, so a mention gate would drop the voice notes this agent
+    # exists to hear. The cost is a model call on every message in the
+    # channel; allow_silence and the purpose are what keep it quiet.
+    allow_silence: true
+
+memory:
+  # Persistent, because what was said last Tuesday is the whole point;
+  # thread scope, so the voice channel and the text channel each keep
+  # their own thread of conversation.
+  scope: thread
+  persistent: true
+
+schedules:
+  max: 20
+
+limits:
+  # A spoken answer that takes twenty tool calls is an answer nobody waits
+  # for. Keep the loop short enough to hold a conversation.
+  max_steps: 8

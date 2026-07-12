@@ -1,0 +1,42 @@
+# Test cases for standup-bot, run with `af test examples/standup-bot/agent.yaml`.
+# The model call is real; the memory and schedule tools are mocked, so nothing
+# is written and no future run is filed.
+#
+# These run the text path. The voice path reaches the loop through the same
+# events - a transcript is an input like any other - so what these cover is
+# what a spoken turn does too.
+cases:
+  - name: keeps a blocker worth remembering
+    input: "Amin is blocked on the staging database, he can't get credentials"
+    mocks:
+      remember: "Remembered."
+    checks:
+      - status: ok
+      - tool_called: remember
+
+  - name: answers what someone is blocked on
+    input: "standup-bot, what's Amin blocked on?"
+    mocks:
+      recall: |
+        [{"key": "amin blocker", "value": "Blocked on the staging database: no credentials."}]
+    checks:
+      - status: ok
+      - tool_called: recall
+      - reply_contains: "credentials"
+
+  - name: files a check-in when someone commits to a date
+    input: "Happy will have the export fix in by Thursday"
+    mocks:
+      remember: "Remembered."
+      schedule: "Scheduled."
+    checks:
+      - status: ok
+      - tool_called: schedule
+
+  - name: stays out of the standup chatter
+    input: "morning all, coffee first"
+    checks:
+      - status: ok
+      # allow_silence turns this into no message at all in the channel.
+      - reply_contains: "__NO_REPLY__"
+      - tool_not_called: schedule

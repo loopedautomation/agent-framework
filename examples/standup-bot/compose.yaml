@@ -1,0 +1,21 @@
+# The whole deployment story: docker compose up -d
+#
+# .env next to this file (see .env.example):
+#   OPENAI_API_KEY, DISCORD_BOT_TOKEN
+services:
+  standup-bot:
+    image: ghcr.io/loopedautomation/agent:latest
+    env_file: .env
+    volumes:
+      - ./agent.yaml:/agent/agent.yaml:ro
+      - standup-bot-data:/data
+    ports:
+      # Status surface: curl localhost:9097/healthz
+      - "127.0.0.1:9097:9090"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  standup-bot-data:
