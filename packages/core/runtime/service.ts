@@ -1,4 +1,5 @@
 import type { AgentConfig } from "../config/schema.ts";
+import type { ImageContent } from "../providers/types.ts";
 import { expandEnvRefs, resolveEnv } from "../config/env.ts";
 import { type Redactor, redactorForConfig, setDefaultRedactor } from "../redact/redact.ts";
 import { logError, logInfo } from "./log.ts";
@@ -49,6 +50,13 @@ export interface AgentEvent {
   trigger: string;
   /** The text the agent is asked to act on. */
   input: string;
+  /**
+   * Images that arrived with the event, already resolved to bytes by the
+   * trigger. Anything the agent cannot look at — a PDF, an oversized image —
+   * is named in `input` instead, so a run never silently sees less than what
+   * the user sent (Plan 14).
+   */
+  images?: ImageContent[];
   /** Session identity (e.g. a thread id). Absent → the run has no history. */
   conversationKey?: string;
   /**
@@ -659,6 +667,7 @@ export class AgentService {
           onScheduleEvent,
         ),
         input: event.input,
+        images: event.images,
         history,
         onEvent: opts?.onEvent,
         redact: (text) => this.redactor.text(text),

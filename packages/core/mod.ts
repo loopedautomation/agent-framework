@@ -80,6 +80,15 @@ export {
   type PermissionKind,
   permissionsToDenoFlags,
 } from "./permissions/engine.ts";
+export type { ImageContent } from "./providers/types.ts";
+export {
+  type Attachment,
+  isImageType,
+  type MediaLimits,
+  resolveAttachments,
+  type ResolvedMedia,
+  withNotes,
+} from "./media/media.ts";
 export {
   denoNetHosts,
   derivedHosts,

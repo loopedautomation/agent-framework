@@ -442,6 +442,14 @@ const LimitsSchema = z.strictObject({
     "Events that may wait per conversation while a run is in flight. An event past the cap is " +
       "refused immediately with a short reply, and every refusal lands in the audit trail.",
   ),
+  max_image_bytes: z.number().int().positive().default(5_000_000).describe(
+    "Largest image a channel may hand the model. A bigger one is named in the prompt and not " +
+      "read, so the agent can say what arrived and why it didn't look at it.",
+  ),
+  max_images_per_message: z.number().int().nonnegative().default(4).describe(
+    "Images one message may carry into the context. An image costs thousands of input tokens, " +
+      "and a channel will happily deliver twenty. The rest are named and not read; 0 reads none.",
+  ),
 }).describe("Per-run budgets — the dead-man's switches for unattended operation.");
 
 const agentConfigSchema = z.strictObject({
@@ -486,7 +494,13 @@ const agentConfigSchema = z.strictObject({
   redact: RedactConfigSchema.optional(),
   memory: MemoryConfigSchema.optional(),
   schedules: SchedulesConfigSchema.optional(),
-  limits: LimitsSchema.default({ max_steps: 20, concurrent_runs: 4, queue_depth: 10 }),
+  limits: LimitsSchema.default({
+    max_steps: 20,
+    concurrent_runs: 4,
+    queue_depth: 10,
+    max_image_bytes: 5_000_000,
+    max_images_per_message: 4,
+  }),
 }).describe(
   "A Looped AF agent: one job, one file. https://github.com/loopedautomation/agent-framework",
 );
@@ -825,6 +839,14 @@ export interface LimitsConfig {
    * refused immediately with a short reply, and every refusal lands in the audit trail.
    */
   queue_depth: number;
+  /**
+   * Largest image a channel may hand the model. A bigger one is named in the prompt and not read.
+   */
+  max_image_bytes: number;
+  /**
+   * Images one message may carry into the context. The rest are named and not read; 0 reads none.
+   */
+  max_images_per_message: number;
 }
 
 /** A parsed and validated agent.yaml, with defaults applied. */

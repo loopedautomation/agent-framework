@@ -908,7 +908,9 @@
       "default": {
         "max_steps": 20,
         "concurrent_runs": 4,
-        "queue_depth": 10
+        "queue_depth": 10,
+        "max_image_bytes": 5000000,
+        "max_images_per_message": 4
       },
       "type": "object",
       "properties": {
@@ -929,6 +931,20 @@
         "queue_depth": {
           "default": 10,
           "description": "Events that may wait per conversation while a run is in flight. An event past the cap is refused immediately with a short reply, and every refusal lands in the audit trail.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "max_image_bytes": {
+          "default": 5000000,
+          "description": "Largest image a channel may hand the model. A bigger one is named in the prompt and not read, so the agent can say what arrived and why it didn't look at it.",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "max_images_per_message": {
+          "default": 4,
+          "description": "Images one message may carry into the context. An image costs thousands of input tokens, and a channel will happily deliver twenty. The rest are named and not read; 0 reads none.",
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991

@@ -24,6 +24,12 @@ function base64Url(s: string): string {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+const MEDIA = { maxImageBytes: 5_000_000, maxImagesPerMessage: 4 };
+
+/** A 1x1 PNG, base64. */
+const PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
 function fakeGmail() {
   const state = {
     tokenRequests: 0,
@@ -31,6 +37,7 @@ function fakeGmail() {
     modified: [] as string[],
     sent: [] as { raw: string; threadId: string }[],
     authSeen: new Set<string>(),
+    attachmentsFetched: [] as string[],
   };
   const payloads: Record<string, unknown> = {
     m1: {
@@ -49,7 +56,16 @@ function fakeGmail() {
             mimeType: "text/plain",
             body: { data: base64Url("Please file the attached invoice.") },
           },
-          { mimeType: "application/pdf", filename: "invoice.pdf", body: { size: 1234 } },
+          {
+            mimeType: "application/pdf",
+            filename: "invoice.pdf",
+            body: { size: 1234, attachmentId: "att_pdf" },
+          },
+          {
+            mimeType: "image/png",
+            filename: "shot.png",
+            body: { size: 70, attachmentId: "att_png" },
+          },
         ],
       },
     },
@@ -89,6 +105,13 @@ function fakeGmail() {
       state.sent.push(await req.json());
       return Response.json({ id: "sent1" });
     }
+    const att = url.pathname.match(/^\/gmail\/v1\/users\/me\/messages\/\w+\/attachments\/(\w+)$/);
+    if (att) {
+      state.attachmentsFetched.push(att[1]);
+      return Response.json({
+        data: PNG_BASE64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+      });
+    }
     const get = url.pathname.match(/^\/gmail\/v1\/users\/me\/messages\/(\w+)$/);
     if (get) return Response.json(payloads[get[1]]);
     return Response.json({ error: url.pathname }, { status: 500 });
@@ -106,6 +129,7 @@ Deno.test("gmail: unread mail wakes the agent, reply threads, cursor advances", 
     label: "agent",
     pollSeconds: 60, // the first poll is immediate; the test never waits an interval
     fromAddresses: ["*@example.com"],
+    media: MEDIA,
     apiBase: api.apiBase(),
     tokenUrl: `${api.apiBase()}/token`,
   });
@@ -129,6 +153,13 @@ Deno.test("gmail: unread mail wakes the agent, reply threads, cursor advances", 
   assert(events[0].input.includes("Please file the attached invoice."));
   assert(events[0].input.includes("invoice.pdf"));
   assertEquals(events[0].conversationKey, "email:gmail:t1");
+
+  // Only the image was fetched from attachments.get; the PDF is prose alone.
+  assertEquals(api.state.attachmentsFetched, ["att_png"]);
+  assertEquals(events[0].images?.length, 1);
+  assertEquals(events[0].images?.[0].mediaType, "image/png");
+  assertEquals(events[0].images?.[0].data, PNG_BASE64);
+  assert(!events[0].input.includes("shot.png"));
   assertEquals(api.state.modified.toSorted(), ["m1", "m2"]);
 
   const sent = api.state.sent[0];

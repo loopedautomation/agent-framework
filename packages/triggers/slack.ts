@@ -1,5 +1,5 @@
-import { logError, logInfo } from "@looped/core";
-import type { AgentEvent, RunResult, Trigger } from "@looped/core";
+import { logError, logInfo, resolveAttachments, withNotes } from "@looped/core";
+import type { AgentEvent, Attachment, MediaLimits, RunResult, Trigger } from "@looped/core";
 import { NO_REPLY, splitMessage } from "./text.ts";
 
 // A deliberately minimal Slack Socket Mode client: open a socket, ack
@@ -24,6 +24,62 @@ export interface SlackMessage {
   channel_type?: string;
   ts: string;
   thread_ts?: string;
+  files?: SlackFile[];
+}
+
+/** A file uploaded with a message (the fields this trigger reads). */
+export interface SlackFile {
+  id: string;
+  name?: string;
+  mimetype?: string;
+  filetype?: string;
+  size?: number;
+  url_private?: string;
+  /** Slack's own transcript of a voice clip. Unread today — see Plan 14. */
+  transcription?: { status?: string; preview?: { content?: string } };
+}
+
+/** The caps a hand-built trigger uses when the config's `limits:` block isn't threaded in. */
+const DEFAULT_MEDIA: MediaLimits = { maxImageBytes: 5_000_000, maxImagesPerMessage: 4 };
+
+/** What the agent reads when an upload arrives with no message text. */
+const NO_CAPTION = "(the user sent this with no message text.)";
+
+/** The message's uploads, as the media layer sees them. */
+export function slackAttachments(
+  msg: SlackMessage,
+  token: string,
+  fetchFn: typeof fetch = fetch,
+): Attachment[] {
+  return (msg.files ?? []).map((f) => ({
+    filename: f.name,
+    mediaType: f.mimetype,
+    size: f.size,
+    fetch: async () => {
+      // url_private is not public despite being a url: it needs the bot token
+      // and the files:read scope, and answers HTML (a login page) without them.
+      const res = await fetchFn(f.url_private ?? "", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        await res.body?.cancel();
+        throw new Error(`slack file download returned ${res.status}`);
+      }
+      // A bot without files:read gets a 200 carrying Slack's sign-in page
+      // rather than a 401. Trusting the status alone would hand the model an
+      // HTML document with an image's media type on it: a corrupt picture,
+      // silently, where the operator deserves to be told about a missing scope.
+      const type = res.headers.get("content-type") ?? "";
+      if (!type.startsWith("image/")) {
+        await res.body?.cancel();
+        throw new Error(
+          `slack served ${type || "no content-type"} for ${f.name ?? "a file"} — ` +
+            `the bot is probably missing the files:read scope`,
+        );
+      }
+      return new Uint8Array(await res.arrayBuffer());
+    },
+  }));
 }
 
 /** Message filters shared by {@linkcode shouldHandle} and {@linkcode SlackTriggerOptions}. */
@@ -43,13 +99,16 @@ export function shouldHandle(
   channelName: string | undefined,
   opts: SlackFilterOptions,
 ): boolean {
-  // Subtypes are edits, joins, bot posts, … — only plain user messages wake the agent.
-  if (msg.type !== "message" || msg.subtype) return false;
+  if (msg.type !== "message") return false;
+  // Subtypes are edits, joins, bot posts, … — none of them wake the agent. An
+  // upload is the exception: a file arrives as the file_share subtype, and a
+  // screenshot dropped in a channel is someone talking to the agent.
+  if (msg.subtype && msg.subtype !== "file_share") return false;
   if (msg.bot_id || !msg.user || msg.user === botUserId) return false;
   // The author gate runs before the model is ever called — messages from
   // unlisted authors are dropped here and never reach the provider.
   if (opts.fromUsers?.length && !opts.fromUsers.includes(msg.user)) return false;
-  if (!msg.text?.trim()) return false;
+  if (!msg.text?.trim() && !msg.files?.length) return false;
   if (opts.channels?.length) {
     const match = opts.channels.includes(msg.channel) ||
       (channelName !== undefined && opts.channels.includes(channelName));
@@ -58,7 +117,7 @@ export function shouldHandle(
   // A DM addresses the bot by definition; mentions only gate channels.
   if (
     opts.requireMention && msg.channel_type !== "im" &&
-    !msg.text.includes(`<@${botUserId}>`)
+    !(msg.text ?? "").includes(`<@${botUserId}>`)
   ) return false;
   return true;
 }
@@ -82,6 +141,8 @@ export interface SlackTriggerOptions extends SlackFilterOptions {
   replyChannel?: string;
   /** Suppress the reply when the agent answers with the NO_REPLY sentinel (or nothing). */
   allowSilence?: boolean;
+  /** What an image uploaded to a channel may cost (from the agent's `limits:` block). */
+  media?: MediaLimits;
 }
 
 /**
@@ -188,11 +249,18 @@ export class SlackTrigger implements Trigger {
       ? await this.#channelName(msg.channel)
       : undefined;
     if (!shouldHandle(msg, this.#botUserId, channelName, this.#opts)) return;
+    const media = await resolveAttachments(
+      slackAttachments(msg, this.#opts.token),
+      this.#opts.media ?? DEFAULT_MEDIA,
+    );
     const result = await emit({
       id: `${msg.channel}:${msg.ts}`,
       trigger: this.name,
       // Conversations are keyed per thread; a DM is one rolling conversation.
-      input: msg.text!,
+      // An upload with no caption still needs a prompt: the model is told what
+      // it is looking at rather than handed an empty turn.
+      input: withNotes((msg.text ?? "").trim() || NO_CAPTION, media.notes),
+      images: media.images,
       conversationKey: msg.channel_type === "im"
         ? `slack:${msg.channel}`
         : `slack:${msg.channel}:${msg.thread_ts ?? msg.ts}`,

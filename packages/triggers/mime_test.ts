@@ -61,6 +61,37 @@ Deno.test("parseMime: multipart/alternative prefers plain, lists attachments", (
   assertEquals(mail.attachments.length, 1);
   assertEquals(mail.attachments[0].filename, "invoice.pdf");
   assertEquals(mail.attachments[0].contentType, "application/pdf");
+  // The bytes come out decoded, and the size is what the file weighs — not the
+  // longer base64 the wire carried.
+  assertEquals(new TextDecoder().decode(mail.attachments[0].bytes), "%PDF-fake");
+  assertEquals(mail.attachments[0].size, 9);
+});
+
+Deno.test("parseMime: an inline image keeps its bytes", () => {
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const raw = [
+    "From: petra@example.com",
+    "Subject: screenshot",
+    'Content-Type: multipart/mixed; boundary="b"',
+    "",
+    "--b",
+    "Content-Type: text/plain",
+    "",
+    "See attached.",
+    "--b",
+    'Content-Type: image/png; name="shot.png"',
+    'Content-Disposition: attachment; filename="shot.png"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    png,
+    "--b--",
+    "",
+  ].join("\r\n");
+  const [attachment] = parseMime(raw).attachments;
+  assertEquals(attachment.contentType, "image/png");
+  assertEquals(attachment.size, 70);
+  assertEquals(btoa(String.fromCharCode(...attachment.bytes)), png);
 });
 
 Deno.test("parseMime: base64 body with non-utf8 charset falls back cleanly", () => {

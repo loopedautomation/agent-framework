@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
+  discordAttachments,
   type DiscordMessage,
   fetchApplicationId,
   INVITE_PERMISSIONS,
@@ -9,7 +10,15 @@ import {
   splitMessage,
   typingLoop,
 } from "./discord.ts";
+import { resolveAttachments, withNotes } from "@looped/core";
 import { isSilence } from "./text.ts";
+
+const LIMITS = { maxImageBytes: 1_000, maxImagesPerMessage: 2 };
+
+/** A fake CDN: any url answers with the same three bytes. */
+const cdn =
+  ((_url: RequestInfo | URL, _init?: RequestInit) =>
+    Promise.resolve(new Response(new Uint8Array([1, 2, 3])))) as typeof fetch;
 
 const BOT_ID = "bot-1";
 
@@ -24,11 +33,62 @@ function msg(overrides: Partial<DiscordMessage>): DiscordMessage {
   };
 }
 
+function png(filename: string) {
+  // Discord tacks parameters onto content_type on some uploads.
+  return {
+    id: "a1",
+    filename,
+    url: `https://cdn.discordapp.com/attachments/1/2/${filename}`,
+    content_type: "image/png; charset=utf-8",
+    size: 300,
+  };
+}
+
 Deno.test("shouldHandle: ignores bots, itself, and empty messages", () => {
   assert(shouldHandle(msg({}), BOT_ID, { name: "issues" }, {}));
   assert(!shouldHandle(msg({ author: { id: "x", bot: true } }), BOT_ID, { name: "issues" }, {}));
   assert(!shouldHandle(msg({ author: { id: BOT_ID } }), BOT_ID, { name: "issues" }, {}));
   assert(!shouldHandle(msg({ content: "   " }), BOT_ID, { name: "issues" }, {}));
+});
+
+Deno.test("shouldHandle: a caption-less image post wakes the agent", () => {
+  const shot = msg({ content: "", attachments: [png("shot.png")] });
+  assert(shouldHandle(shot, BOT_ID, { name: "issues" }, {}));
+  // …but the filters still apply to it
+  assert(!shouldHandle(shot, BOT_ID, { name: "general" }, { channels: ["issues"] }));
+  // nothing at all is still nothing
+  assert(!shouldHandle(msg({ content: "", attachments: [] }), BOT_ID, { name: "issues" }, {}));
+});
+
+Deno.test("discordAttachments: an image post resolves to an image and no notes", async () => {
+  const post = msg({ content: "", attachments: [png("shot.png")] });
+  const media = await resolveAttachments(discordAttachments(post, cdn), LIMITS);
+  assertEquals(media.notes, []);
+  assertEquals(media.images.length, 1);
+  assertEquals(media.images[0].mediaType, "image/png");
+  assertEquals(media.images[0].data, btoa("\x01\x02\x03"));
+});
+
+Deno.test("discordAttachments: a non-image is described in the prompt, never read", async () => {
+  const post = msg({
+    content: "have a look",
+    attachments: [{ id: "a2", filename: "q3.pdf", url: "https://cdn/q3", size: 2_000 }],
+  });
+  const media = await resolveAttachments(discordAttachments(post, cdn), LIMITS);
+  assertEquals(media.images, []);
+  assertEquals(media.notes.length, 1);
+  assert(media.notes[0].includes("q3.pdf"));
+  assert(withNotes("have a look", media.notes).startsWith("have a look\n[attachment:"));
+});
+
+Deno.test("discordAttachments: a failed CDN fetch becomes a note, not a dropped image", async () => {
+  const gone =
+    ((_url: RequestInfo | URL, _init?: RequestInit) =>
+      Promise.resolve(new Response("", { status: 404 }))) as typeof fetch;
+  const post = msg({ content: "", attachments: [png("shot.png")] });
+  const media = await resolveAttachments(discordAttachments(post, gone), LIMITS);
+  assertEquals(media.images, []);
+  assert(media.notes[0].includes("404"));
 });
 
 Deno.test("shouldHandle: channel filter matches by name or id", () => {

@@ -82,7 +82,10 @@ type InputItem =
   | {
     type: "message";
     role: "user" | "assistant";
-    content: { type: "input_text" | "output_text"; text: string }[];
+    content: (
+      | { type: "input_text" | "output_text"; text: string }
+      | { type: "input_image"; image_url: string }
+    )[];
   }
   | { type: "function_call"; call_id: string; name: string; arguments: string }
   | { type: "function_call_output"; call_id: string; output: string };
@@ -95,7 +98,13 @@ function toInputItems(messages: Message[]): InputItem[] {
         items.push({
           type: "message",
           role: "user",
-          content: [{ type: "input_text", text: m.content }],
+          content: [
+            ...(m.images ?? []).map((image) => ({
+              type: "input_image" as const,
+              image_url: `data:${image.mediaType};base64,${image.data}`,
+            })),
+            { type: "input_text" as const, text: m.content },
+          ],
         });
         break;
       case "assistant":
