@@ -5,6 +5,7 @@ import {
   fetchApplicationId,
   INVITE_PERMISSIONS,
   inviteUrl,
+  isVoiceMessage,
   NO_REPLY,
   shouldHandle,
   splitMessage,
@@ -148,11 +149,54 @@ Deno.test("splitMessage: respects the 2000-char cap on line boundaries", () => {
 });
 
 Deno.test("inviteUrl: correct client_id, scope, and permissions integer", () => {
-  assertEquals(INVITE_PERMISSIONS, 68608); // VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY
+  // VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | SEND_VOICE_MESSAGES (bit 46)
+  assertEquals(INVITE_PERMISSIONS, 68608 + 2 ** 46);
   assertEquals(
     inviteUrl("1234567890"),
-    "https://discord.com/oauth2/authorize?client_id=1234567890&scope=bot&permissions=68608",
+    `https://discord.com/oauth2/authorize?client_id=1234567890&scope=bot&permissions=${
+      68608 + 2 ** 46
+    }`,
   );
+});
+
+Deno.test("isVoiceMessage: needs both the flag and an audio attachment", () => {
+  const attachment = {
+    id: "1",
+    filename: "voice-message.ogg",
+    url: "https://cdn.discordapp.com/a/1.ogg",
+    content_type: "audio/ogg",
+  };
+  assert(isVoiceMessage(msg({ content: "", flags: 8192, attachments: [attachment] })));
+  assert(!isVoiceMessage(msg({ content: "", flags: 8192, attachments: [] }))); // flag alone
+  assert(!isVoiceMessage(msg({ content: "", attachments: [attachment] }))); // attachment alone
+  assert(
+    !isVoiceMessage(
+      msg({
+        content: "",
+        flags: 8192,
+        attachments: [{ id: "2", filename: "x.png", url: "x", content_type: "image/png" }],
+      }),
+    ),
+  );
+});
+
+Deno.test("shouldHandle: a voice message wakes the agent like any attachment post", () => {
+  const voice = msg({
+    content: "",
+    flags: 8192,
+    attachments: [{
+      id: "1",
+      filename: "voice-message.ogg",
+      url: "https://cdn.discordapp.com/a/1.ogg",
+      content_type: "audio/ogg",
+    }],
+  });
+  assert(shouldHandle(voice, BOT_ID, { name: "issues" }, {}));
+  // No text to carry a mention: a mention-gated guild drops voice messages…
+  assert(!shouldHandle(voice, BOT_ID, { name: "issues" }, { requireMention: true }));
+  // …while a DM still addresses the bot by definition.
+  const dm = { ...voice, guild_id: undefined };
+  assert(shouldHandle(dm, BOT_ID, undefined, { requireMention: true }));
 });
 
 Deno.test("typingLoop: fires immediately, keeps firing, and stops cleanly", async () => {

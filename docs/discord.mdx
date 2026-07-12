@@ -90,6 +90,10 @@ The agent replies in-channel to the triggering message; conversations are keyed 
 
 The bot answers DMs too. A DM addresses the bot by definition, so the `channels` filter and `require_mention` don't apply there. `from_users` still does, and it's the knob to reach for if you don't want the bot talking to everyone who can see it in a server. Each DM is its own conversation, with history kept separate from every channel the bot watches.
 
+## Voice notes
+
+With a top-level `voice` block in the agent file, the trigger handles Discord voice messages: it downloads the audio, transcribes it and runs the transcript through the normal loop, and with `tts` configured the reply comes back as a voice message too. [Voice](voice.md) has the setup and the fallbacks. For a bot invited before voice was enabled, run `af discord-invite` again and open the URL; the invite now carries the permission to send voice messages.
+
 ## Observer agents
 
 `from_users`, `reply_channel` and `allow_silence` together turn the trigger from a chatbot into an observer: an agent that watches channels, reacts to specific people and reports elsewhere. [Observer agents](observer-agents.md) covers the pattern, with a full example.

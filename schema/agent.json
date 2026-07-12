@@ -633,6 +633,77 @@
         "description": "An event source that wakes the agent."
       }
     },
+    "voice": {
+      "type": "object",
+      "properties": {
+        "stt": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": [
+                "openai",
+                "elevenlabs"
+              ],
+              "description": "Speech-to-text provider for incoming voice notes."
+            },
+            "model": {
+              "description": "Transcription model. Defaults per provider: gpt-4o-mini-transcribe (openai), scribe_v2 (elevenlabs).",
+              "type": "string",
+              "minLength": 1
+            },
+            "api_key_env": {
+              "description": "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "provider"
+          ],
+          "additionalProperties": false,
+          "description": "How incoming voice notes become text."
+        },
+        "tts": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": [
+                "openai",
+                "elevenlabs"
+              ],
+              "description": "Text-to-speech provider for spoken replies."
+            },
+            "model": {
+              "description": "Speech model. Defaults per provider: gpt-4o-mini-tts (openai), eleven_multilingual_v2 (elevenlabs).",
+              "type": "string",
+              "minLength": 1
+            },
+            "voice": {
+              "description": "Voice to speak with: a voice name for openai (defaults to alloy), a voice id for elevenlabs (defaults to Rachel).",
+              "type": "string",
+              "minLength": 1
+            },
+            "api_key_env": {
+              "description": "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "provider"
+          ],
+          "additionalProperties": false,
+          "description": "How replies to voice notes become speech. Omit this block and voice notes get text replies."
+        }
+      },
+      "required": [
+        "stt"
+      ],
+      "additionalProperties": false,
+      "description": "Voice notes on chat triggers (telegram, discord). stt transcribes an incoming voice note and the transcript runs through the normal text loop; with tts the reply comes back as a voice note too. Omit the block and voice notes are ignored."
+    },
     "skills": {
       "description": "Paths to skill markdown files (relative to this config). Skills carry knowledge, never capability.",
       "type": "array",

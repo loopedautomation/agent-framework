@@ -8,6 +8,7 @@ import type {
   Trigger,
 } from "@looped/core";
 import { NO_REPLY, splitMessage } from "./text.ts";
+import { SPEAK_MAX_CHARS, type VoiceEngines } from "./voice.ts";
 
 // A deliberately minimal Telegram Bot API client: getMe, getUpdates
 // long-polling, sendMessage. No library, no webhook, no public endpoint —
@@ -186,6 +187,8 @@ export interface TelegramTriggerOptions extends TelegramFilterOptions {
   commands?: CommandSpec[];
   /** What an inbound image may cost; from the agent's `limits:` block. */
   media?: MediaLimits;
+  /** Voice engines: transcribe incoming voice notes, and (with speak) voice the replies back. */
+  voice?: VoiceEngines;
 }
 
 /** The schema's defaults, so a trigger built by hand still has a ceiling. */
@@ -209,10 +212,12 @@ export class TelegramTrigger implements Trigger {
   }
 
   async #api(method: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
+    // FormData rides as multipart (sendVoice uploads); everything else as JSON.
+    const form = body instanceof FormData;
     return await fetch(`https://api.telegram.org/bot${this.#opts.token}/${method}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: form ? undefined : { "content-type": "application/json" },
+      body: form ? body : body === undefined ? undefined : JSON.stringify(body),
       signal,
     });
   }
@@ -223,7 +228,7 @@ export class TelegramTrigger implements Trigger {
    * served from a different url shape than the JSON methods (/file/bot<token>/…
    * rather than /bot<token>/<method>), on the same host.
    */
-  async #download(fileId: string): Promise<Uint8Array> {
+  async #download(fileId: string): Promise<Uint8Array<ArrayBuffer>> {
     const res = await this.#api("getFile", { file_id: fileId });
     if (!res.ok) {
       await res.body?.cancel();
@@ -245,18 +250,67 @@ export class TelegramTrigger implements Trigger {
   /** The prompt text and the images for one message: caption, files, and honesty about the rest. */
   async #media(msg: TelegramMessage) {
     const limits = this.#opts.media ?? DEFAULT_MEDIA;
+
+    // With voice engines, a voice note becomes the prompt itself; without
+    // them it stays an attachment and resolves to an honest "can't listen"
+    // note below. A failed transcription becomes a note line the same way.
+    const voice = this.#opts.voice && msg.voice ? msg.voice : undefined;
+    const notes: string[] = [];
+    let transcript: string | undefined;
+    if (voice) {
+      try {
+        transcript = await this.#opts.voice!.transcribe({
+          audio: await this.#download(voice.file_id),
+          mimeType: voice.mime_type ?? "audio/ogg",
+          durationSecs: voice.duration,
+        });
+      } catch (err) {
+        notes.push(`[voice message — transcription failed (${(err as Error).message})]`);
+      }
+    }
+
     const attachments = telegramAttachments(
-      msg,
+      voice ? { ...msg, voice: undefined } : msg, // a transcribed note is handled, not an attachment
       limits.maxImageBytes,
       (fileId) => this.#download(fileId),
     );
-    const { images, notes } = await resolveAttachments(attachments, limits);
+    const resolved = await resolveAttachments(attachments, limits);
+    notes.push(...resolved.notes);
 
     // An image with no caption is still a message; an empty prompt would leave
     // the model guessing why it was woken at all.
-    const text = messageText(msg) ??
-      (images.length ? "(an image arrived with no caption)" : "");
-    return { input: withNotes(text, notes), images };
+    const text = transcript ?? messageText(msg) ??
+      (resolved.images.length ? "(an image arrived with no caption)" : "");
+    return {
+      input: withNotes(text, notes),
+      images: resolved.images,
+      asVoice: transcript !== undefined,
+    };
+  }
+
+  /** Speak the reply and post it as a voice note; false hands the reply back to the text path. */
+  async #sendVoiceReply(msg: TelegramMessage, text: string): Promise<boolean> {
+    try {
+      const clip = await this.#opts.voice!.speak!(text);
+      const form = new FormData();
+      form.append("chat_id", String(msg.chat.id));
+      form.append("voice", new Blob([clip.audio], { type: clip.mimeType }), "voice.ogg");
+      if (clip.durationSecs) form.append("duration", String(Math.round(clip.durationSecs)));
+      form.append(
+        "reply_parameters",
+        JSON.stringify({ message_id: msg.message_id, allow_sending_without_reply: true }),
+      );
+      const res = await this.#api("sendVoice", form);
+      if (!res.ok) {
+        logError(`telegram: sendVoice failed (${res.status}): ${await res.text()}`);
+        return false;
+      }
+      await res.body?.cancel();
+      return true;
+    } catch (err) {
+      logError(`telegram: voice reply failed: ${(err as Error).message}`);
+      return false;
+    }
   }
 
   /** Proactive send (agent-created schedules): "telegram:<chatId>" keys are ours. */
@@ -274,7 +328,7 @@ export class TelegramTrigger implements Trigger {
     return true;
   }
 
-  async #reply(msg: TelegramMessage, result: RunResult) {
+  async #reply(msg: TelegramMessage, result: RunResult, asVoice = false) {
     const reply = (result.reply ?? "").trim();
 
     // The agent had nothing to say — with allow_silence, say nothing.
@@ -283,6 +337,15 @@ export class TelegramTrigger implements Trigger {
     // Where to post: a dedicated reply chat, else the source chat.
     const target = this.#opts.replyChat ?? msg.chat.id;
     const inSourceChat = String(target) === String(msg.chat.id);
+
+    // A voice note gets a voice note back when speak is configured. Failures
+    // and replies too long to speak fall through to the text path; replies
+    // routed to another chat stay text, since they quote their context.
+    if (
+      asVoice && this.#opts.voice?.speak && inSourceChat &&
+      reply !== "" && reply.length <= SPEAK_MAX_CHARS &&
+      await this.#sendVoiceReply(msg, reply)
+    ) return;
 
     let body = reply || `(${result.status})`;
     if (!inSourceChat) {
@@ -363,16 +426,16 @@ export class TelegramTrigger implements Trigger {
           // service's job (per-conversation FIFO), and holding the poll
           // loop here would make one long run block every other chat.
           this.#media(msg)
-            .then(({ input, images }) =>
-              emit({
+            .then(async ({ input, images, asVoice }) => {
+              const result = await emit({
                 id: String(update.update_id),
                 trigger: this.name,
                 input: stripCommandMention(input, botUsername),
                 ...(images.length ? { images } : {}),
                 conversationKey: `telegram:${msg.chat.id}`,
-              })
-            )
-            .then((result) => this.#reply(msg, result))
+              });
+              await this.#reply(msg, result, asVoice);
+            })
             .catch((err) => {
               logError(`telegram: run failed: ${(err as Error).message}`);
             });

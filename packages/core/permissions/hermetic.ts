@@ -81,6 +81,25 @@ const PROVIDER_HOSTS: Record<ModelConfig["provider"], string[]> = {
   "codex": ["auth.openai.com", "chatgpt.com"],
 };
 
+/** Endpoints per voice provider, from packages/triggers/voice.ts. */
+const VOICE_PROVIDER_HOSTS: Record<"openai" | "elevenlabs", string> = {
+  openai: "api.openai.com",
+  elevenlabs: "api.elevenlabs.io",
+};
+
+/**
+ * The hosts voice notes reach: each engine's API. Voice-message audio itself
+ * downloads from hosts each trigger already lists (Telegram's bot API,
+ * Discord's CDN — Plan 14 put the CDN there for images).
+ */
+function voiceHosts(config: AgentConfig): string[] {
+  const voice = config.voice;
+  if (!voice) return [];
+  const hosts = [VOICE_PROVIDER_HOSTS[voice.stt.provider]];
+  if (voice.tts) hosts.push(VOICE_PROVIDER_HOSTS[voice.tts.provider]);
+  return hosts;
+}
+
 /** The host (with port, when non-default) a URL is reached at. */
 function urlHost(url: string): string {
   const u = new URL(url);
@@ -163,6 +182,7 @@ export function derivedHosts(config: AgentConfig, env: Env = Deno.env.get): stri
     `${listenHost}:${statusPort}`,
     ...modelHosts(config.model),
     ...(config.triggers ?? []).flatMap((t) => triggerHosts(t, listenHost)),
+    ...voiceHosts(config),
     ...(config.tools?.mcp ?? []).filter((s) => s.url).map((s) => urlHost(s.url!)),
   ];
   return [...new Set(hosts)];

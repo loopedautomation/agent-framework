@@ -274,6 +274,44 @@ const TriggerSchema = z.discriminatedUnion("type", [
   CronTriggerSchema,
 ]).describe("An event source that wakes the agent.");
 
+const VoiceSttSchema = z.strictObject({
+  provider: z.enum(["openai", "elevenlabs"]).describe(
+    "Speech-to-text provider for incoming voice notes.",
+  ),
+  model: z.string().min(1).optional().describe(
+    "Transcription model. Defaults per provider: gpt-4o-mini-transcribe (openai), scribe_v2 (elevenlabs).",
+  ),
+  api_key_env: z.string().min(1).optional().describe(
+    "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
+  ),
+}).describe("How incoming voice notes become text.");
+
+const VoiceTtsSchema = z.strictObject({
+  provider: z.enum(["openai", "elevenlabs"]).describe(
+    "Text-to-speech provider for spoken replies.",
+  ),
+  model: z.string().min(1).optional().describe(
+    "Speech model. Defaults per provider: gpt-4o-mini-tts (openai), eleven_multilingual_v2 (elevenlabs).",
+  ),
+  voice: z.string().min(1).optional().describe(
+    "Voice to speak with: a voice name for openai (defaults to alloy), a voice id for elevenlabs (defaults to Rachel).",
+  ),
+  api_key_env: z.string().min(1).optional().describe(
+    "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
+  ),
+}).describe(
+  "How replies to voice notes become speech. Omit this block and voice notes get text replies.",
+);
+
+const VoiceConfigSchema = z.strictObject({
+  stt: VoiceSttSchema,
+  tts: VoiceTtsSchema.optional(),
+}).describe(
+  "Voice notes on chat triggers (telegram, discord). stt transcribes an incoming voice note and " +
+    "the transcript runs through the normal text loop; with tts the reply comes back as a voice " +
+    "note too. Omit the block and voice notes are ignored.",
+);
+
 const McpServerSchema = z
   .strictObject({
     name: z.string().min(1).describe(
@@ -472,6 +510,7 @@ const agentConfigSchema = z.strictObject({
   triggers: z.array(TriggerSchema).optional().describe(
     "Event sources that wake the agent. With triggers, `af run` starts a long-lived service; without, an interactive REPL.",
   ),
+  voice: VoiceConfigSchema.optional(),
   skills: z.array(z.string().min(1)).optional().describe(
     "Paths to skill markdown files (relative to this config). Skills carry knowledge, never capability.",
   ),
@@ -736,6 +775,36 @@ export type TriggerConfig =
   | GithubTriggerConfig
   | CronTriggerConfig;
 
+/** How incoming voice notes become text. */
+export interface VoiceSttConfig {
+  /** Speech-to-text provider. */
+  provider: "openai" | "elevenlabs";
+  /** Transcription model. Defaults per provider: gpt-4o-mini-transcribe (openai), scribe_v2 (elevenlabs). */
+  model?: string;
+  /** Name of the env var holding the API key. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider. */
+  api_key_env?: string;
+}
+
+/** How replies to voice notes become speech. */
+export interface VoiceTtsConfig {
+  /** Text-to-speech provider. */
+  provider: "openai" | "elevenlabs";
+  /** Speech model. Defaults per provider: gpt-4o-mini-tts (openai), eleven_multilingual_v2 (elevenlabs). */
+  model?: string;
+  /** Voice to speak with: a voice name for openai (defaults to alloy), a voice id for elevenlabs (defaults to Rachel). */
+  voice?: string;
+  /** Name of the env var holding the API key. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider. */
+  api_key_env?: string;
+}
+
+/** Voice notes on chat triggers: stt transcribes them in; tts speaks the replies back. */
+export interface VoiceConfig {
+  /** How incoming voice notes become text. */
+  stt: VoiceSttConfig;
+  /** How replies become speech. Omit and voice notes get text replies. */
+  tts?: VoiceTtsConfig;
+}
+
 /** A Model Context Protocol server providing tools to the agent. */
 export interface McpServerConfig {
   /** Server name; its tools appear namespaced as mcp__<name>__<tool>. */
@@ -861,6 +930,8 @@ export interface AgentConfig {
   purpose: string;
   /** Event sources that wake the agent. */
   triggers?: TriggerConfig[];
+  /** Voice notes on chat triggers: stt transcribes them in; tts speaks the replies back. */
+  voice?: VoiceConfig;
   /** Paths to skill markdown files, relative to this config. */
   skills?: string[];
   /** Tool sources beyond the natives and skills. */
@@ -917,6 +988,12 @@ export const DEFAULT_API_KEY_ENV: Record<Exclude<ModelConfig["provider"], "codex
   anthropic: "ANTHROPIC_API_KEY",
 };
 
+/** The env var each voice provider reads its API key from when api_key_env is omitted. */
+export const DEFAULT_VOICE_API_KEY_ENV: Record<VoiceSttConfig["provider"], string> = {
+  openai: "OPENAI_API_KEY",
+  elevenlabs: "ELEVENLABS_API_KEY",
+};
+
 // Compile-time drift guards: each fails if the hand-written type and the
 // schema's inferred type stop being mutually assignable.
 type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
@@ -925,6 +1002,7 @@ const _triggerConfigInSync: MutuallyAssignable<TriggerConfig, z.infer<typeof Tri
 const _permissionsInSync: MutuallyAssignable<Permissions, z.infer<typeof PermissionsSchema>> = true;
 const _httpInSync: MutuallyAssignable<HttpConfig, z.infer<typeof HttpConfigSchema>> = true;
 const _redactInSync: MutuallyAssignable<RedactConfig, z.infer<typeof RedactConfigSchema>> = true;
+const _voiceInSync: MutuallyAssignable<VoiceConfig, z.infer<typeof VoiceConfigSchema>> = true;
 
 /** The published JSON Schema for agent.yaml (editor completion, validation). */
 export function agentConfigJsonSchema(): Record<string, unknown> {

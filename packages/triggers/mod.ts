@@ -17,6 +17,7 @@ import { GmailEmailTrigger } from "./email_gmail.ts";
 import { OutlookEmailTrigger } from "./email_outlook.ts";
 import { SlackTrigger } from "./slack.ts";
 import { TelegramTrigger } from "./telegram.ts";
+import { voiceFromConfig } from "./voice.ts";
 
 export type {
   AgentConfig,
@@ -45,6 +46,9 @@ export type {
   Trigger,
   TriggerConfig,
   Usage,
+  VoiceConfig,
+  VoiceSttConfig,
+  VoiceTtsConfig,
   WebhookTriggerConfig,
 } from "@looped/core";
 export { NO_REPLY } from "./text.ts";
@@ -109,6 +113,14 @@ export {
   TelegramTrigger,
   type TelegramTriggerOptions,
 } from "./telegram.ts";
+export {
+  oggOpusDurationSecs,
+  placeholderWaveform,
+  SPEAK_MAX_CHARS,
+  type VoiceClip,
+  type VoiceEngines,
+  voiceFromConfig,
+} from "./voice.ts";
 
 /**
  * Instantiate the triggers a config declares.
@@ -128,6 +140,9 @@ export function triggersFromConfig(
     maxImageBytes: config.limits.max_image_bytes,
     maxImagesPerMessage: config.limits.max_images_per_message,
   };
+  // One set of voice engines shared by every voice-capable trigger; API keys
+  // resolve here — startup, not first voice note.
+  const voice = config.voice ? voiceFromConfig(config.voice, getEnv) : undefined;
   for (const t of config.triggers ?? []) {
     switch (t.type) {
       case "webhook": {
@@ -292,6 +307,7 @@ export function triggersFromConfig(
             showTyping: t.show_typing,
             commands,
             media,
+            voice,
           }),
         );
         break;
@@ -336,6 +352,7 @@ export function triggersFromConfig(
             allowSilence: t.allow_silence,
             commands,
             media,
+            voice,
           }),
         );
         break;

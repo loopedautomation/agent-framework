@@ -1,0 +1,51 @@
+---
+title: "Voice"
+description: "Voice notes on chat triggers: transcription in, spoken replies out, via OpenAI or ElevenLabs."
+---
+
+Someone sends your agent a voice note and the agent can only apologize: the trigger hands the model a line saying an audio file arrived that it cannot listen to ([Attachments](attachments.md) covers that honesty). The `voice` block turns the apology into a conversation, on the chat triggers that carry voice notes: Telegram and Discord.
+
+It works with two engines at the trigger's edge. `stt` turns an incoming voice note into a transcript, and the transcript runs through the normal loop like any typed message. `tts` is optional: with it configured, the reply to a voice note comes back as a voice note in the same chat. Text messages get text replies either way, and the loop itself stays text end to end - the audio never reaches the model.
+
+```yaml
+voice:
+  stt:
+    provider: openai              # or elevenlabs
+    # model: gpt-4o-mini-transcribe (default)
+    # api_key_env: OPENAI_API_KEY (default)
+  tts:                            # omit this block for text replies to voice notes
+    provider: elevenlabs
+    # model: eleven_multilingual_v2 (default)
+    # voice: 21m00Tcm4TlvDq8ikWAM (default: Rachel)
+    # api_key_env: ELEVENLABS_API_KEY (default)
+```
+
+The block sits at the top level of the agent file because the engines are shared: every voice-capable trigger in the file transcribes and speaks through the same pair. Mixing providers is fine - transcribe with OpenAI and speak with ElevenLabs, or the other way around.
+
+## Options
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `stt.provider` | required | `openai` or `elevenlabs`. |
+| `stt.model` | per provider | `gpt-4o-mini-transcribe` for openai, `scribe_v2` for elevenlabs. |
+| `stt.api_key_env` | per provider | The env var holding the key: `OPENAI_API_KEY` or `ELEVENLABS_API_KEY`. A reference; the value stays out of the file and is redacted everywhere it could surface ([Secrets](secrets.md)). |
+| `tts.provider` | required in `tts` | `openai` or `elevenlabs`. |
+| `tts.model` | per provider | `gpt-4o-mini-tts` for openai, `eleven_multilingual_v2` for elevenlabs. |
+| `tts.voice` | per provider | The voice to speak with: a voice name for openai (`alloy`), a voice id for elevenlabs (Rachel's premade voice). |
+| `tts.api_key_env` | per provider | Same defaults as `stt.api_key_env`. Each engine resolves its own key, so mixed providers each find theirs. |
+
+## What happens to a voice note
+
+The trigger downloads the audio, sends it to the transcription API and emits the transcript as the event's input. From there it is an ordinary run: same purpose, same tools, same memory, same audit trail. When the run finishes and `tts` is configured, the trigger asks the speech API for Ogg Opus and posts it as a real voice note, the kind that renders with a play button and a waveform.
+
+Some replies stay text on purpose. A reply longer than 4000 characters reads better than it listens, so it posts as text. A reply routed elsewhere via `reply_chat` or `reply_channel` stays text too, because it quotes the message it answers. And when the speech API errors, the trigger logs the failure and posts the text instead, so the reply still arrives. `allow_silence` applies before any of this: a `__NO_REPLY__` answer posts nothing, voice or text.
+
+One gate to know about: `require_mention`. A voice note has no text to carry an @-mention, so in a mention-gated group voice notes drop before the model is called. Private chats and DMs always address the bot, and that's where voice conversations naturally live.
+
+## Keys and the sandbox
+
+Both API keys resolve at startup from the env vars the config names, and a missing key stops the agent right there with the var's name in the error. Under [hermetic mode](permission-model.md) the engines' hosts join the derived allowlist on their own: `api.openai.com` or `api.elevenlabs.io`. The audio files themselves download from hosts each trigger already lists. Nothing to declare in `permissions.net`.
+
+## What this doesn't cover
+
+A voice note is still a turn: audio in, one run, audio out. Joining a Discord voice channel and holding a live spoken conversation is a different mechanism, and this block does not provide it. Slack is absent here too, because Slack gives bots no voice-message surface to read or post. And the waveform Discord shows on the agent's voice replies is a placeholder shape; drawing the real envelope would mean decoding Opus inside the trigger, which we decided isn't worth it for a preview.

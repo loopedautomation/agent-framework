@@ -7,7 +7,9 @@ import type {
   RunResult,
   Trigger,
 } from "@looped/core";
+import type { ImageContent } from "@looped/core";
 import { isSilence, NO_REPLY, splitMessage } from "./text.ts";
+import { placeholderWaveform, SPEAK_MAX_CHARS, type VoiceEngines } from "./voice.ts";
 
 // A deliberately minimal Discord gateway client: identify, heartbeat,
 // MESSAGE_CREATE, reconnect-with-backoff. No library — the framework's
@@ -22,9 +24,14 @@ export { NO_REPLY, splitMessage };
 
 /**
  * Permission bitfield the invite URL requests:
- * VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY.
+ * VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | SEND_VOICE_MESSAGES.
+ * SEND_VOICE_MESSAGES sits at bit 46, past 32-bit bitwise range — hence the
+ * addition.
  */
-export const INVITE_PERMISSIONS = (1 << 10) | (1 << 11) | (1 << 16);
+export const INVITE_PERMISSIONS: number = ((1 << 10) | (1 << 11) | (1 << 16)) + 2 ** 46;
+
+/** Message flag marking a voice message (IS_VOICE_MESSAGE). */
+export const VOICE_MESSAGE_FLAG = 8192;
 
 /** The OAuth invite URL for a bot application — so nobody computes permission bitfields by hand. */
 export function inviteUrl(applicationId: string): string {
@@ -55,6 +62,7 @@ export interface DiscordMessage {
   content: string;
   author: { id: string; bot?: boolean; username?: string };
   mentions?: { id: string }[];
+  flags?: number;
   attachments?: DiscordAttachment[];
 }
 
@@ -66,6 +74,14 @@ export interface DiscordAttachment {
   proxy_url?: string;
   content_type?: string;
   size?: number;
+  /** Playback seconds; present on voice-message attachments. */
+  duration_secs?: number;
+}
+
+/** True when a message is a voice message: the flag plus an audio attachment. (pure, unit-tested) */
+export function isVoiceMessage(msg: DiscordMessage): boolean {
+  return ((msg.flags ?? 0) & VOICE_MESSAGE_FLAG) !== 0 &&
+    (msg.attachments?.[0]?.content_type?.startsWith("audio/") ?? false);
 }
 
 /** The caps a hand-built trigger uses when the config's `limits:` block isn't threaded in. */
@@ -162,6 +178,8 @@ export interface DiscordTriggerOptions extends DiscordFilterOptions {
   commands?: CommandSpec[];
   /** What an image posted in a channel may cost (from the agent's `limits:` block). */
   media?: MediaLimits;
+  /** Voice engines: transcribe incoming voice messages, and (with speak) voice the replies back. */
+  voice?: VoiceEngines;
 }
 
 /** A Discord slash-command interaction (the fields this trigger reads). */
@@ -213,10 +231,63 @@ export class DiscordTrigger implements Trigger {
       ...init,
       headers: {
         authorization: `Bot ${this.#opts.token}`,
-        "content-type": "application/json",
+        // FormData rides as multipart with its own boundary (voice uploads).
+        ...(init?.body instanceof FormData ? {} : { "content-type": "application/json" }),
         ...init?.headers,
       },
     });
+  }
+
+  /** Fetch a voice message's audio from the CDN and hand it to the transcriber. */
+  async #transcribe(attachment: DiscordAttachment): Promise<string> {
+    const res = await fetch(attachment.url);
+    if (!res.ok) {
+      await res.body?.cancel();
+      throw new Error(`voice download failed (${res.status})`);
+    }
+    return await this.#opts.voice!.transcribe({
+      audio: new Uint8Array(await res.arrayBuffer()),
+      mimeType: attachment.content_type?.split(";")[0].trim() ?? "audio/ogg",
+      durationSecs: attachment.duration_secs,
+    });
+  }
+
+  /** Speak the reply and post it as a voice message; false hands the reply back to the text path. */
+  async #sendVoiceReply(msg: DiscordMessage, text: string): Promise<boolean> {
+    try {
+      const clip = await this.#opts.voice!.speak!(text);
+      // Discord accepts only Ogg Opus as a voice message.
+      if (clip.mimeType !== "audio/ogg") return false;
+      const duration = clip.durationSecs ?? 1;
+      const form = new FormData();
+      form.append(
+        "payload_json",
+        JSON.stringify({
+          flags: VOICE_MESSAGE_FLAG,
+          attachments: [{
+            id: "0",
+            filename: "voice-message.ogg",
+            duration_secs: duration,
+            waveform: placeholderWaveform(duration),
+          }],
+          message_reference: { message_id: msg.id, fail_if_not_exists: false },
+        }),
+      );
+      form.append("files[0]", new Blob([clip.audio], { type: "audio/ogg" }), "voice-message.ogg");
+      const res = await this.#api(`/channels/${msg.channel_id}/messages`, {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) {
+        logError(`discord: voice reply failed (${res.status}): ${await res.text()}`);
+        return false;
+      }
+      await res.body?.cancel();
+      return true;
+    } catch (err) {
+      logError(`discord: voice reply failed: ${(err as Error).message}`);
+      return false;
+    }
   }
 
   async #channelInfo(channelId: string): Promise<DiscordChannelInfo | undefined> {
@@ -263,7 +334,7 @@ export class DiscordTrigger implements Trigger {
     return true;
   }
 
-  async #reply(msg: DiscordMessage, result: RunResult) {
+  async #reply(msg: DiscordMessage, result: RunResult, asVoice = false) {
     const reply = (result.reply ?? "").trim();
 
     // The agent had nothing to say — with allow_silence, say nothing.
@@ -272,6 +343,15 @@ export class DiscordTrigger implements Trigger {
     // Where to post: a dedicated reply channel, else the source channel.
     const target = this.#opts.replyChannel ?? msg.channel_id;
     const inSourceChannel = target === msg.channel_id;
+
+    // A voice message gets a voice message back when speak is configured.
+    // Failures and replies too long to speak fall through to the text path;
+    // replies routed to another channel stay text, since they quote context.
+    if (
+      asVoice && this.#opts.voice?.speak && inSourceChannel &&
+      reply !== "" && reply.length <= SPEAK_MAX_CHARS &&
+      await this.#sendVoiceReply(msg, reply)
+    ) return;
 
     let body = reply || `(${result.status})`;
     if (!inSourceChannel) {
@@ -449,20 +529,41 @@ export class DiscordTrigger implements Trigger {
               })
               : undefined;
             try {
-              const media = await resolveAttachments(
-                discordAttachments(msg),
-                this.#opts.media ?? DEFAULT_MEDIA,
-              );
+              // With voice engines, a voice message becomes the prompt itself
+              // — it carries exactly one attachment and no text, so there is
+              // nothing else to resolve. Without them it flows through the
+              // media path and resolves to an honest "can't listen" note.
+              const voiceNote = this.#opts.voice && isVoiceMessage(msg)
+                ? msg.attachments![0]
+                : undefined;
+              let input: string;
+              let images: ImageContent[] = [];
+              let asVoice = false;
+              if (voiceNote) {
+                try {
+                  input = await this.#transcribe(voiceNote);
+                  asVoice = true;
+                } catch (err) {
+                  input = `[voice message — transcription failed (${(err as Error).message})]`;
+                }
+              } else {
+                const media = await resolveAttachments(
+                  discordAttachments(msg),
+                  this.#opts.media ?? DEFAULT_MEDIA,
+                );
+                // An image with no caption still needs a prompt: the model is
+                // told what it is looking at rather than handed an empty turn.
+                input = withNotes(msg.content.trim() || NO_CAPTION, media.notes);
+                images = media.images;
+              }
               const result = await emit({
                 id: msg.id,
                 trigger: this.name,
-                // An image with no caption still needs a prompt: the model is
-                // told what it is looking at rather than handed an empty turn.
-                input: withNotes(msg.content.trim() || NO_CAPTION, media.notes),
-                images: media.images,
+                input,
+                images,
                 conversationKey: `discord:${msg.channel_id}`,
               });
-              await this.#reply(msg, result);
+              await this.#reply(msg, result, asVoice);
             } finally {
               stopTyping?.();
             }

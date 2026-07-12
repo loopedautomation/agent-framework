@@ -165,6 +165,41 @@ triggers:
   );
 });
 
+Deno.test("triggersFromConfig: voice API keys resolve at startup, not first voice note", () => {
+  const config = parseAgentConfig(`
+handle: voice-bot
+description: voice test agent
+model:
+  provider: openai-compatible
+  id: test-model
+purpose: test
+voice:
+  stt:
+    provider: openai
+  tts:
+    provider: elevenlabs
+triggers:
+  - type: telegram
+`);
+  const env: Record<string, string> = {
+    TELEGRAM_BOT_TOKEN: "123:abc",
+    OPENAI_API_KEY: "sk-1",
+    ELEVENLABS_API_KEY: "el-1",
+  };
+  assertEquals(triggersFromConfig(config, (n) => env[n]).map((t) => t.name), ["telegram"]);
+  const without = (name: string) => (n: string) => n === name ? undefined : env[n];
+  assertThrows(
+    () => triggersFromConfig(config, without("OPENAI_API_KEY")),
+    Error,
+    "OPENAI_API_KEY",
+  );
+  assertThrows(
+    () => triggersFromConfig(config, without("ELEVENLABS_API_KEY")),
+    Error,
+    "ELEVENLABS_API_KEY",
+  );
+});
+
 Deno.test("cron trigger fires with its configured prompt on a stable serial lane", async () => {
   const events: { input: string; serialKey?: string }[] = [];
   const results: string[] = [];
