@@ -20,9 +20,26 @@ export interface ToolCall {
   arguments: string;
 }
 
-/** One turn in a conversation: user input, assistant output, or a tool result. */
+/** An image the model can look at, carried alongside the text of a user turn. */
+export interface ImageContent {
+  /** The image's media type. Only formats every provider dialect accepts. */
+  mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+  /** The image bytes, base64-encoded, with no `data:` prefix. */
+  data: string;
+}
+
+/**
+ * One turn in a conversation: user input, assistant output, or a tool result.
+ *
+ * `content` is a string on every role, and images ride beside it rather than
+ * turning it into a block union. That keeps every reader of a message — the
+ * compactor, the redactor, the session store, the REPL — working on text, and
+ * confines multimodality to the two places that have to know about it: the
+ * trigger that resolves the bytes and the provider that ships them. The model
+ * answers in text, so only the user turn carries images (Plan 14).
+ */
 export type Message =
-  | { role: "user"; content: string }
+  | { role: "user"; content: string; images?: ImageContent[] }
   | { role: "assistant"; content: string; toolCalls?: ToolCall[] }
   | { role: "tool"; toolCallId: string; content: string };
 

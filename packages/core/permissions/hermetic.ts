@@ -100,11 +100,13 @@ function modelHosts(model: ModelConfig): string[] {
 function triggerHosts(trigger: TriggerConfig, listenHost: string): string[] {
   switch (trigger.type) {
     case "discord":
-      // REST API, plus the gateway socket /gateway/bot hands back.
-      return ["discord.com", "gateway.discord.gg"];
+      // REST API, the gateway socket /gateway/bot hands back, and the CDN an
+      // uploaded image is fetched from (Plan 14).
+      return ["discord.com", "gateway.discord.gg", "cdn.discordapp.com", "media.discordapp.net"];
     case "slack":
-      // Web API, plus Socket Mode's two published websocket endpoints.
-      return ["slack.com", "wss-primary.slack.com", "wss-backup.slack.com"];
+      // Web API, Socket Mode's two published websocket endpoints, and the host
+      // serving token-gated file downloads (Plan 14).
+      return ["slack.com", "wss-primary.slack.com", "wss-backup.slack.com", "files.slack.com"];
     case "telegram":
       return ["api.telegram.org"];
     case "webhook":

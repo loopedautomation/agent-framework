@@ -25,9 +25,14 @@ interface WireToolCall {
   function: { name: string; arguments: string };
 }
 
+/** The array form of `content`, which this dialect only accepts on user turns. */
+type WirePart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 interface WireMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
+  content: string | WirePart[] | null;
   tool_calls?: WireToolCall[];
   tool_call_id?: string;
 }
@@ -38,7 +43,22 @@ function toWireMessages(system: string | undefined, messages: Message[]): WireMe
   for (const m of messages) {
     switch (m.role) {
       case "user":
-        wire.push({ role: "user", content: m.content });
+        // A turn with no images keeps sending a bare string. The array form is
+        // what this dialect wants for images, but plenty of openai-compatible
+        // proxies only ever implemented the string, and an agent that sends no
+        // images should never find out which kind it is talking to.
+        wire.push({
+          role: "user",
+          content: m.images?.length
+            ? [
+              ...m.images.map((image): WirePart => ({
+                type: "image_url",
+                image_url: { url: `data:${image.mediaType};base64,${image.data}` },
+              })),
+              { type: "text", text: m.content },
+            ]
+            : m.content,
+        });
         break;
       case "assistant":
         wire.push({

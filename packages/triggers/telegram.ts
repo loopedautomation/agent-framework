@@ -1,5 +1,12 @@
-import { logError, logInfo } from "@looped/core";
-import type { AgentEvent, CommandSpec, RunResult, Trigger } from "@looped/core";
+import { logError, logInfo, resolveAttachments, withNotes } from "@looped/core";
+import type {
+  AgentEvent,
+  Attachment,
+  CommandSpec,
+  MediaLimits,
+  RunResult,
+  Trigger,
+} from "@looped/core";
 import { NO_REPLY, splitMessage } from "./text.ts";
 
 // A deliberately minimal Telegram Bot API client: getMe, getUpdates
@@ -11,11 +18,106 @@ import { NO_REPLY, splitMessage } from "./text.ts";
 
 const LIMIT = 4096; // Telegram's hard cap per message
 
+/** A photo variant: Telegram renders one upload at several sizes and sends them all. */
+export interface TelegramPhotoSize {
+  file_id: string;
+  file_unique_id: string;
+  width: number;
+  height: number;
+  file_size?: number;
+}
+
 export interface TelegramMessage {
   message_id: number;
   chat: { id: number; type: string; title?: string; username?: string };
   from?: { id: number; is_bot?: boolean; username?: string };
   text?: string;
+  /** A photo's or document's text arrives here; `text` is empty on those messages. */
+  caption?: string;
+  /** Size variants of one photo, smallest first. */
+  photo?: TelegramPhotoSize[];
+  /** Anything sent "as a file" — including images, which keep their real mime type. */
+  document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number };
+  voice?: { file_id: string; duration: number; mime_type?: string; file_size?: number };
+  audio?: {
+    file_id: string;
+    duration: number;
+    file_name?: string;
+    mime_type?: string;
+    file_size?: number;
+  };
+  video?: {
+    file_id: string;
+    duration: number;
+    file_name?: string;
+    mime_type?: string;
+    file_size?: number;
+  };
+}
+
+/** The text a message carries, wherever Telegram chose to put it. */
+function messageText(msg: TelegramMessage): string | undefined {
+  const text = (msg.text ?? msg.caption)?.trim();
+  return text ? text : undefined;
+}
+
+/** Whether the message carries anything the agent should be told about. */
+function hasMedia(msg: TelegramMessage): boolean {
+  return Boolean(msg.photo?.length || msg.document || msg.voice || msg.audio || msg.video);
+}
+
+/**
+ * The variants of a photo are the same picture at several resolutions; the
+ * biggest one the caps allow is the one worth spending tokens on. Telegram
+ * orders them smallest first, so walk back from the end. When none fits, the
+ * smallest still goes through: {@linkcode resolveAttachments} turns it into an
+ * honest "over the limit" line rather than dropping the photo in silence.
+ */
+export function pickPhoto(
+  variants: TelegramPhotoSize[],
+  maxBytes: number,
+): TelegramPhotoSize | undefined {
+  if (!variants.length) return undefined;
+  const fits = variants.findLast((v) => v.file_size === undefined || v.file_size <= maxBytes);
+  return fits ?? variants[0];
+}
+
+/**
+ * Everything the message carried, as attachments the core resolver understands.
+ * Voice, audio and video are handed over with their real media type and never
+ * fetched — they are not images, so they come back as note lines and the agent
+ * can say plainly that it cannot listen to or watch them (Plan 14 defers voice).
+ */
+export function telegramAttachments(
+  msg: TelegramMessage,
+  maxImageBytes: number,
+  download: (fileId: string) => Promise<Uint8Array>,
+): Attachment[] {
+  const attachments: Attachment[] = [];
+
+  const photo = msg.photo?.length ? pickPhoto(msg.photo, maxImageBytes) : undefined;
+  if (photo) {
+    // A photo has no name or mime on the wire: Telegram always re-encodes to JPEG.
+    attachments.push({
+      filename: `photo_${photo.file_unique_id}.jpg`,
+      mediaType: "image/jpeg",
+      size: photo.file_size,
+      fetch: () => download(photo.file_id),
+    });
+  }
+
+  const files = [msg.document, msg.voice, msg.audio, msg.video];
+  for (const file of files) {
+    if (!file) continue;
+    attachments.push({
+      filename: "file_name" in file ? file.file_name : undefined,
+      mediaType: file.mime_type,
+      size: file.file_size,
+      fetch: () => download(file.file_id),
+    });
+  }
+
+  return attachments;
 }
 
 /** Message filters shared by {@linkcode shouldHandle} and {@linkcode TelegramTriggerOptions}. */
@@ -42,8 +144,10 @@ export function shouldHandle(
     opts.fromUsers?.length &&
     !opts.fromUsers.some((u) => u === String(from.id) || u === from.username)
   ) return false;
-  const text = msg.text?.trim();
-  if (!text) return false;
+  // A photo carries its words in `caption`, and often carries none at all —
+  // requiring `text` here is what used to drop every image on the floor.
+  const text = messageText(msg);
+  if (!text && !hasMedia(msg)) return false;
   if (opts.chats?.length) {
     const match = opts.chats.some((c) =>
       c === String(msg.chat.id) || c === msg.chat.username || c === msg.chat.title ||
@@ -54,7 +158,7 @@ export function shouldHandle(
   // A private chat addresses the bot by definition; mentions only gate groups.
   if (
     opts.requireMention && msg.chat.type !== "private" &&
-    !msg.text!.includes(`@${botUsername}`)
+    !(text ?? "").includes(`@${botUsername}`)
   ) return false;
   return true;
 }
@@ -80,7 +184,12 @@ export interface TelegramTriggerOptions extends TelegramFilterOptions {
   allowSilence?: boolean;
   /** Slash commands to register via setMyCommands, so clients offer a native picker with descriptions. */
   commands?: CommandSpec[];
+  /** What an inbound image may cost; from the agent's `limits:` block. */
+  media?: MediaLimits;
 }
+
+/** The schema's defaults, so a trigger built by hand still has a ceiling. */
+const DEFAULT_MEDIA: MediaLimits = { maxImageBytes: 5_000_000, maxImagesPerMessage: 4 };
 
 /**
  * Long-polls the Telegram Bot API and wakes the agent on matching messages,
@@ -106,6 +215,48 @@ export class TelegramTrigger implements Trigger {
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,
     });
+  }
+
+  /**
+   * Bytes of an uploaded file, in the two hops the Bot API insists on: getFile
+   * resolves a file_id to a path that expires in an hour, and the path is
+   * served from a different url shape than the JSON methods (/file/bot<token>/…
+   * rather than /bot<token>/<method>), on the same host.
+   */
+  async #download(fileId: string): Promise<Uint8Array> {
+    const res = await this.#api("getFile", { file_id: fileId });
+    if (!res.ok) {
+      await res.body?.cancel();
+      throw new Error(`getFile failed (${res.status})`);
+    }
+    const path = (await res.json()).result?.file_path;
+    if (!path) throw new Error("getFile returned no file_path");
+
+    const file = await fetch(
+      `https://api.telegram.org/file/bot${this.#opts.token}/${path}`,
+    );
+    if (!file.ok) {
+      await file.body?.cancel();
+      throw new Error(`file download failed (${file.status})`);
+    }
+    return new Uint8Array(await file.arrayBuffer());
+  }
+
+  /** The prompt text and the images for one message: caption, files, and honesty about the rest. */
+  async #media(msg: TelegramMessage) {
+    const limits = this.#opts.media ?? DEFAULT_MEDIA;
+    const attachments = telegramAttachments(
+      msg,
+      limits.maxImageBytes,
+      (fileId) => this.#download(fileId),
+    );
+    const { images, notes } = await resolveAttachments(attachments, limits);
+
+    // An image with no caption is still a message; an empty prompt would leave
+    // the model guessing why it was woken at all.
+    const text = messageText(msg) ??
+      (images.length ? "(an image arrived with no caption)" : "");
+    return { input: withNotes(text, notes), images };
   }
 
   /** Proactive send (agent-created schedules): "telegram:<chatId>" keys are ours. */
@@ -140,7 +291,7 @@ export class TelegramTrigger implements Trigger {
       // t.me/c/<internal>/<message_id> links to).
       const id = String(msg.chat.id);
       const link = id.startsWith("-100") ? `\nhttps://t.me/c/${id.slice(4)}/${msg.message_id}` : "";
-      const quoted = (msg.text ?? "").replace(/\n/g, "\n> ");
+      const quoted = (messageText(msg) ?? "(no text)").replace(/\n/g, "\n> ");
       body = `On this message:${link}\n> ${quoted}\n\n${body}`;
     }
 
@@ -211,12 +362,16 @@ export class TelegramTrigger implements Trigger {
           // Dispatch without awaiting: ordering within a chat is the
           // service's job (per-conversation FIFO), and holding the poll
           // loop here would make one long run block every other chat.
-          emit({
-            id: String(update.update_id),
-            trigger: this.name,
-            input: stripCommandMention(msg.text!, botUsername),
-            conversationKey: `telegram:${msg.chat.id}`,
-          })
+          this.#media(msg)
+            .then(({ input, images }) =>
+              emit({
+                id: String(update.update_id),
+                trigger: this.name,
+                input: stripCommandMention(input, botUsername),
+                ...(images.length ? { images } : {}),
+                conversationKey: `telegram:${msg.chat.id}`,
+              })
+            )
             .then((result) => this.#reply(msg, result))
             .catch((err) => {
               logError(`telegram: run failed: ${(err as Error).message}`);

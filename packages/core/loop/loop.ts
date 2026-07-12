@@ -1,5 +1,5 @@
 import type { AgentConfig } from "../config/schema.ts";
-import type { Message, Provider, Usage } from "../providers/types.ts";
+import type { ImageContent, Message, Provider, Usage } from "../providers/types.ts";
 import { ProviderError } from "../providers/types.ts";
 import type { NativeTool } from "../tools/types.ts";
 
@@ -70,6 +70,8 @@ export interface RunOptions {
   tools?: NativeTool[] | (() => NativeTool[]);
   /** The user-facing input that starts the run. */
   input: string;
+  /** Images the input arrived with, for a model that can look at them (Plan 14). */
+  images?: ImageContent[];
   /** Prior conversation, e.g. from session memory. */
   history?: Message[];
   /** Observes progress as the run happens; see {@linkcode RunEvent}. */
@@ -99,7 +101,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   const resolveTools = typeof opts.tools === "function"
     ? opts.tools
     : () => opts.tools as NativeTool[] ?? [];
-  const messages: Message[] = [...(opts.history ?? []), { role: "user", content: input }];
+  const messages: Message[] = [
+    ...(opts.history ?? []),
+    { role: "user", content: input, images: opts.images?.length ? opts.images : undefined },
+  ];
   const usage: Usage = { inputTokens: 0, outputTokens: 0 };
   const redact = opts.redact ?? ((text: string) => text);
   // Every event carries text a secret could ride out on: a tool result, the

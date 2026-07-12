@@ -20,12 +20,20 @@ async function until(cond: () => boolean, ms = 4000): Promise<void> {
   }
 }
 
+const MEDIA = { maxImageBytes: 5_000_000, maxImagesPerMessage: 4 };
+
+/** A 1x1 PNG, base64. */
+const PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
 function fakeGraph() {
   const state = {
     tokenBodies: [] as string[],
     unread: true,
     replies: [] as { id: string; comment: string }[],
     patched: [] as string[],
+    listPaths: [] as string[],
+    attachmentsFetched: [] as string[],
   };
   const message = {
     id: "m1",
@@ -37,7 +45,10 @@ function fakeGraph() {
     receivedDateTime: "2026-07-07T09:00:00Z",
     body: { contentType: "text", content: "Please file the attached invoice." },
     internetMessageHeaders: [{ name: "Message-ID", value: "<orig@example.com>" }],
-    attachments: [{ name: "invoice.pdf", contentType: "application/pdf", size: 1234 }],
+    attachments: [
+      { id: "a_pdf", name: "invoice.pdf", contentType: "application/pdf", size: 1234 },
+      { id: "a_png", name: "shot.png", contentType: "image/png", size: 70 },
+    ],
   };
   let port = 0;
   const server = Deno.serve({ port: 0, onListen: (a) => (port = a.port) }, async (req) => {
@@ -48,7 +59,13 @@ function fakeGraph() {
     }
     if (url.pathname === "/me") return Response.json({ mail: "Assistant@Example.com" });
     if (url.pathname === "/me/mailFolders/inbox/messages") {
+      state.listPaths.push(url.search);
       return Response.json({ value: state.unread ? [message] : [] });
+    }
+    const att = url.pathname.match(/^\/me\/messages\/m1\/attachments\/(\w+)\/\$value$/);
+    if (att) {
+      state.attachmentsFetched.push(att[1]);
+      return new Response(Uint8Array.from(atob(PNG_BASE64), (c) => c.charCodeAt(0)));
     }
     if (req.method === "POST" && url.pathname === "/me/messages/m1/reply") {
       state.replies.push({ id: "m1", comment: (await req.json()).comment });
@@ -75,6 +92,7 @@ Deno.test("outlook: unread mail wakes the agent, reply goes to the conversation,
     folder: "inbox",
     pollSeconds: 60, // the first poll is immediate; the test never waits an interval
     fromAddresses: ["petra@example.com"],
+    media: MEDIA,
     apiBase: api.apiBase(),
     tokenUrl: `${api.apiBase()}/token`,
   });
@@ -97,6 +115,14 @@ Deno.test("outlook: unread mail wakes the agent, reply goes to the conversation,
   assert(events[0].input.includes("Please file the attached invoice."));
   assert(events[0].input.includes("invoice.pdf"));
   assertEquals(events[0].conversationKey, "email:outlook:c1");
+
+  // The list stays cheap: ids, not contentBytes. Only the image is fetched.
+  assert(api.state.listPaths[0].includes("attachments(%24select%3Did%2Cname"));
+  assert(!api.state.listPaths[0].includes("contentBytes"));
+  assertEquals(api.state.attachmentsFetched, ["a_png"]);
+  assertEquals(events[0].images?.length, 1);
+  assertEquals(events[0].images?.[0].data, PNG_BASE64);
+  assert(!events[0].input.includes("shot.png"));
   assertEquals(api.state.replies[0].comment, "Filed it.");
   assertEquals(api.state.patched, ["m1"]);
 });

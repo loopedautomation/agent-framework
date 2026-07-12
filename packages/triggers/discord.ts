@@ -1,5 +1,12 @@
-import { logError, logInfo } from "@looped/core";
-import type { AgentEvent, CommandSpec, RunResult, Trigger } from "@looped/core";
+import { logError, logInfo, resolveAttachments, withNotes } from "@looped/core";
+import type {
+  AgentEvent,
+  Attachment,
+  CommandSpec,
+  MediaLimits,
+  RunResult,
+  Trigger,
+} from "@looped/core";
 import { isSilence, NO_REPLY, splitMessage } from "./text.ts";
 
 // A deliberately minimal Discord gateway client: identify, heartbeat,
@@ -48,6 +55,47 @@ export interface DiscordMessage {
   content: string;
   author: { id: string; bot?: boolean; username?: string };
   mentions?: { id: string }[];
+  attachments?: DiscordAttachment[];
+}
+
+/** A file Discord hung off a message (the fields this trigger reads). */
+export interface DiscordAttachment {
+  id: string;
+  filename: string;
+  url: string;
+  proxy_url?: string;
+  content_type?: string;
+  size?: number;
+}
+
+/** The caps a hand-built trigger uses when the config's `limits:` block isn't threaded in. */
+const DEFAULT_MEDIA: MediaLimits = { maxImageBytes: 5_000_000, maxImagesPerMessage: 4 };
+
+/** What the agent reads when a post is nothing but an attachment. */
+const NO_CAPTION = "(the user sent this with no message text.)";
+
+/** The message's files, as the media layer sees them. */
+export function discordAttachments(
+  msg: DiscordMessage,
+  fetchFn: typeof fetch = fetch,
+): Attachment[] {
+  return (msg.attachments ?? []).map((a) => ({
+    filename: a.filename,
+    // Discord reports "image/png; charset=..." on some uploads; the media layer
+    // matches the bare type.
+    mediaType: a.content_type?.split(";")[0].trim(),
+    size: a.size,
+    fetch: async () => {
+      // The CDN url is signed and carries its own expiry — a bot token on it
+      // buys nothing.
+      const res = await fetchFn(a.url);
+      if (!res.ok) {
+        await res.body?.cancel();
+        throw new Error(`discord CDN returned ${res.status}`);
+      }
+      return new Uint8Array(await res.arrayBuffer());
+    },
+  }));
 }
 
 /**
@@ -86,7 +134,9 @@ export function shouldHandle(
     opts.fromUsers?.length &&
     !opts.fromUsers.some((u) => u === msg.author.id || u === msg.author.username)
   ) return false;
-  if (!msg.content.trim()) return false;
+  // A screenshot posted with no caption is still someone talking to the agent;
+  // only a message carrying neither text nor a file is nothing to wake for.
+  if (!msg.content.trim() && !msg.attachments?.length) return false;
   // A DM addresses the bot by definition: the channel filter and the mention
   // gate only apply to guild messages (DMs carry no guild_id).
   const isDM = !msg.guild_id;
@@ -110,6 +160,8 @@ export interface DiscordTriggerOptions extends DiscordFilterOptions {
   showTyping?: boolean;
   /** Slash commands to register as Discord application commands, so clients offer a native picker with descriptions. */
   commands?: CommandSpec[];
+  /** What an image posted in a channel may cost (from the agent's `limits:` block). */
+  media?: MediaLimits;
 }
 
 /** A Discord slash-command interaction (the fields this trigger reads). */
@@ -397,10 +449,17 @@ export class DiscordTrigger implements Trigger {
               })
               : undefined;
             try {
+              const media = await resolveAttachments(
+                discordAttachments(msg),
+                this.#opts.media ?? DEFAULT_MEDIA,
+              );
               const result = await emit({
                 id: msg.id,
                 trigger: this.name,
-                input: msg.content,
+                // An image with no caption still needs a prompt: the model is
+                // told what it is looking at rather than handed an empty turn.
+                input: withNotes(msg.content.trim() || NO_CAPTION, media.notes),
+                images: media.images,
                 conversationKey: `discord:${msg.channel_id}`,
               });
               await this.#reply(msg, result);

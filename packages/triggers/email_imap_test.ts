@@ -151,15 +151,38 @@ function fakeSmtp() {
   );
 }
 
+const MEDIA = { maxImageBytes: 5_000_000, maxImagesPerMessage: 4 };
+
+/** A 1x1 PNG, base64. */
+const PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
 const RAW_ALLOWED = [
   "From: Petra Lang <petra@example.com>",
   "To: agent@example.com",
   "Subject: Invoice 42",
   "Message-Id: <orig@example.com>",
   "Date: Tue, 07 Jul 2026 09:00:00 +0000",
+  'Content-Type: multipart/mixed; boundary="b"',
+  "",
+  "--b",
   "Content-Type: text/plain; charset=utf-8",
   "",
   "Please file the attached invoice.",
+  "--b",
+  'Content-Type: image/png; name="shot.png"',
+  'Content-Disposition: attachment; filename="shot.png"',
+  "Content-Transfer-Encoding: base64",
+  "",
+  PNG_BASE64,
+  "--b",
+  'Content-Type: application/pdf; name="invoice.pdf"',
+  'Content-Disposition: attachment; filename="invoice.pdf"',
+  "Content-Transfer-Encoding: base64",
+  "",
+  btoa("%PDF-fake"),
+  "--b--",
+  "",
 ].join("\r\n");
 
 const RAW_STRANGER = [
@@ -184,6 +207,7 @@ Deno.test("imap: unseen mail wakes the agent, reply threads over SMTP, cursor ad
     folder: "INBOX",
     pollSeconds: 60, // the first poll is immediate; the test never waits an interval
     fromAddresses: ["*@example.com"],
+    media: MEDIA,
     tls: false,
     smtpTls: false,
   });
@@ -204,6 +228,13 @@ Deno.test("imap: unseen mail wakes the agent, reply threads over SMTP, cursor ad
   assert(events[0].input.includes("Please file the attached invoice."));
   assertEquals(events[0].conversationKey, "email:<orig@example.com>");
   assertEquals(imap.seen.toSorted(), [7, 9]);
+
+  // The MIME already held the bytes: the PNG is an image, the PDF is prose.
+  assertEquals(events[0].images?.length, 1);
+  assertEquals(events[0].images?.[0].mediaType, "image/png");
+  assertEquals(events[0].images?.[0].data, PNG_BASE64);
+  assert(events[0].input.includes("[attachment: invoice.pdf (application/pdf, 9 bytes)"));
+  assert(!events[0].input.includes("shot.png"));
 
   const sent = smtp.dataLines[0].join("\n");
   assert(sent.includes("Subject: Re: Invoice 42"));
@@ -238,6 +269,7 @@ Deno.test("imap: a bad login fails start, ahead of the first message", async () 
     folder: "INBOX",
     pollSeconds: 60,
     fromAddresses: ["*"],
+    media: MEDIA,
     tls: false,
     smtpTls: false,
   });

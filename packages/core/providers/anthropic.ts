@@ -20,6 +20,7 @@ export interface AnthropicOptions {
 
 type ContentBlock =
   | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
   | { type: "tool_use"; id: string; name: string; input: unknown }
   | { type: "tool_result"; tool_use_id: string; content: string };
 
@@ -42,6 +43,14 @@ function toWireMessages(messages: Message[]): WireMessage[] {
   for (const m of messages) {
     switch (m.role) {
       case "user":
+        // Images before the text: the model reads the prompt as being about
+        // what it was just shown, which is the order the user sent them in.
+        for (const image of m.images ?? []) {
+          push("user", {
+            type: "image",
+            source: { type: "base64", media_type: image.mediaType, data: image.data },
+          });
+        }
         push("user", { type: "text", text: m.content });
         break;
       case "assistant":

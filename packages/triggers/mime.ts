@@ -23,8 +23,18 @@ export interface ParsedMail {
   text?: string;
   /** The first text/html body found. */
   html?: string;
-  /** Attachment metadata; contents are dropped (Plan 7 open question). */
-  attachments: { filename?: string; contentType?: string; size?: number }[];
+  /** Attachments, bytes included — an IMAP FETCH already carried them here. */
+  attachments: ParsedAttachment[];
+}
+
+/** One attachment out of a parsed message. */
+export interface ParsedAttachment {
+  filename?: string;
+  contentType?: string;
+  /** Length of {@linkcode bytes} — what the file weighs, not what the wire carried. */
+  size: number;
+  /** The decoded file. */
+  bytes: Uint8Array;
 }
 
 const latin1 = new TextDecoder("latin1");
@@ -141,10 +151,12 @@ function walkPart(headers: Record<string, string>, body: string, mail: ParsedMai
   }
 
   if (filename || disposition?.trim().toLowerCase().startsWith("attachment")) {
+    const bytes = decodeTransfer(body, headers["content-transfer-encoding"]);
     mail.attachments.push({
       filename: filename ? decodeWords(filename) : undefined,
       contentType: mediaType,
-      size: body.length,
+      size: bytes.length,
+      bytes,
     });
     return;
   }
@@ -158,8 +170,10 @@ function walkPart(headers: Record<string, string>, body: string, mail: ParsedMai
   }
 
   // Anything else without a filename still gets counted, so the rendered
-  // input mentions that the message carried more than its text.
-  mail.attachments.push({ contentType: mediaType, size: body.length });
+  // input mentions that the message carried more than its text. An inline
+  // image (a screenshot pasted into the mail) arrives on this branch.
+  const bytes = decodeTransfer(body, headers["content-transfer-encoding"]);
+  mail.attachments.push({ contentType: mediaType, size: bytes.length, bytes });
 }
 
 /** Parse a raw RFC 822 message into headers, bodies and attachment metadata. */
