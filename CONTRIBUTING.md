@@ -47,6 +47,10 @@ Work on a branch and keep commits focused. Your PR description should explain wh
 
 This is alpha software, and the README says so up front: interfaces, config fields and defaults are all still moving. If your change breaks something on purpose, say so in the PR description rather than working around it.
 
+## Releasing
+
+The process lives in [RELEASING.md](RELEASING.md): version numbers exist in four source files that must agree (the release workflows refuse a tag that contradicts them), plus the action and image tags pinned throughout the docs and examples. It is written to be followed end to end, by an agent or a human.
+
 ## Reporting bugs and proposing features
 
 Open a GitHub issue. There's no template yet, so a clear repro (for a bug) or a description of the problem you're trying to solve (for a feature) is enough to get started.
