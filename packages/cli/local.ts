@@ -46,15 +46,42 @@ export async function validate(path: string) {
   }
 }
 
-/** The plain line-at-a-time loop, for piped stdin and dumb terminals. */
+/**
+ * One line of input at a time: prompt() on a TTY, a plain line reader when
+ * stdin is piped — prompt() returns null off-TTY, so a piped run would
+ * otherwise exit after the header without handling anything.
+ */
+async function* inputLines(): AsyncGenerator<string> {
+  if (Deno.stdin.isTerminal()) {
+    while (true) {
+      const input = prompt("you>");
+      if (input === null) return; // EOF
+      yield input;
+    }
+  }
+  const decoder = new TextDecoder();
+  let buf = "";
+  for await (const chunk of Deno.stdin.readable) {
+    buf += decoder.decode(chunk, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop()!;
+    for (const line of lines) yield line.endsWith("\r") ? line.slice(0, -1) : line;
+  }
+  if (buf) yield buf;
+}
+
+/**
+ * The plain line-at-a-time loop, for piped stdin and dumb terminals. Piped
+ * stdin makes this a one-shot mode: each line is handled in order and the
+ * process exits on EOF, so `echo "..." | af run agent.yaml` runs once and
+ * leaves — what CI wants.
+ */
 async function repl(config: AgentConfig, service: AgentService, name: string) {
   console.log(
     `${name} (${config.handle}) is listening (model: ${config.model.id}; /help for commands; ctrl-d to exit)`,
   );
   const conversationKey = config.memory?.scope === "thread" ? "cli" : undefined;
-  while (true) {
-    const input = prompt("you>");
-    if (input === null) break; // EOF
+  for await (const input of inputLines()) {
     if (!input.trim()) continue;
     const result = await service.handle({
       id: crypto.randomUUID(),
