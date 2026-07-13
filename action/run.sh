@@ -11,15 +11,15 @@ log="$tmp/af-transcript.log"
 
 # A trigger makes the agent a long-lived service, and a CI step has to end.
 if grep -qE '^triggers[[:space:]]*:' "$agent"; then
-  echo "::error::$agent has triggers — the action is for one-shot agents; deploy service agents with af up" >&2
+  echo "::error::$agent has triggers - the action is for one-shot agents; deploy service agents with af up" >&2
   exit 1
 fi
 
 args=("$agent")
 
-# The container gets only an env file, never the runner's environment, so the
-# secrets input becomes one. An explicit env-file input is the base; secrets
-# lines are appended and win.
+# The container's environment comes from an env file alone, so the secrets
+# input becomes one. An explicit env-file input is the base; secrets lines
+# are appended and win.
 envfile="${AF_ACTION_ENV_FILE:-}"
 if [ -n "${AF_ACTION_SECRETS:-}" ]; then
   merged="$tmp/af-action.env"
@@ -48,7 +48,7 @@ printf '%s\n' "$prompt" | af run "${args[@]}" | tee "$log"
 # The agent names itself, so learn the name from the header first.
 name="$(sed -nE 's/^(.+) \(.+\) is listening \(model: .+/\1/p' "$log" | head -1)"
 if [ -z "$name" ]; then
-  echo "::error::no repl header in the transcript — the run never reached the agent (transcript above)" >&2
+  echo "::error::no repl header in the transcript - the run never reached the agent (transcript above)" >&2
   exit 1
 fi
 
