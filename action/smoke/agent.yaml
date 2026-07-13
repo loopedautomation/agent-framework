@@ -1,0 +1,9 @@
+# The smoke-test agent for .github/workflows/action-smoke.yml. No triggers
+# (one-shot), no API key (openai-compatible with a base_url needs none).
+# 172.17.0.1 is the docker bridge gateway on the Linux runner — the mock
+# model backend (mock.ts) listens there on the host.
+handle: action-smoke
+description: Proves the GitHub Action can run an agent one-shot in CI.
+model: { provider: openai-compatible, id: mock-model, base_url: "http://172.17.0.1:8734/v1" }
+purpose: You are a test agent. Answer with what your tools return.
+memory: { scope: thread }

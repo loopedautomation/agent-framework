@@ -11,6 +11,7 @@
     "docker-run",
     "docker-compose",
     "cli",
+    "github-actions",
     "---Triggers---",
     "webhook",
     "cron",

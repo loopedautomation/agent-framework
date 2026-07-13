@@ -1,0 +1,62 @@
+name: Action smoke test
+
+# Proves the GitHub Action (action.yml) end to end, with no secrets: build
+# the agent image from this checkout, start the mock model backend on the
+# host, run the action against it and check the reply came back as a step
+# output. The action installs the published af CLI from JSR; the --image
+# override is what lets the run use the image built from source.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "action.yml"
+      - "action/**"
+      - "packages/**"
+      - "images/**"
+      - ".github/workflows/action-smoke.yml"
+  pull_request:
+    paths:
+      - "action.yml"
+      - "action/**"
+      - "packages/**"
+      - "images/**"
+      - ".github/workflows/action-smoke.yml"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Build the agent image from source
+        run: docker build -f images/agent/Dockerfile -t looped/agent:smoke .
+
+      - name: Start the mock model backend
+        run: |
+          deno run --allow-net action/smoke/mock.ts &
+          sleep 1
+          curl -sf -X POST http://127.0.0.1:8734/v1/chat/completions \
+            -d '{"messages":[{"role":"user","content":"ping"}]}' >/dev/null
+
+      - name: Run the action against the mock
+        id: agent
+        uses: ./
+        with:
+          agent: action/smoke/agent.yaml
+          prompt: "what time is it?"
+          image: looped/agent:smoke
+
+      - name: The reply came through
+        env:
+          REPLY: ${{ steps.agent.outputs.reply }}
+          STATUS: ${{ steps.agent.outputs.status }}
+        run: |
+          echo "status: $STATUS"
+          echo "reply:  $REPLY"
+          test "$STATUS" = ok
+          grep -q "12:00 UTC" <<<"$REPLY"
