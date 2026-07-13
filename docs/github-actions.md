@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: loopedautomation/agent-framework@v0.7.1
+      - uses: loopedautomation/agent-framework@v0.8.0
         id: agent
         with:
           agent: ./triage/agent.yaml
@@ -62,6 +62,6 @@ Every run on a fresh runner is a fresh agent: first boot, new name, empty [memor
 ## Requirements and notes
 
 - **A Linux runner with Docker** — `ubuntu-latest` has it. macOS runners don't ship Docker.
-- **Pin the action to a release tag** — the current release, `@v0.7.1` for example — the same way you'd pin any action. The framework's releases and the action share one repo, so one tag names both.
+- **Pin the action to a release tag** — the current release, `@v0.8.0` for example — the same way you'd pin any action. The framework's releases and the action share one repo, so one tag names both.
 - **Budgets still apply**: the run is bounded by the agent's step cap, so a confused agent costs a known amount, not a job timeout.
 - **[Test cases](testing.md) belong in CI too.** `af test` isn't part of this action — it runs on the host, not in Docker — but it's one install away in a sibling step, and its exit code already speaks CI.
