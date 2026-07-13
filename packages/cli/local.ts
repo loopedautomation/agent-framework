@@ -8,6 +8,7 @@ import {
   hermeticPlan,
   IMAGE_ENV,
   resolveAgentConfig,
+  runGrantAdvisories,
   type RunResult,
   startStatusServer,
 } from "@looped/core";
@@ -35,6 +36,9 @@ export async function validate(path: string) {
   } else {
     console.log(`  sandbox:  net open below the app layer; egress bounded by the container`);
     for (const blocker of plan.blockers) console.log(`  ${warn("⚠")} ${blocker}`);
+  }
+  for (const advisory of runGrantAdvisories(config.permissions?.run)) {
+    console.log(`  ${warn("⚠")} ${advisory.advice}`);
   }
   const refs = collectEnvRefs(config);
   if (refs.length) {
@@ -162,6 +166,10 @@ export async function runLocal(path: string) {
     await reexecHermetic(config, path);
   } else if (Deno.env.get("AF_HERMETIC")) {
     console.log(dim(`sandbox: hermetic — ${hermeticPlan(config).hosts.join(", ")}`));
+  }
+
+  for (const advisory of runGrantAdvisories(config.permissions?.run)) {
+    console.log(`${warn("⚠")} ${advisory.advice}`);
   }
 
   const baseDir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ".";

@@ -49,6 +49,10 @@ The check reads the executable at the head of each segment; it can't see into th
 - interpreters: `python -c`, `node -e`, `deno run`
 - wrappers and exec flags: `env`, `xargs`, `timeout`, `find -exec`
 
+The same blindness applies to network-capable binaries (`curl`, `ssh`, even `gh`): a subprocess opens its own sockets, so its traffic never touches `permissions.net` — until per-agent egress enforcement lands, such a grant is an implicit `net: ["*"]` with the container as the only boundary.
+
+`af validate` and startup both warn about these grants — shells, interpreters, wrappers, and known network-capable binaries — naming what each one gives up. The grants stay legal (a `gh` agent is a perfectly good agent); the warning exists so the cost is a choice, not a surprise.
+
 Grant the specific CLIs the agent's job needs (`gh`, `grep`) and let the [container](#the-layers) be the backstop. The MCP examples that launch a server via `bash -c` are unaffected: that spawn comes from your config at startup and never passes through `run_bash`.
 
 ## Scoped environments
