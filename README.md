@@ -6,6 +6,12 @@ Looped AF lets you build contained, event-driven AI agents. Define your agent in
 >
 > We're still in the early stages, and things are going to change and sometimes break: interfaces, config fields, defaults. If you're up for experimenting anyway, welcome. File an issue when something breaks and we'll sort it out.
 
+## 🎥 Demo
+<a href="https://www.youtube.com/watch?v=2t-z1yFO9lE" target="_blank">
+<img width="1920" height="1080" alt="introducing-thumbnail-with-play-button" src="https://github.com/user-attachments/assets/15f58b18-4653-4ced-b0bb-0baae2b9df67" />
+</a>
+
+[Watch on youtube](https://www.youtube.com/watch?v=2t-z1yFO9lE)
 
 The idea is that an agent is a file: one file that says the job, the model, the tools and the boundaries. Deploying it is a `docker run`. Agents run as long-lived services that sit in a loop; each one waits for an event (a Discord message, a webhook, a cron tick), does its one job, delivers the result and then goes idle.
 
