@@ -1,0 +1,85 @@
+# The Looped AF GitHub Action — a one-shot, stateless agent run in CI.
+#
+#   - uses: loopedautomation/agent-framework@v0.7.1
+#     with:
+#       agent: ./agent.yaml
+#       prompt: "Summarize the open issues."
+#       secrets: |
+#         OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+#
+# The agent runs in Docker exactly as it does everywhere else: the action
+# installs the af CLI, pipes the prompt into `af run` and hands the reply
+# back as a step output. Piped stdin makes the run one-shot — one line in,
+# one reply out, exit on EOF. See docs/github-actions.md.
+name: "Run a Looped AF agent"
+description: "One-shot, stateless run of a Looped AF agent in Docker: pipe a prompt in, get the reply as a step output."
+author: "Looped Automation"
+branding:
+  icon: repeat
+  color: purple
+
+inputs:
+  agent:
+    description: "Path to the agent file, relative to the workspace. The agent must have no triggers — a trigger makes it a long-lived service, and a CI step has to end."
+    required: false
+    default: "agent.yaml"
+  prompt:
+    description: "What to ask the agent. One run, one reply; newlines collapse to spaces."
+    required: true
+  secrets:
+    description: >-
+      KEY=VALUE lines for the container's env file — the provider API key and
+      whatever else the agent file's env refs name. The container gets only
+      this file, never the runner's environment.
+    required: false
+    default: ""
+  env-file:
+    description: "Path to an existing env file. Lines from the secrets input are appended to it (later lines win)."
+    required: false
+    default: ""
+  af-version:
+    description: "The @looped/af version to install from JSR."
+    required: false
+    default: "latest"
+  image:
+    description: "Container image override, passed through as `af run --image`."
+    required: false
+    default: ""
+
+outputs:
+  reply:
+    description: "The agent's reply."
+    value: ${{ steps.run.outputs.reply }}
+  status:
+    description: "How the run ended: ok, error_max_steps or error_provider."
+    value: ${{ steps.run.outputs.status }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Deno
+      uses: denoland/setup-deno@v2
+      with:
+        deno-version: v2.x
+
+    - name: Install af
+      shell: bash
+      env:
+        AF_VERSION: ${{ inputs.af-version }}
+      run: |
+        spec="jsr:@looped/af"
+        if [ "$AF_VERSION" != "latest" ]; then spec="$spec@$AF_VERSION"; fi
+        deno install -g -f --allow-read --allow-write --allow-env --allow-net \
+          --allow-run=bash,docker,deno -n af "$spec"
+        echo "${DENO_INSTALL_ROOT:-$HOME/.deno}/bin" >> "$GITHUB_PATH"
+
+    - name: Run the agent
+      id: run
+      shell: bash
+      env:
+        AF_ACTION_AGENT: ${{ inputs.agent }}
+        AF_ACTION_PROMPT: ${{ inputs.prompt }}
+        AF_ACTION_SECRETS: ${{ inputs.secrets }}
+        AF_ACTION_ENV_FILE: ${{ inputs.env-file }}
+        AF_ACTION_IMAGE: ${{ inputs.image }}
+      run: '"$GITHUB_ACTION_PATH/action/run.sh"'
