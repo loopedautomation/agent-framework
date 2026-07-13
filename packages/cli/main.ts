@@ -40,6 +40,7 @@ import { runLocal, validate } from "./local.ts";
 import { test } from "./test_command.ts";
 import { accent, dim, table } from "./style.ts";
 import { update } from "./update_command.ts";
+import { maybeNotifyUpdate } from "./update_check.ts";
 
 // Set by the image: `run` executes in-process (the container entrypoint)
 // instead of spawning docker inside docker.
@@ -79,6 +80,7 @@ function usage(): string {
 async function main() {
   const [command, arg] = Deno.args;
   const rest = () => parseCommandArgs(Deno.args.slice(1));
+  await maybeNotifyUpdate({ command, inContainer: IN_CONTAINER });
   try {
     switch (command) {
       case "init":
