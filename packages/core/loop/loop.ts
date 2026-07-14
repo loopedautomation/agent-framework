@@ -38,7 +38,9 @@ export type RunEvent =
   /** Interim commentary the model produced alongside tool calls (not the final reply). */
   | { type: "assistant"; content: string }
   | { type: "tool_call"; name: string; arguments: string }
-  | { type: "tool_result"; name: string; content: string; durationMs: number };
+  | { type: "tool_result"; name: string; content: string; durationMs: number }
+  /** A compaction summarize call has started, replacing `messageCount` messages. */
+  | { type: "compaction"; phase: "start"; messageCount: number };
 
 /** What one run produced. */
 export interface RunResult {
