@@ -85,6 +85,11 @@ export {
   type PermissionKind,
   permissionsToDenoFlags,
 } from "./permissions/engine.ts";
+export {
+  runGrantAdvisories,
+  type RunGrantAdvisory,
+  type RunGrantHazard,
+} from "./permissions/advisories.ts";
 export type { ImageContent } from "./providers/types.ts";
 export {
   type Attachment,

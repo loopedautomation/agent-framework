@@ -26,7 +26,7 @@ The threat this enables is prompt injection plus exfiltration. A hostile Discord
 
 **4. `run` matches by basename.** `run: [gh]` allows any executable named `gh` anywhere on disk. Fine inside the hardened base image; a derived image that widens writable paths should know the container is the backstop.
 
-**5. Static analysis stops at the head of each segment.** `extractExecutables` (`packages/core/tools/bash.ts`) checks the first word of each pipe/chain segment and can't see into arguments. Granting a program that runs other programs (`bash`, `sh`, `python`, `node`, `env`, `xargs`, `find` with `-exec`) collapses the allowlist: `bash -c '<anything>'` passes with the inner command carried as an opaque string. Nothing warns about this today; `docs/permissions.md` documents it and the `af validate` warning below is the enforcement direction.
+**5. Static analysis stops at the head of each segment.** `extractExecutables` (`packages/core/tools/bash.ts`) checks the first word of each pipe/chain segment and can't see into arguments. Granting a program that runs other programs (`bash`, `sh`, `python`, `node`, `env`, `xargs`, `find` with `-exec`) collapses the allowlist: `bash -c '<anything>'` passes with the inner command carried as an opaque string. `docs/permissions.md` documents it, and `af validate` / startup now warn per entry (`runGrantAdvisories`, `packages/core/permissions/advisories.ts`) — the structural gap itself remains.
 
 ## Shipped: hermetic mode
 
@@ -75,7 +75,7 @@ Gap 2 has two halves. Where a server can *talk to* is a network question, deferr
 ## Sequencing
 
 1. ~~**Hermetic mode.**~~ Shipped. Entrypoint re-exec plus host derivation from config.
-2. **`af validate` warnings (#48).** Flag `run:` entries that defeat the model: shells and interpreters, wrappers, network-capable binaries.
+2. ~~**`af validate` warnings (#48).**~~ Shipped. `af validate` and startup flag `run:` entries that defeat the model: shells and interpreters, wrappers, network-capable binaries.
 3. **MCP permission axis.** Design first; likely its own plan or an amendment here.
 
 Per-agent egress enforcement lands with Looped Agents (Plan 5), on the platform's network layer.
@@ -83,5 +83,5 @@ Per-agent egress enforcement lands with Looped Agents (Plan 5), on the platform'
 ## Open questions
 
 - ~~Is hermetic mode auto-detected, opt-in, or auto-detected with an opt-out?~~ Auto-detected. A change of enforcement layer is never silent: startup, `af flags` and `af validate` each name the grant that caused it.
-- Should `af validate` refuse, or only warn loudly, on shells and interpreters (bash, sh, python, node) in `permissions.run`, which collapse the allowlist entirely (gap 5)?
+- ~~Should `af validate` refuse, or only warn loudly, on shells and interpreters (bash, sh, python, node) in `permissions.run`, which collapse the allowlist entirely (gap 5)?~~ Warn, don't refuse: the container is still the backstop, some jobs legitimately need an interpreter, and a refusal would push people to rename binaries rather than to think. The warning names the cost per entry.
 - When the platform enforces `permissions.net` at its network layer, where do denied egress attempts land? They should reach the same audit trail as engine denials.
