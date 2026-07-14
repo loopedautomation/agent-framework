@@ -361,8 +361,14 @@ class Tui {
     const startedAt = performance.now();
     let step = 0;
     let tool: string | undefined;
+    let compacting: number | undefined;
     const status = () => {
       const elapsed = ((performance.now() - startedAt) / 1000).toFixed(0);
+      if (compacting !== undefined) {
+        return `${paint(FRAMES[this.#frame++ % FRAMES.length], ACCENT)} ${
+          dim(`compacting ${compacting} messages · ${elapsed}s`)
+        }`;
+      }
       const doing = tool ? `⚙ ${tool}` : "thinking";
       return `${paint(FRAMES[this.#frame++ % FRAMES.length], ACCENT)} ${
         dim(`${doing} · step ${step} · ${elapsed}s`)
@@ -393,6 +399,10 @@ class Tui {
             ),
           );
           tool = undefined;
+          this.#paintRun(status());
+          break;
+        case "compaction":
+          compacting = e.messageCount;
           this.#paintRun(status());
           break;
       }

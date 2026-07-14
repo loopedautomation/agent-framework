@@ -346,6 +346,7 @@ export class AgentService {
     command: ParsedCommand,
     event: AgentEvent,
     identityName: string,
+    onEvent?: (event: RunEvent) => void,
   ): Promise<RunResult> {
     let reply: string;
     switch (command.name) {
@@ -390,7 +391,7 @@ export class AgentService {
         break;
       }
       case "compact":
-        return await this.#compactCommand(event);
+        return await this.#compactCommand(event, onEvent);
       default:
         // Unreachable: parseCommand only matches known names.
         reply = `Unknown command /${command.name}.`;
@@ -433,7 +434,10 @@ export class AgentService {
    * consumer), then the transcript is replaced by the marker + summary pair
    * plus the most recent turns. Guards reply without spending a call.
    */
-  async #compactCommand(event: AgentEvent): Promise<RunResult> {
+  async #compactCommand(
+    event: AgentEvent,
+    onEvent?: (event: RunEvent) => void,
+  ): Promise<RunResult> {
     const zero = { inputTokens: 0, outputTokens: 0 };
     const done = (reply: string, steps = 0, usage = zero): RunResult => ({
       status: "ok",
@@ -456,6 +460,7 @@ export class AgentService {
         model: this.config.model.small ?? this.config.model.id,
         system: this.config.purpose,
         history,
+        onEvent,
       });
       if (!compacted) return done("Compaction produced no summary; history is unchanged.", 1);
       this.store.saveMessages(sessionId, compacted.messages);
@@ -486,7 +491,7 @@ export class AgentService {
    * spend ledger and this call costs real tokens. A provider failure is
    * audited and swallowed; it must never disturb the conversation.
    */
-  async #autoCompact(sessionId: number): Promise<void> {
+  async #autoCompact(sessionId: number, onEvent?: (event: RunEvent) => void): Promise<void> {
     const startedAt = new Date().toISOString();
     const history = this.store.loadMessages(sessionId);
     if (isNothingToCompact(history)) return;
@@ -496,6 +501,7 @@ export class AgentService {
         model: this.config.model.small ?? this.config.model.id,
         system: this.config.purpose,
         history,
+        onEvent,
       });
       if (!compacted) return;
       this.store.saveMessages(sessionId, compacted.messages);
@@ -594,7 +600,7 @@ export class AgentService {
       commandSpecs(this.config.commands).map((c) => c.name),
     );
     if (command && BUILTIN_COMMANDS.some((c) => c.name === command.name)) {
-      const result = await this.#runBuiltin(command, event, identity.name);
+      const result = await this.#runBuiltin(command, event, identity.name, opts?.onEvent);
       const useSession = this.config.memory?.scope === "thread" && event.conversationKey;
       const runId = this.store.recordRun({
         sessionId: useSession ? this.store.sessionFor(event.conversationKey!) : undefined,
@@ -723,7 +729,7 @@ export class AgentService {
       sessionId !== undefined && threshold !== undefined && threshold !== false &&
       result.contextTokens !== undefined && result.contextTokens >= threshold
     ) {
-      await this.#autoCompact(sessionId);
+      await this.#autoCompact(sessionId, opts?.onEvent);
     }
     return result;
   }

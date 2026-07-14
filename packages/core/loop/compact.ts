@@ -1,4 +1,5 @@
 import type { Message, Provider, Usage } from "../providers/types.ts";
+import type { RunEvent } from "./loop.ts";
 
 // Compaction: replace a conversation's older history with a model-written
 // summary, keeping the most recent turns verbatim. One code path serves the
@@ -87,9 +88,12 @@ export async function compactTranscript(opts: {
   model: string;
   system: string;
   history: Message[];
+  /** Observes progress for interactive surfaces; see {@linkcode RunEvent}. */
+  onEvent?: (event: RunEvent) => void;
 }): Promise<CompactionResult | undefined> {
   if (isNothingToCompact(opts.history)) return undefined;
   const { head, tail } = splitForCompaction(opts.history);
+  opts.onEvent?.({ type: "compaction", phase: "start", messageCount: head.length });
   const completion = await opts.provider.complete({
     model: opts.model,
     system: opts.system,

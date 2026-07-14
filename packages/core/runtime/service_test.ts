@@ -12,6 +12,7 @@ import {
 } from "../providers/types.ts";
 import { parseAgentConfig } from "../config/load.ts";
 import { COMPACTION_MARKER, COMPACTION_PROMPT } from "../loop/compact.ts";
+import type { RunEvent } from "../loop/loop.ts";
 import { type AgentEvent, AgentService } from "./service.ts";
 
 // Every complete() blocks until the test releases (or fails) it, oldest first.
@@ -232,6 +233,21 @@ Deno.test("service: /compact folds older turns into a summary and keeps the rece
     "msg 3",
     "reply 3",
   ]);
+  await service.stop();
+});
+
+Deno.test("service: /compact emits a compaction event for the TUI's progress line", async () => {
+  const { service, provider } = await makeService();
+  await exchange(service, provider, 3);
+
+  const events: RunEvent[] = [];
+  const p = service.handle(event("c", "/compact", { conversationKey: "k" }), {
+    onEvent: (e) => events.push(e),
+  });
+  await until(() => provider.calls.length === 4, "the summarize call");
+  assertEquals(events, [{ type: "compaction", phase: "start", messageCount: 2 }]);
+  provider.release("the summary");
+  await p;
   await service.stop();
 });
 
