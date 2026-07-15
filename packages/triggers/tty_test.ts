@@ -1,0 +1,184 @@
+// The tty trigger: a WebSocket terminal that streams run progress live —
+// auth (header and browser-subprotocol), streamed frames, session resume,
+// and proactive delivery into an open terminal.
+import { assert, assertEquals } from "@std/assert";
+import {
+  AgentService,
+  type Completion,
+  type CompletionRequest,
+  parseAgentConfig,
+  type Provider,
+} from "@looped/core";
+import { type TtyServerFrame, TtyTrigger } from "./tty.ts";
+import { triggersFromConfig } from "./mod.ts";
+
+function scripted(script: Partial<Completion>[]): Provider {
+  let i = 0;
+  return {
+    id: "mock",
+    complete(_req: CompletionRequest): Promise<Completion> {
+      const c = script[Math.min(i++, script.length - 1)];
+      return Promise.resolve({
+        content: c.content ?? "",
+        toolCalls: c.toolCalls ?? [],
+        stopReason: "end",
+        usage: c.usage ?? { inputTokens: 10, outputTokens: 5 },
+      });
+    },
+  };
+}
+
+const CONFIG = parseAgentConfig(`
+handle: tty-bot
+description: tty trigger test agent
+model:
+  provider: openai-compatible
+  id: test-model
+purpose: You run commands when asked.
+triggers:
+  - type: tty
+    token_env: TTY_TOKEN
+permissions:
+  run: [echo]
+memory:
+  scope: thread
+`);
+
+async function startService(script: Partial<Completion>[]) {
+  const dataDir = await Deno.makeTempDir();
+  const service = new AgentService({
+    config: CONFIG,
+    provider: scripted(script),
+    dataDir,
+    // Skip the naming ritual so the script isn't consumed by it.
+    identity: { name: "tty-bot", isNew: false },
+  });
+  let port = 0;
+  const trigger = new TtyTrigger({
+    path: "/tty",
+    port: 0, // ephemeral; captured via onListen
+    token: "s3cret",
+    handle: "tty-bot",
+    onListen: (addr) => (port = addr.port),
+  });
+  await service.start([trigger]);
+  return { service, trigger, port: () => port };
+}
+
+/** Connect and collect frames until the predicate says the turn is over. */
+function connect(url: string, protocols?: string[]) {
+  const socket = new WebSocket(url, protocols);
+  const frames: TtyServerFrame[] = [];
+  const waiters: Array<{ done: (f: TtyServerFrame) => boolean; resolve: () => void }> = [];
+  socket.onmessage = (msg) => {
+    const frame = JSON.parse(String(msg.data)) as TtyServerFrame;
+    frames.push(frame);
+    for (const w of [...waiters]) {
+      if (w.done(frame)) {
+        waiters.splice(waiters.indexOf(w), 1);
+        w.resolve();
+      }
+    }
+  };
+  const opened = new Promise<void>((resolve, reject) => {
+    socket.onopen = () => resolve();
+    socket.onerror = () => reject(new Error("socket error"));
+  });
+  const until = (done: (f: TtyServerFrame) => boolean) =>
+    new Promise<void>((resolve) => waiters.push({ done, resolve }));
+  return { socket, frames, opened, until };
+}
+
+Deno.test("tty: auth, streamed run frames, and session memory", async () => {
+  const { service, port } = await startService([
+    { toolCalls: [{ id: "c1", name: "run_bash", arguments: '{"command":"echo hello"}' }] },
+    { content: "ran echo: hello" },
+  ]);
+  const base = `ws://127.0.0.1:${port()}/tty`;
+
+  // Plain HTTP request without upgrade → 426.
+  const plain = await fetch(`http://127.0.0.1:${port()}/tty`);
+  assertEquals(plain.status, 426);
+  await plain.body?.cancel();
+
+  // Wrong token → connection refused with 401 (socket errors out).
+  const bad = new WebSocket(base, ["bearer.wrong"]);
+  await new Promise<void>((resolve) => {
+    bad.onerror = () => resolve();
+    bad.onclose = () => resolve();
+  });
+
+  // Browser-style auth: token in the subprotocol; server selects "bearer".
+  const term = connect(`${base}?conversation_id=demo`, ["bearer.s3cret"]);
+  await term.opened;
+  assertEquals(term.socket.protocol, "bearer.s3cret");
+  const helloSeen = term.until((f) => f.type === "hello");
+  const resultSeen = term.until((f) => f.type === "result");
+  term.socket.send(JSON.stringify({ type: "input", text: "run echo hello" }));
+  await helloSeen;
+  await resultSeen;
+
+  const hello = term.frames.find((f) => f.type === "hello");
+  assert(hello && hello.type === "hello");
+  assertEquals(hello.handle, "tty-bot");
+  assertEquals(hello.conversation_id, "demo");
+
+  // The run streamed live: a tool_result frame arrived before the result.
+  const types = term.frames.map((f) => f.type);
+  assert(types.indexOf("tool_result") !== -1, `expected tool_result in ${types}`);
+  assert(types.indexOf("tool_result") < types.indexOf("result"));
+  const result = term.frames.find((f) => f.type === "result");
+  assert(result && result.type === "result");
+  assertEquals(result.status, "ok");
+  assertEquals(result.reply, "ran echo: hello");
+
+  // Session memory landed under the conversation key.
+  const sessionId = service.store.sessionFor("tty:demo");
+  assert(service.store.loadMessages(sessionId).length >= 2);
+
+  term.socket.close();
+  await service.stop();
+});
+
+Deno.test("tty: malformed frames get errors, deliver reaches an open terminal", async () => {
+  const { service, trigger, port } = await startService([{ content: "hi" }]);
+  const term = connect(`ws://127.0.0.1:${port()}/tty?conversation_id=demo`, ["bearer.s3cret"]);
+  await term.opened;
+  await term.until((f) => f.type === "hello");
+
+  const errSeen = term.until((f) => f.type === "error");
+  term.socket.send("not json");
+  await errSeen;
+
+  const err2Seen = term.until((f) => f.type === "error" && f.error.includes("input"));
+  term.socket.send(JSON.stringify({ type: "input", text: "" }));
+  await err2Seen;
+
+  // Proactive delivery: an open terminal on the key gets the message.
+  const msgSeen = term.until((f) => f.type === "message");
+  assertEquals(await trigger.deliver("tty:demo", "reminder!"), true);
+  await msgSeen;
+  const msg = term.frames.find((f) => f.type === "message");
+  assert(msg && msg.type === "message" && msg.text === "reminder!");
+
+  // No terminal on that key → the key is handed to the next trigger.
+  assertEquals(await trigger.deliver("tty:absent", "lost"), false);
+
+  term.socket.close();
+  await service.stop();
+});
+
+Deno.test("triggersFromConfig: builds tty trigger, fails loudly on missing token", () => {
+  const built = triggersFromConfig(CONFIG, (name) => name === "TTY_TOKEN" ? "tok" : undefined);
+  assertEquals(built.length, 1);
+  assertEquals(built[0].name, "tty");
+
+  let threw = false;
+  try {
+    triggersFromConfig(CONFIG, () => undefined);
+  } catch (err) {
+    threw = true;
+    assert((err as Error).message.includes("TTY_TOKEN"));
+  }
+  assert(threw);
+});

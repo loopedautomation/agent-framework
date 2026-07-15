@@ -19,6 +19,7 @@
     "slack",
     "telegram",
     "email",
+    "tty",
     "---Guides---",
     "email-assistant",
     "observer-agents",

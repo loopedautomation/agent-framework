@@ -1,0 +1,59 @@
+---
+title: "TTY"
+description: "The REPL as a network surface: an authenticated WebSocket that streams the agent's run live, for hosted terminals and embedded chat."
+---
+
+Without triggers, `af run` drops into an interactive REPL — but that REPL lives on the container's stdin, which a hosted platform can't reach. The `tty` trigger exposes the same interactive conversation over a WebSocket, so a control plane can attach a browser terminal to a deployed agent and the operator can chat with it live: every step, tool call and result streams as it happens.
+
+```yaml
+triggers:
+  - type: tty
+    # path: /tty         (default)
+    # port: 8090         (default)
+    token_env: TTY_TOKEN   # required — bearer auth, deny by default
+```
+
+Because it's a trigger like any other, it composes: an agent with `tty` alongside `discord` or `cron` is still a long-lived service, and the terminal is a window into that same agent — same memory, same permissions, same audit trail.
+
+## The protocol
+
+Connect with a WebSocket to `ws://host:8090/tty`. Auth is the usual bearer token, presented one of two ways:
+
+- an `authorization: Bearer <token>` header, for server-side clients;
+- the WebSocket subprotocol `bearer.<token>`, for browsers (which cannot set headers on a WebSocket). The server selects the subprotocol back on the upgrade.
+
+Every frame in both directions is JSON. On connect the server announces itself:
+
+```json
+{"type": "hello", "handle": "task-bot", "conversation_id": "8b1f..."}
+```
+
+Send input:
+
+```json
+{"type": "input", "text": "what's on the calendar today?"}
+```
+
+While the run executes, the server streams its progress — the same events the local TUI renders:
+
+```json
+{"type": "step", "n": 1}
+{"type": "assistant", "content": "Let me check."}
+{"type": "tool_call", "name": "run_bash", "arguments": "{...}"}
+{"type": "tool_result", "name": "run_bash", "content": "...", "durationMs": 412}
+{"type": "result", "status": "ok", "reply": "Two meetings: ...", "steps": 2}
+```
+
+`result` ends the turn; send the next `input` after it. One run at a time per socket — an `input` sent mid-run gets `{"type": "error", ...}` back rather than queueing.
+
+## Sessions
+
+Each connection is a conversation. By default a new socket gets a fresh `conversation_id`; pass `?conversation_id=<id>` in the URL to resume one across reconnects (with `memory.scope: thread` — [Memory](memory.md)), so a dropped connection or a page reload picks up where it left off.
+
+Agent-created [schedules](scheduling.md) deliver into the terminal too: a reminder created in a tty conversation arrives as `{"type": "message", "text": "..."}` on any socket attached to that conversation. If no terminal is attached when it fires, delivery falls through to the agent's other triggers as usual.
+
+## Exposure
+
+`token_env` is required — an unauthenticated terminal contradicts deny-by-default, and this surface can drive everything the agent is permitted to do. The token resolves at startup; a missing env var fails right there. As with the webhook trigger, put a TLS-terminating proxy in front of the port before exposing it (`wss://`), and treat the token like the credential it is.
+
+Every turn lands in the agent's [run history](docker-run.md#persistence-the-data-volume) with its status, steps and tokens, exactly like a run from any other trigger.

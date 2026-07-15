@@ -120,6 +120,19 @@ const WebhookTriggerSchema = z.strictObject({
   "HTTP trigger: POST {path} with authorization: Bearer <token> and JSON body {input, conversation_id?}; responds with the run result.",
 );
 
+const TtyTriggerSchema = z.strictObject({
+  type: z.literal("tty"),
+  path: z.string().startsWith("/").default("/tty").describe(
+    "HTTP path that accepts the WebSocket upgrade.",
+  ),
+  port: z.number().int().min(1).max(65535).default(8090).describe("Port to listen on."),
+  token_env: z.string().min(1).describe(
+    "Env var holding the bearer token clients must present (authorization header, or the Sec-WebSocket-Protocol value `bearer.<token>` from browsers). Required: an unauthenticated terminal contradicts deny-by-default.",
+  ),
+}).describe(
+  "Interactive terminal over WebSocket: connect to {path}, send {type: 'input', text} frames and receive the run's progress and result as JSON frames. This is the REPL as a network surface, for hosted terminals.",
+);
+
 const ResendEmailTriggerSchema = z.strictObject({
   type: z.literal("email"),
   transport: z.literal("resend").describe(
@@ -274,6 +287,7 @@ const TriggerSchema = z.discriminatedUnion("type", [
   SlackTriggerSchema,
   TelegramTriggerSchema,
   WebhookTriggerSchema,
+  TtyTriggerSchema,
   EmailTriggerSchema,
   GithubTriggerSchema,
   CronTriggerSchema,
@@ -289,6 +303,9 @@ const VoiceSttSchema = z.strictObject({
   api_key_env: z.string().min(1).optional().describe(
     "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
   ),
+  base_url: z.string().min(1).optional().describe(
+    "Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs.",
+  ),
 }).describe("How incoming voice notes become text.");
 
 const VoiceTtsSchema = z.strictObject({
@@ -303,6 +320,9 @@ const VoiceTtsSchema = z.strictObject({
   ),
   api_key_env: z.string().min(1).optional().describe(
     "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
+  ),
+  base_url: z.string().min(1).optional().describe(
+    "Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs.",
   ),
 }).describe(
   "How replies to voice notes become speech. Omit this block and voice notes get text replies.",
@@ -692,6 +712,18 @@ export interface WebhookTriggerConfig {
   token_env: string;
 }
 
+/** A tty trigger: an interactive terminal session over WebSocket — the REPL as a network surface. */
+export interface TtyTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "tty";
+  /** HTTP path that accepts the WebSocket upgrade. */
+  path: string;
+  /** Port to listen on. */
+  port: number;
+  /** Env var holding the bearer token clients must present. */
+  token_env: string;
+}
+
 /** An email trigger on the Resend pushed transport: signed inbound-mail webhooks wake the agent. */
 export interface ResendEmailTriggerConfig {
   /** Discriminant for TriggerConfig. */
@@ -825,6 +857,7 @@ export type TriggerConfig =
   | SlackTriggerConfig
   | TelegramTriggerConfig
   | WebhookTriggerConfig
+  | TtyTriggerConfig
   | EmailTriggerConfig
   | GithubTriggerConfig
   | CronTriggerConfig;
@@ -837,6 +870,8 @@ export interface VoiceSttConfig {
   model?: string;
   /** Name of the env var holding the API key. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider. */
   api_key_env?: string;
+  /** Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs. */
+  base_url?: string;
 }
 
 /** How replies to voice notes become speech. */
@@ -849,6 +884,8 @@ export interface VoiceTtsConfig {
   voice?: string;
   /** Name of the env var holding the API key. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider. */
   api_key_env?: string;
+  /** Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs. */
+  base_url?: string;
 }
 
 /** Live voice in Discord voice channels: the realtime model and its budget (plan 15). */

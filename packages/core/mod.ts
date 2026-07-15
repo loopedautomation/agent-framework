@@ -33,6 +33,7 @@ export {
   type SlackTriggerConfig,
   type TelegramTriggerConfig,
   type TriggerConfig,
+  type TtyTriggerConfig,
   type VoiceConfig,
   type VoiceSttConfig,
   type VoiceTtsConfig,

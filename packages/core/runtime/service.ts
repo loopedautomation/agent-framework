@@ -90,8 +90,12 @@ function formatUptime(totalSeconds: number): string {
 export interface Trigger {
   /** Trigger name, e.g. "discord" or "cron". */
   readonly name: string;
-  /** Connect and begin emitting events; `emit` runs the agent and resolves with the result. */
-  start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void>;
+  /**
+   * Connect and begin emitting events; `emit` runs the agent and resolves
+   * with the result. Interactive triggers pass `opts.onEvent` to stream the
+   * run's inner-loop progress to their surface.
+   */
+  start(emit: (event: AgentEvent, opts?: HandleOptions) => Promise<RunResult>): Promise<void>;
   /** Disconnect and stop emitting. */
   stop(): Promise<void>;
   /**
@@ -738,7 +742,7 @@ export class AgentService {
   async start(triggers: Trigger[]) {
     this.#triggers = triggers;
     for (const trigger of triggers) {
-      await trigger.start((event) => this.handle(event));
+      await trigger.start((event, opts) => this.handle(event, opts));
     }
   }
 
