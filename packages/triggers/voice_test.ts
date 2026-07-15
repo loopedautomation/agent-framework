@@ -63,6 +63,20 @@ Deno.test("transcribe: openai gets a multipart upload with the default model", a
   assertEquals(file.name, "voice.ogg");
 });
 
+Deno.test("voice: openai engines honor a base_url override", async () => {
+  const { calls, fetchFn } = recordingFetch(new Response(JSON.stringify({ text: "hi" })));
+  const engines = voiceFromConfig(
+    {
+      stt: { provider: "openai", base_url: "https://gw.example/api/v1/" },
+      tts: { provider: "openai", base_url: "https://gw.example/api/v1" },
+    },
+    () => "sk-1",
+    fetchFn,
+  );
+  assertEquals(await engines!.transcribe(clip), "hi");
+  assertEquals(calls[0].url, "https://gw.example/api/v1/audio/transcriptions"); // trailing slash trimmed
+});
+
 Deno.test("transcribe: elevenlabs authenticates with xi-api-key and model_id", async () => {
   const { calls, fetchFn } = recordingFetch(new Response(JSON.stringify({ text: "hi" })));
   const engines = voiceFromConfig(
