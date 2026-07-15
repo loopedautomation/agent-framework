@@ -121,6 +121,8 @@ export {
   type SlackSlashCommand,
   SlackTrigger,
   type SlackTriggerOptions,
+  type SlackVerifyOptions,
+  verifySlackSignature,
 } from "./slack.ts";
 export {
   stripCommandMention,
@@ -376,16 +378,32 @@ export function triggersFromConfig(
         if (!token) {
           throw new Error(`slack trigger: bot token env var ${t.token_env} is not set`);
         }
-        const appToken = getEnv(t.app_token_env);
-        if (!appToken) {
-          throw new Error(
-            `slack trigger: app-level token env var ${t.app_token_env} is not set (Socket Mode needs it)`,
-          );
+        // Each transport resolves only its own secret — startup, not first event.
+        let appToken: string | undefined;
+        let signingSecret: string | undefined;
+        if (t.transport === "events_api") {
+          signingSecret = getEnv(t.signing_secret_env);
+          if (!signingSecret) {
+            throw new Error(
+              `slack trigger: signing secret env var ${t.signing_secret_env} is not set (every Events API delivery is verified)`,
+            );
+          }
+        } else {
+          appToken = getEnv(t.app_token_env);
+          if (!appToken) {
+            throw new Error(
+              `slack trigger: app-level token env var ${t.app_token_env} is not set (Socket Mode needs it)`,
+            );
+          }
         }
         triggers.push(
           new SlackTrigger({
             token,
             appToken,
+            transport: t.transport,
+            port: t.port,
+            path: t.path,
+            signingSecret,
             channels: t.channels,
             requireMention: t.require_mention,
             fromUsers: t.from_users,
@@ -404,6 +422,10 @@ export function triggersFromConfig(
         triggers.push(
           new TelegramTrigger({
             token,
+            transport: t.transport,
+            port: t.port,
+            path: t.path,
+            publicUrl: t.public_url,
             chats: t.chats,
             requireMention: t.require_mention,
             fromUsers: t.from_users,

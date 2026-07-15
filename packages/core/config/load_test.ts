@@ -420,3 +420,51 @@ Deno.test("rejects command names no platform would register", () => {
     ConfigError,
   );
 });
+
+Deno.test("chat transports: defaults apply, telegram webhook demands a https public_url", () => {
+  const telegram = parseAgentConfig(MINIMAL + "triggers:\n  - type: telegram\n");
+  assertEquals(telegram.triggers?.[0], {
+    type: "telegram",
+    transport: "polling",
+    token_env: "TELEGRAM_BOT_TOKEN",
+    allow_silence: false,
+    port: 8080,
+    path: "/telegram",
+  });
+
+  const webhook = parseAgentConfig(
+    MINIMAL +
+      "triggers:\n  - type: telegram\n    transport: webhook\n    public_url: https://agent.example\n",
+  ).triggers?.[0];
+  assert(webhook?.type === "telegram" && webhook.public_url === "https://agent.example");
+
+  // webhook without a public_url has nowhere to register; polling with one
+  // would silently never use it; Telegram only delivers over HTTPS.
+  assertThrows(
+    () => parseAgentConfig(MINIMAL + "triggers:\n  - type: telegram\n    transport: webhook\n"),
+    ConfigError,
+  );
+  assertThrows(
+    () =>
+      parseAgentConfig(
+        MINIMAL + "triggers:\n  - type: telegram\n    public_url: https://agent.example\n",
+      ),
+    ConfigError,
+  );
+  assertThrows(
+    () =>
+      parseAgentConfig(
+        MINIMAL +
+          "triggers:\n  - type: telegram\n    transport: webhook\n    public_url: http://agent.example\n",
+      ),
+    ConfigError,
+  );
+
+  const slack = parseAgentConfig(
+    MINIMAL + "triggers:\n  - type: slack\n    transport: events_api\n",
+  ).triggers?.[0];
+  assert(slack?.type === "slack");
+  assertEquals(slack.transport, "events_api");
+  assertEquals(slack.path, "/slack");
+  assertEquals(slack.signing_secret_env, "SLACK_SIGNING_SECRET");
+});

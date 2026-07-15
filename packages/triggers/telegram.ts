@@ -10,14 +10,29 @@ import type {
 import { NO_REPLY, splitMessage } from "./text.ts";
 import { SPEAK_MAX_CHARS, type VoiceEngines } from "./voice.ts";
 
-// A deliberately minimal Telegram Bot API client: getMe, getUpdates
-// long-polling, sendMessage. No library, no webhook, no public endpoint —
-// the poll loop is the whole transport (Plan 0, principle 8).
+// A deliberately minimal Telegram Bot API client: getMe, sendMessage, and one
+// of two delivery transports. polling (the default) long-polls getUpdates —
+// no library, no public endpoint (Plan 0, principle 8). webhook registers a
+// setWebhook URL and serves inbound HTTPS deliveries instead, so the process
+// can sleep between messages on scale-to-zero hosts: Telegram queues
+// undelivered updates (~24h) and retries, and the retry is what wakes the
+// host back up.
 //
 // Note: bots have privacy mode ON by default — in groups they only receive
 // mentions and replies until it's disabled via @BotFather (/setprivacy).
 
 const LIMIT = 4096; // Telegram's hard cap per message
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ab = enc.encode(a);
+  const bb = enc.encode(b);
+  let diff = ab.length ^ bb.length;
+  for (let i = 0; i < Math.max(ab.length, bb.length); i++) {
+    diff |= (ab[i % ab.length] ?? 0) ^ (bb[i % bb.length] ?? 0);
+  }
+  return diff === 0;
+}
 
 /** A photo variant: Telegram renders one upload at several sizes and sends them all. */
 export interface TelegramPhotoSize {
@@ -185,6 +200,18 @@ export interface TelegramTriggerOptions extends TelegramFilterOptions {
   allowSilence?: boolean;
   /** Slash commands to register via setMyCommands, so clients offer a native picker with descriptions. */
   commands?: CommandSpec[];
+  /** How updates arrive: getUpdates long polling (default) or an inbound webhook. */
+  transport?: "polling" | "webhook";
+  /** Webhook transport: TCP port to listen on. */
+  port?: number;
+  /** Webhook transport: URL path Telegram POSTs updates to. */
+  path?: string;
+  /** Webhook transport: the externally reachable HTTPS base registered via setWebhook. */
+  publicUrl?: string;
+  /** Injectable for tests: 0 picks an ephemeral port. */
+  onListen?: (addr: { port: number }) => void;
+  /** Injectable for tests: a fake Bot API server stands in for api.telegram.org. */
+  apiBase?: string;
   /** What an inbound image may cost; from the agent's `limits:` block. */
   media?: MediaLimits;
   /** Voice engines: transcribe incoming voice notes, and (with speak) voice the replies back. */
@@ -205,16 +232,21 @@ export class TelegramTrigger implements Trigger {
   #stopped = false;
   #abort?: AbortController;
   #backoffMs = 1_000;
+  #server?: Deno.HttpServer;
 
   /** Create the trigger; nothing polls until {@linkcode start}. */
   constructor(opts: TelegramTriggerOptions) {
     this.#opts = opts;
   }
 
+  get #apiBase(): string {
+    return this.#opts.apiBase ?? "https://api.telegram.org";
+  }
+
   async #api(method: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
     // FormData rides as multipart (sendVoice uploads); everything else as JSON.
     const form = body instanceof FormData;
-    return await fetch(`https://api.telegram.org/bot${this.#opts.token}/${method}`, {
+    return await fetch(`${this.#apiBase}/bot${this.#opts.token}/${method}`, {
       method: "POST",
       headers: form ? undefined : { "content-type": "application/json" },
       body: form ? body : body === undefined ? undefined : JSON.stringify(body),
@@ -238,7 +270,7 @@ export class TelegramTrigger implements Trigger {
     if (!path) throw new Error("getFile returned no file_path");
 
     const file = await fetch(
-      `https://api.telegram.org/file/bot${this.#opts.token}/${path}`,
+      `${this.#apiBase}/file/bot${this.#opts.token}/${path}`,
     );
     if (!file.ok) {
       await file.body?.cancel();
@@ -374,7 +406,7 @@ export class TelegramTrigger implements Trigger {
     }
   }
 
-  /** Verify the token and start the getUpdates long-poll loop. */
+  /** Verify the token and start the configured transport: poll loop or webhook server. */
   async start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
     const res = await this.#api("getMe");
     if (!res.ok) {
@@ -397,8 +429,94 @@ export class TelegramTrigger implements Trigger {
         await set.body?.cancel();
       }
     }
+    if (this.#opts.transport === "webhook") {
+      await this.#serve(me.username, emit);
+      logInfo(`telegram trigger connected as @${me.username} (webhook)`);
+      return;
+    }
+    // A leftover webhook registration makes getUpdates answer 409 forever;
+    // deleting it is idempotent, so polling always clears its own path.
+    const del = await this.#api("deleteWebhook");
+    await del.body?.cancel();
     logInfo(`telegram trigger connected as @${me.username}`);
     this.#poll(me.username, emit); // long-poll loop runs for the service's lifetime
+  }
+
+  /** One matching update wakes the agent; shared by both transports. */
+  #dispatch(
+    update: { update_id: number; message?: TelegramMessage },
+    botUsername: string,
+    emit: (event: AgentEvent) => Promise<RunResult>,
+  ) {
+    const msg = update.message;
+    if (!msg || !shouldHandle(msg, botUsername, this.#opts)) return;
+    // Dispatch without awaiting: ordering within a chat is the service's job
+    // (per-conversation FIFO), and holding the transport here would make one
+    // long run block every other chat.
+    this.#media(msg)
+      .then(async ({ input, images, asVoice }) => {
+        const result = await emit({
+          id: String(update.update_id),
+          trigger: this.name,
+          input: stripCommandMention(input, botUsername),
+          ...(images.length ? { images } : {}),
+          conversationKey: `telegram:${msg.chat.id}`,
+        });
+        await this.#reply(msg, result, asVoice);
+      })
+      .catch((err) => {
+        logError(`telegram: run failed: ${(err as Error).message}`);
+      });
+  }
+
+  /**
+   * Register the webhook and serve Telegram's deliveries. Each request must
+   * carry the secret token minted here — Telegram echoes it back in the
+   * X-Telegram-Bot-Api-Secret-Token header, and anything else is not Telegram.
+   * Deliveries are acked immediately; the run happens after, because Telegram
+   * redelivers slow responses and a run outlasts any HTTP timeout.
+   */
+  async #serve(botUsername: string, emit: (event: AgentEvent) => Promise<RunResult>) {
+    const path = this.#opts.path ?? "/telegram";
+    const secret = crypto.randomUUID();
+    const url = (this.#opts.publicUrl ?? "").replace(/\/+$/, "") + path;
+    const res = await this.#api("setWebhook", {
+      url,
+      secret_token: secret,
+      allowed_updates: ["message"],
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`telegram: setWebhook failed (${res.status}): ${detail}`);
+    }
+    await res.body?.cancel();
+
+    this.#server = Deno.serve({
+      port: this.#opts.port ?? 8080,
+      onListen: this.#opts.onListen ?? ((addr) => {
+        logInfo(`telegram trigger listening on :${addr.port}${path} for ${url}`);
+      }),
+    }, async (req) => {
+      const reqUrl = new URL(req.url);
+      if (reqUrl.pathname !== path) return Response.json({ error: "not found" }, { status: 404 });
+      if (req.method !== "POST") {
+        return Response.json({ error: "method not allowed" }, { status: 405 });
+      }
+      const token = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
+      if (!timingSafeEqual(token, secret)) {
+        return Response.json({ error: "unauthorized" }, { status: 401 });
+      }
+      let update: { update_id?: number; message?: TelegramMessage };
+      try {
+        update = await req.json();
+      } catch {
+        return Response.json({ error: "body must be JSON" }, { status: 400 });
+      }
+      if (typeof update.update_id === "number") {
+        this.#dispatch({ update_id: update.update_id, message: update.message }, botUsername, emit);
+      }
+      return Response.json({ ok: true });
+    });
   }
 
   async #poll(botUsername: string, emit: (event: AgentEvent) => Promise<RunResult>) {
@@ -420,25 +538,7 @@ export class TelegramTrigger implements Trigger {
         this.#backoffMs = 1_000;
         for (const update of updates) {
           offset = update.update_id + 1;
-          const msg = update.message;
-          if (!msg || !shouldHandle(msg, botUsername, this.#opts)) continue;
-          // Dispatch without awaiting: ordering within a chat is the
-          // service's job (per-conversation FIFO), and holding the poll
-          // loop here would make one long run block every other chat.
-          this.#media(msg)
-            .then(async ({ input, images, asVoice }) => {
-              const result = await emit({
-                id: String(update.update_id),
-                trigger: this.name,
-                input: stripCommandMention(input, botUsername),
-                ...(images.length ? { images } : {}),
-                conversationKey: `telegram:${msg.chat.id}`,
-              });
-              await this.#reply(msg, result, asVoice);
-            })
-            .catch((err) => {
-              logError(`telegram: run failed: ${(err as Error).message}`);
-            });
+          this.#dispatch(update, botUsername, emit);
         }
       } catch (err) {
         if (this.#stopped) return;
@@ -450,10 +550,14 @@ export class TelegramTrigger implements Trigger {
     }
   }
 
-  /** Stop the poll loop and abort the in-flight getUpdates request. */
-  stop(): Promise<void> {
+  /**
+   * Stop the transport. The webhook registration is deliberately left in
+   * place: Telegram queues undelivered updates (~24h) and retries, and on a
+   * scale-to-zero host that retry is what boots the machine back up.
+   */
+  async stop(): Promise<void> {
     this.#stopped = true;
     this.#abort?.abort();
-    return Promise.resolve();
+    await this.#server?.shutdown();
   }
 }
