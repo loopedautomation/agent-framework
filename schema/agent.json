@@ -273,6 +273,39 @@
             "description": "HTTP trigger: POST {path} with authorization: Bearer <token> and JSON body {input, conversation_id?}; responds with the run result."
           },
           {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "tty"
+              },
+              "path": {
+                "default": "/tty",
+                "description": "HTTP path that accepts the WebSocket upgrade.",
+                "type": "string",
+                "pattern": "^\\/.*"
+              },
+              "port": {
+                "default": 8090,
+                "description": "Port to listen on.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "token_env": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Env var holding the bearer token clients must present (authorization header, or the Sec-WebSocket-Protocol value `bearer.<token>` from browsers). Required: an unauthenticated terminal contradicts deny-by-default."
+              }
+            },
+            "required": [
+              "type",
+              "token_env"
+            ],
+            "additionalProperties": false,
+            "description": "Interactive terminal over WebSocket: connect to {path}, send {type: 'input', text} frames and receive the run's progress and result as JSON frames. This is the REPL as a network surface, for hosted terminals."
+          },
+          {
             "oneOf": [
               {
                 "type": "object",
@@ -664,6 +697,11 @@
               "description": "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
               "type": "string",
               "minLength": 1
+            },
+            "base_url": {
+              "description": "Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs.",
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [
@@ -695,6 +733,11 @@
             },
             "api_key_env": {
               "description": "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
+              "type": "string",
+              "minLength": 1
+            },
+            "base_url": {
+              "description": "Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs.",
               "type": "string",
               "minLength": 1
             }

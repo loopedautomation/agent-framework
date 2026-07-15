@@ -23,6 +23,7 @@ import { GmailEmailTrigger } from "./email_gmail.ts";
 import { OutlookEmailTrigger } from "./email_outlook.ts";
 import { SlackTrigger } from "./slack.ts";
 import { TelegramTrigger } from "./telegram.ts";
+import { TtyTrigger } from "./tty.ts";
 import { voiceFromConfig } from "./voice.ts";
 
 export type {
@@ -52,6 +53,7 @@ export type {
   ToolCall,
   Trigger,
   TriggerConfig,
+  TtyTriggerConfig,
   Usage,
   VoiceConfig,
   VoiceSttConfig,
@@ -61,6 +63,12 @@ export type {
 export { NO_REPLY } from "./text.ts";
 export { CronTrigger, type CronTriggerOptions } from "./cron.ts";
 export { WebhookTrigger, type WebhookTriggerOptions } from "./webhook.ts";
+export {
+  type TtyClientFrame,
+  type TtyServerFrame,
+  TtyTrigger,
+  type TtyTriggerOptions,
+} from "./tty.ts";
 export {
   addressAllowed,
   EmailTrigger,
@@ -180,6 +188,18 @@ export function triggersFromConfig(
           );
         }
         triggers.push(new WebhookTrigger({ path: t.path, port: t.port, token }));
+        break;
+      }
+      case "tty": {
+        const token = getEnv(t.token_env);
+        if (!token) {
+          throw new Error(
+            `tty trigger: token env var ${t.token_env} is not set (required for bearer auth)`,
+          );
+        }
+        triggers.push(
+          new TtyTrigger({ path: t.path, port: t.port, token, handle: config.handle }),
+        );
         break;
       }
       case "cron":
