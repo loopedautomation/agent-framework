@@ -60,6 +60,12 @@ const DiscordTriggerSchema = z.strictObject({
 
 const SlackTriggerSchema = z.strictObject({
   type: z.literal("slack"),
+  transport: z.enum(["socket", "events_api"]).default("socket").describe(
+    "How events arrive. socket holds a Socket Mode connection open (no public endpoint, needs an " +
+      "always-on process). events_api serves Slack's Events API over inbound HTTP, so the host " +
+      "can scale to zero between messages — but needs a public HTTPS endpoint (the request URL " +
+      "in the Slack app config).",
+  ),
   channels: z.array(z.string().min(1)).optional().describe(
     "Channel names or ids to listen in; omit for all channels the bot is in.",
   ),
@@ -70,7 +76,18 @@ const SlackTriggerSchema = z.strictObject({
     "Env var holding the bot token (xoxb-…) — reads channel info, posts replies.",
   ),
   app_token_env: z.string().min(1).default("SLACK_APP_TOKEN").describe(
-    "Env var holding the app-level token (xapp-…, scope connections:write) for Socket Mode.",
+    "Env var holding the app-level token (xapp-…, scope connections:write). Only the socket " +
+      "transport needs it.",
+  ),
+  port: z.number().int().min(1).max(65535).default(8080).describe(
+    "events_api transport: port to listen on.",
+  ),
+  path: z.string().startsWith("/").default("/slack").describe(
+    "events_api transport: HTTP path Slack POSTs event deliveries to.",
+  ),
+  signing_secret_env: z.string().min(1).default("SLACK_SIGNING_SECRET").describe(
+    "events_api transport: env var holding the app's signing secret. Every delivery's " +
+      "X-Slack-Signature is verified before parsing; unsigned POSTs get a 401.",
   ),
   from_users: z.array(z.string().min(1)).optional().describe(
     "Only handle messages from these Slack user ids (U…); the filter runs before the model is called. Omit for anyone.",
@@ -82,11 +99,18 @@ const SlackTriggerSchema = z.strictObject({
     "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
   ),
 }).describe(
-  "Listen to Slack messages via Socket Mode (no public endpoint); replies go in-thread by default.",
+  "Listen to Slack messages via Socket Mode (default, no public endpoint) or the Events API " +
+    "(inbound HTTP, scale-to-zero friendly); replies go in-thread by default.",
 );
 
 const TelegramTriggerSchema = z.strictObject({
   type: z.literal("telegram"),
+  transport: z.enum(["polling", "webhook"]).default("polling").describe(
+    "How updates arrive. polling long-polls getUpdates (no public endpoint, needs an always-on " +
+      "process). webhook registers public_url + path via setWebhook and serves inbound HTTP, so " +
+      "the host can scale to zero between messages — Telegram queues undelivered updates (~24h) " +
+      "and retries, which is what wakes the host back up.",
+  ),
   chats: z.array(z.string().min(1)).optional().describe(
     "Chat ids, group titles, or public @usernames to listen in; omit for all chats the bot sees.",
   ),
@@ -105,8 +129,19 @@ const TelegramTriggerSchema = z.strictObject({
   allow_silence: z.boolean().default(false).describe(
     "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
   ),
+  port: z.number().int().min(1).max(65535).default(8080).describe(
+    "webhook transport: port to listen on.",
+  ),
+  path: z.string().startsWith("/").default("/telegram").describe(
+    "webhook transport: HTTP path Telegram POSTs updates to.",
+  ),
+  public_url: z.url().optional().describe(
+    "webhook transport: the externally reachable HTTPS base registered via setWebhook " +
+      "(e.g. https://my-agent.fly.dev). Required when transport is webhook.",
+  ),
 }).describe(
-  "Listen to Telegram messages via Bot API long-polling (no public endpoint); replies go in-chat by default.",
+  "Listen to Telegram messages via Bot API long-polling (default, no public endpoint) or a " +
+    "registered webhook (inbound HTTP, scale-to-zero friendly); replies go in-chat by default.",
 );
 
 const WebhookTriggerSchema = z.strictObject({
@@ -613,6 +648,31 @@ const agentConfigSchema = z.strictObject({
         message: "voice_channels requires the top-level voice.live block",
       });
     }
+    if (t.type === "telegram") {
+      // setWebhook needs somewhere to deliver to, and Telegram only accepts
+      // HTTPS; a polling trigger with a public_url would silently never use it.
+      if (t.transport === "webhook" && !t.public_url) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["triggers", i, "public_url"],
+          message: "the webhook transport requires public_url (registered via setWebhook)",
+        });
+      }
+      if (t.public_url && !t.public_url.startsWith("https://")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["triggers", i, "public_url"],
+          message: "public_url must be https:// — Telegram only delivers webhooks over HTTPS",
+        });
+      }
+      if (t.transport !== "webhook" && t.public_url) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["triggers", i, "public_url"],
+          message: "public_url only applies to the webhook transport",
+        });
+      }
+    }
   });
 });
 
@@ -662,18 +722,26 @@ export interface DiscordTriggerConfig {
   voice_channels?: string[];
 }
 
-/** A Slack trigger: listen to messages via Socket Mode. */
+/** A Slack trigger: listen to messages via Socket Mode or the Events API. */
 export interface SlackTriggerConfig {
   /** Discriminant for TriggerConfig. */
   type: "slack";
+  /** How events arrive: a Socket Mode connection (default) or inbound Events API HTTP. */
+  transport: "socket" | "events_api";
   /** Channel names or ids to listen in; omit for all channels the bot is in. */
   channels?: string[];
   /** Only respond when the bot is @-mentioned. DMs always address the bot. */
   require_mention?: boolean;
   /** Env var holding the bot token (xoxb-…). */
   token_env: string;
-  /** Env var holding the app-level token (xapp-…) for Socket Mode. */
+  /** Env var holding the app-level token (xapp-…); only the socket transport needs it. */
   app_token_env: string;
+  /** events_api transport: port to listen on. */
+  port: number;
+  /** events_api transport: HTTP path Slack POSTs event deliveries to. */
+  path: string;
+  /** events_api transport: env var holding the app's signing secret. */
+  signing_secret_env: string;
   /** Only handle messages from these Slack user ids (U…). */
   from_users?: string[];
   /** Channel id to post replies into instead of the source thread. */
@@ -682,10 +750,12 @@ export interface SlackTriggerConfig {
   allow_silence: boolean;
 }
 
-/** A Telegram trigger: listen to messages via Bot API long-polling. */
+/** A Telegram trigger: listen to messages via Bot API long-polling or a registered webhook. */
 export interface TelegramTriggerConfig {
   /** Discriminant for TriggerConfig. */
   type: "telegram";
+  /** How updates arrive: getUpdates long-polling (default) or an inbound webhook. */
+  transport: "polling" | "webhook";
   /** Chat ids, group titles, or public @usernames to listen in. */
   chats?: string[];
   /** Only respond when the bot is @-mentioned. Private chats always address the bot. */
@@ -698,6 +768,12 @@ export interface TelegramTriggerConfig {
   reply_chat?: string;
   /** Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
   allow_silence: boolean;
+  /** webhook transport: port to listen on. */
+  port: number;
+  /** webhook transport: HTTP path Telegram POSTs updates to. */
+  path: string;
+  /** webhook transport: the externally reachable HTTPS base registered via setWebhook. */
+  public_url?: string;
 }
 
 /** A webhook trigger: POST {path} with a bearer token and JSON body {input, conversation_id?}. */

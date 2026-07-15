@@ -1,6 +1,12 @@
 import { assert, assertEquals } from "@std/assert";
-import { shouldHandle, slackAttachments, type SlackMessage } from "./slack.ts";
-import { resolveAttachments } from "@looped/core";
+import {
+  shouldHandle,
+  slackAttachments,
+  type SlackMessage,
+  SlackTrigger,
+  verifySlackSignature,
+} from "./slack.ts";
+import { type AgentEvent, resolveAttachments, type RunResult } from "@looped/core";
 
 const BOT_ID = "U0BOT";
 const TOKEN = "xoxb-test";
@@ -123,4 +129,204 @@ Deno.test("shouldHandle: from_users matches by user id, drops everyone else", ()
   assert(!shouldHandle(msg({ user: "U0OTHER" }), BOT_ID, "issues", opts));
   // empty list behaves like no filter
   assert(shouldHandle(msg({ user: "U0OTHER" }), BOT_ID, "issues", { fromUsers: [] }));
+});
+
+const SIGNING_SECRET = "8f742231b10e8888abcd99yyyzzz85a5";
+
+// The signing inputs from Slack's docs (Verifying requests from Slack);
+// the expected signature is computed from them with an independent HMAC.
+const VECTOR_TS = "1531420618";
+const VECTOR_BODY =
+  "token=xyzz0WbapA4vBCDEFasx0q6G&team_id=T1DC2JH3J&team_domain=testteamnow&channel_id=G8PSS9T3V&channel_name=foobar&user_id=U2CERLKJA&user_name=roadrunner&command=%2Fwebhook-collect&text=&response_url=https%3A%2F%2Fhooks.slack.com%2Fcommands%2FT1DC2JH3J%2F397700885554%2F96rGlfmibIGlgcZRskXaIFfN&trigger_id=398738663015.47445629121.803a0bc887a14d10d2c447fce8b6703c";
+const VECTOR_SIG = "v0=a2114d57b48eac39b9ad189dd8316235a7b4a8d21a10bd27519666489c69b503";
+
+async function sign(timestamp: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(SIGNING_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`v0:${timestamp}:${body}`),
+  );
+  return "v0=" + [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+Deno.test("verifySlackSignature: accepts Slack's documented vector", async () => {
+  assert(
+    await verifySlackSignature({
+      signingSecret: SIGNING_SECRET,
+      timestamp: VECTOR_TS,
+      body: VECTOR_BODY,
+      signature: VECTOR_SIG,
+      now: () => Number(VECTOR_TS),
+    }),
+  );
+});
+
+Deno.test("verifySlackSignature: rejects a wrong signature, wrong secret, and a replay", async () => {
+  const now = () => Number(VECTOR_TS);
+  assert(
+    !(await verifySlackSignature({
+      signingSecret: SIGNING_SECRET,
+      timestamp: VECTOR_TS,
+      body: VECTOR_BODY + "x",
+      signature: VECTOR_SIG,
+      now,
+    })),
+  );
+  assert(
+    !(await verifySlackSignature({
+      signingSecret: "some other secret",
+      timestamp: VECTOR_TS,
+      body: VECTOR_BODY,
+      signature: VECTOR_SIG,
+      now,
+    })),
+  );
+  // A valid signature from an hour ago is a replay, not a slow network.
+  assert(
+    !(await verifySlackSignature({
+      signingSecret: SIGNING_SECRET,
+      timestamp: VECTOR_TS,
+      body: VECTOR_BODY,
+      signature: VECTOR_SIG,
+      now: () => Number(VECTOR_TS) + 3600,
+    })),
+  );
+});
+
+function okResult(): RunResult {
+  return {
+    status: "ok",
+    reply: "done",
+    steps: 1,
+    usage: { inputTokens: 1, outputTokens: 1 },
+    messages: [],
+  };
+}
+
+/** Wait until the async dispatch (never awaited by the server) has landed. */
+async function until(cond: () => boolean) {
+  for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+  assert(cond(), "condition never became true");
+}
+
+Deno.test("SlackTrigger: events_api transport verifies, acks, dedupes and dispatches", async () => {
+  // A fake Web API so the whole trigger runs: auth.test, chat.postMessage,
+  // plus a /response sink for slash-command response_url replies.
+  // deno-lint-ignore no-explicit-any
+  const posted: any[] = [];
+  // deno-lint-ignore no-explicit-any
+  const responded: any[] = [];
+  const api = Deno.serve({ port: 0, onListen: () => {} }, async (req) => {
+    const pathname = new URL(req.url).pathname;
+    if (pathname.endsWith("/auth.test")) {
+      return Response.json({ ok: true, user_id: BOT_ID, user: "looped" });
+    }
+    if (pathname.endsWith("/chat.postMessage")) {
+      posted.push(await req.json());
+      return Response.json({ ok: true });
+    }
+    if (pathname === "/response") {
+      responded.push(await req.json());
+      return Response.json({ ok: true });
+    }
+    return Response.json({ ok: false, error: `unexpected ${pathname}` }, { status: 404 });
+  });
+
+  let port = 0;
+  const trigger = new SlackTrigger({
+    token: TOKEN,
+    transport: "events_api",
+    port: 0,
+    path: "/slack",
+    signingSecret: SIGNING_SECRET,
+    apiBase: `http://127.0.0.1:${api.addr.port}`,
+    onListen: (addr) => (port = addr.port),
+  });
+  const seen: AgentEvent[] = [];
+  await trigger.start((event) => {
+    seen.push(event);
+    return Promise.resolve(okResult());
+  });
+
+  const post = async (
+    body: string,
+    headers: Record<string, string>,
+  ): Promise<{ status: number; json?: Record<string, unknown> }> => {
+    const res = await fetch(`http://127.0.0.1:${port}/slack`, {
+      method: "POST",
+      headers,
+      body,
+    });
+    if (res.status !== 200) {
+      await res.body?.cancel();
+      return { status: res.status };
+    }
+    const text = await res.text();
+    return { status: res.status, json: text ? JSON.parse(text) : undefined };
+  };
+  const signedHeaders = async (body: string) => {
+    const ts = String(Math.floor(Date.now() / 1000));
+    return {
+      "content-type": "application/json",
+      "x-slack-request-timestamp": ts,
+      "x-slack-signature": await sign(ts, body),
+    };
+  };
+
+  // Unsigned delivery: 401, no run.
+  const unsigned = await post("{}", { "content-type": "application/json" });
+  assertEquals(unsigned.status, 401);
+
+  // The app-config handshake answers without a run.
+  const challengeBody = JSON.stringify({ type: "url_verification", challenge: "c0ffee" });
+  const challenge = await post(challengeBody, await signedHeaders(challengeBody));
+  assertEquals(challenge.json?.challenge, "c0ffee");
+
+  // A signed message event is acked and wakes the agent; the reply threads after.
+  const eventBody = JSON.stringify({
+    type: "event_callback",
+    event_id: "Ev1",
+    event: msg({}),
+  });
+  const first = await post(eventBody, await signedHeaders(eventBody));
+  assertEquals(first.status, 200);
+  await until(() => posted.length === 1);
+  assertEquals(seen.length, 1);
+  assertEquals(seen[0].conversationKey, "slack:C0ISSUES:1751.0001");
+  assertEquals(posted[0].text, "done");
+
+  // Slack retried the same delivery (a cold boot ate the first ack): deduped, no second run.
+  const retry = await post(eventBody, await signedHeaders(eventBody));
+  assertEquals(retry.json?.deduplicated, true);
+  assertEquals(seen.length, 1);
+
+  // A slash command arrives form-encoded and replies through its response_url.
+  const form = new URLSearchParams({
+    command: "/status",
+    text: "deploys",
+    user_id: "U0USER",
+    channel_id: "C0ISSUES",
+    response_url: `http://127.0.0.1:${api.addr.port}/response`,
+  }).toString();
+  const ts = String(Math.floor(Date.now() / 1000));
+  const cmd = await post(form, {
+    "content-type": "application/x-www-form-urlencoded",
+    "x-slack-request-timestamp": ts,
+    "x-slack-signature": await sign(ts, form),
+  });
+  assertEquals(cmd.status, 200);
+  await until(() => responded.length === 1);
+  assertEquals(seen.length, 2);
+  assertEquals(seen[1].input, "/status deploys");
+  assertEquals(responded[0].text, "done");
+
+  await trigger.stop();
+  await api.shutdown();
 });

@@ -3,7 +3,7 @@ title: "Slack"
 description: "Connect an agent to Slack: Socket Mode setup, in-thread replies and slash commands."
 ---
 
-Triggers turn an agent into a long-lived service that waits for events, acts on them, delivers the result, and goes idle. The `slack` trigger connects that loop to a Slack workspace over Socket Mode — an outbound WebSocket, so the agent needs no public endpoint. It watches channels and replies in a thread under the messages that wake it.
+Triggers turn an agent into a long-lived service that waits for events, acts on them, delivers the result, and goes idle. The `slack` trigger connects that loop to a Slack workspace over Socket Mode — an outbound WebSocket, so the agent needs no public endpoint. It watches channels and replies in a thread under the messages that wake it. (A second transport, `events_api`, trades the always-on socket for an inbound HTTPS endpoint — see [Transports](#transports).)
 
 ```yaml
 triggers:
@@ -30,6 +30,29 @@ Every key is optional; the defaults give you a bot that answers everyone, in eve
 | `app_token_env` | `SLACK_APP_TOKEN` | The env var holding the app-level token (`xapp-…`, scope `connections:write`) that opens the Socket Mode connection. |
 | `reply_channel` | the source thread | Channel id to post replies into. Out-of-channel replies quote the triggering message and link back to it. |
 | `allow_silence` | `false` | Post nothing when the agent replies with exactly `__NO_REPLY__`, or with nothing at all. Tell the agent about the sentinel in `purpose`. |
+| `transport` | `socket` | How events arrive: `socket` (Socket Mode) or `events_api` (inbound HTTP from Slack's Events API). See [Transports](#transports). |
+| `signing_secret_env` | `SLACK_SIGNING_SECRET` | Events API transport: the env var holding the app's signing secret. Every delivery's `X-Slack-Signature` is verified before parsing. |
+| `path` | `/slack` | Events API transport: the HTTP path Slack POSTs deliveries to. |
+| `port` | `8080` | Events API transport: the port to listen on. |
+
+## Transports
+
+`socket` holds a Socket Mode WebSocket open — outbound only, no public endpoint, but the process must be running to receive anything. `events_api` inverts that: the trigger serves Slack's Events API over inbound HTTP, verifying each delivery against the app's signing secret, answering the `url_verification` challenge (so the request URL can be enabled in the app config), and acking within Slack's 3-second deadline before running the agent. Slack retries deliveries it thinks failed (up to 3× — and on a scale-to-zero host a cold boot often eats the first attempt), so events are deduped on their `event_id`. Everything after ingestion — `channels`, `from_users`, `require_mention`, `reply_channel`, `allow_silence` — behaves identically, and `app_token_env` is not needed in this mode (there is no Socket Mode connection).
+
+The trade-off: the socket transport needs an always-on process; the Events API transport needs a public HTTPS endpoint, and in exchange the host can scale to zero. On platforms that stop idle machines and autostart them on inbound HTTP (Fly.io and friends), Slack's retry is exactly what boots the machine back up.
+
+```yaml
+triggers:
+  - type: slack
+    transport: events_api
+    # signing_secret_env: SLACK_SIGNING_SECRET (default)
+    # path: /slack   (default)
+    # port: 8080     (default)
+```
+
+To set it up, skip the Socket Mode step below; instead, under **Event Subscriptions**, enable events and set the **Request URL** to your public endpoint + `path` (the running agent answers the verification challenge), and export the **Signing Secret** from **Basic Information** as `SLACK_SIGNING_SECRET`. [Slash commands](slash-commands.md) work here too: point each command's request URL at the same endpoint.
+
+Multiple HTTP-serving triggers on one agent need distinct `port`/`path` combinations, the same rule as the [`webhook`](webhook.md), `github` and `email` triggers.
 
 ## Setup
 

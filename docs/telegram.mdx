@@ -3,7 +3,7 @@ title: "Telegram"
 description: "Connect an agent to Telegram: BotFather setup, long-polling and slash commands."
 ---
 
-Triggers turn an agent into a long-lived service that waits for events, acts on them, delivers the result, and goes idle. The `telegram` trigger connects that loop to Telegram over Bot API long-polling — outbound HTTPS only, so the agent needs no public endpoint. It watches chats and replies to the messages that wake it.
+Triggers turn an agent into a long-lived service that waits for events, acts on them, delivers the result, and goes idle. The `telegram` trigger connects that loop to Telegram over Bot API long-polling — outbound HTTPS only, so the agent needs no public endpoint. It watches chats and replies to the messages that wake it. (A second transport, `webhook`, trades the always-on poll for an inbound HTTPS endpoint — see [Transports](#transports).)
 
 ```yaml
 triggers:
@@ -28,6 +28,27 @@ Every key is optional; the defaults give you a bot that answers everyone, in eve
 | `token_env` | `TELEGRAM_BOT_TOKEN` | The env var holding the bot token from @BotFather. |
 | `reply_chat` | the source chat | Chat id to post replies into. Out-of-chat replies quote the triggering message, and link back to it when the source is a supergroup. |
 | `allow_silence` | `false` | Post nothing when the agent replies with exactly `__NO_REPLY__`, or with nothing at all. Tell the agent about the sentinel in `purpose`. |
+| `transport` | `polling` | How updates arrive: `polling` (long-poll `getUpdates`) or `webhook` (inbound HTTP registered via `setWebhook`). See [Transports](#transports). |
+| `public_url` | — | Webhook transport only, required there: the externally reachable **HTTPS** base registered with Telegram (e.g. `https://my-agent.fly.dev`). |
+| `path` | `/telegram` | Webhook transport: the HTTP path Telegram POSTs updates to. |
+| `port` | `8080` | Webhook transport: the port to listen on. |
+
+## Transports
+
+`polling` holds a long-poll request open against the Bot API — outbound only, no public endpoint, but the process must be running to receive anything. `webhook` inverts that: at startup the trigger calls `setWebhook` to register `public_url` + `path` (with a per-boot secret token; deliveries that don't echo it back in `X-Telegram-Bot-Api-Secret-Token` get a 401), then serves Telegram's POSTs. Everything after ingestion — `chats`, `from_users`, `require_mention`, `reply_chat`, `allow_silence`, voice, commands — behaves identically.
+
+The trade-off: polling needs an always-on process; the webhook transport needs a public HTTPS endpoint, and in exchange the host can scale to zero. On platforms that stop idle machines and autostart them on inbound HTTP (Fly.io and friends), Telegram queues undelivered updates (~24h) and retries — the retry is exactly what boots the machine back up, so the webhook registration is deliberately left in place on shutdown. Switching back is safe too: the polling transport deletes any leftover webhook registration at startup, since Telegram refuses `getUpdates` while one exists.
+
+```yaml
+triggers:
+  - type: telegram
+    transport: webhook
+    public_url: https://my-agent.fly.dev
+    # path: /telegram   (default)
+    # port: 8080        (default)
+```
+
+Multiple HTTP-serving triggers on one agent need distinct `port`/`path` combinations, the same rule as the [`webhook`](webhook.md), `github` and `email` triggers.
 
 ## Setup
 

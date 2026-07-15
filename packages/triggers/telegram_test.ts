@@ -1,11 +1,17 @@
-import { assert, assertEquals } from "@std/assert";
-import { type MediaLimits, resolveAttachments } from "@looped/core";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import {
+  type AgentEvent,
+  type MediaLimits,
+  resolveAttachments,
+  type RunResult,
+} from "@looped/core";
 import {
   pickPhoto,
   shouldHandle,
   stripCommandMention,
   telegramAttachments,
   type TelegramMessage,
+  TelegramTrigger,
 } from "./telegram.ts";
 
 const BOT = "looped_bot";
@@ -160,4 +166,105 @@ Deno.test("stripCommandMention: leaves other text alone", () => {
   assertEquals(stripCommandMention("/status@other_bot", "my_bot"), "/status@other_bot");
   assertEquals(stripCommandMention("/status", "my_bot"), "/status");
   assertEquals(stripCommandMention("email me a@b.com", "my_bot"), "email me a@b.com");
+});
+
+function okResult(): RunResult {
+  return {
+    status: "ok",
+    reply: "done",
+    steps: 1,
+    usage: { inputTokens: 1, outputTokens: 1 },
+    messages: [],
+  };
+}
+
+/** Wait until the fake API has seen the async reply (dispatched, never awaited). */
+async function until(cond: () => boolean) {
+  for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+  assert(cond(), "condition never became true");
+}
+
+Deno.test("TelegramTrigger: webhook transport registers, verifies and dispatches", async () => {
+  // A fake Bot API so the whole trigger runs: getMe, setWebhook, sendMessage.
+  // deno-lint-ignore no-explicit-any
+  let webhookReg: any;
+  // deno-lint-ignore no-explicit-any
+  const sent: any[] = [];
+  const api = Deno.serve({ port: 0, onListen: () => {} }, async (req) => {
+    const pathname = new URL(req.url).pathname;
+    const raw = await req.text();
+    const body = raw ? JSON.parse(raw) : undefined; // getMe posts no body
+    if (pathname.endsWith("/getMe")) {
+      return Response.json({ ok: true, result: { username: BOT } });
+    }
+    if (pathname.endsWith("/setWebhook")) {
+      webhookReg = body;
+      return Response.json({ ok: true, result: true });
+    }
+    if (pathname.endsWith("/sendMessage")) {
+      sent.push(body);
+      return Response.json({ ok: true, result: {} });
+    }
+    return Response.json({ ok: false, description: `unexpected ${pathname}` }, { status: 404 });
+  });
+
+  let port = 0;
+  const trigger = new TelegramTrigger({
+    token: "TOKEN",
+    transport: "webhook",
+    port: 0,
+    path: "/telegram",
+    publicUrl: "https://agent.example/",
+    apiBase: `http://127.0.0.1:${api.addr.port}`,
+    onListen: (addr) => (port = addr.port),
+  });
+  const seen: AgentEvent[] = [];
+  await trigger.start((event) => {
+    seen.push(event);
+    return Promise.resolve(okResult());
+  });
+
+  // Registration went out with the joined URL and a minted secret.
+  assertEquals(webhookReg.url, "https://agent.example/telegram");
+  const secret: string = webhookReg.secret_token;
+  assert(secret.length > 0);
+
+  const post = async (
+    path: string,
+    body: unknown,
+    headers: Record<string, string> = {},
+  ): Promise<number> => {
+    const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+    await res.body?.cancel();
+    return res.status;
+  };
+
+  const update = { update_id: 7, message: msg({}) };
+
+  // No secret header, a wrong secret, a wrong path: never Telegram, never a run.
+  assertEquals(await post("/telegram", update), 401);
+  assertEquals(
+    await post("/telegram", update, { "x-telegram-bot-api-secret-token": "guess" }),
+    401,
+  );
+  assertEquals(await post("/other", update), 404);
+
+  // A real delivery is acked and wakes the agent; the reply goes out after.
+  assertEquals(
+    await post("/telegram", update, { "x-telegram-bot-api-secret-token": secret }),
+    200,
+  );
+  await until(() => sent.length === 1);
+  assertEquals(seen.length, 1);
+  assertEquals(seen[0].id, "7");
+  assertEquals(seen[0].conversationKey, "telegram:-100123");
+  assertStringIncludes(seen[0].input, "the export breaks on big files");
+  assertEquals(sent[0].text, "done");
+
+  await trigger.stop();
+  await api.shutdown();
 });

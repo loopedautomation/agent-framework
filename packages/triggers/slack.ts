@@ -2,17 +2,78 @@ import { logError, logInfo, resolveAttachments, withNotes } from "@looped/core";
 import type { AgentEvent, Attachment, MediaLimits, RunResult, Trigger } from "@looped/core";
 import { NO_REPLY, splitMessage } from "./text.ts";
 
-// A deliberately minimal Slack Socket Mode client: open a socket, ack
-// envelopes, handle message events, reconnect-with-backoff. No library,
-// no public endpoint (Plan 0, principle 8).
+// A deliberately minimal Slack client with two delivery transports. socket
+// (the default) is Socket Mode: open a socket, ack envelopes, handle message
+// events, reconnect-with-backoff — no library, no public endpoint (Plan 0,
+// principle 8). events_api serves Slack's Events API over inbound HTTPS
+// instead, so the process can sleep between messages on scale-to-zero hosts:
+// Slack retries undelivered events (up to 3×), and the retry is what wakes
+// the host back up.
 //
-// The Slack app needs Socket Mode enabled, an app-level token with
-// connections:write, and event subscriptions for message.channels /
-// message.groups / message.im (plus matching *:history read scopes).
+// Either way the Slack app needs event subscriptions for message.channels /
+// message.groups / message.im (plus matching *:history read scopes). socket
+// additionally needs Socket Mode enabled and an app-level token with
+// connections:write; events_api instead needs the request URL enabled in the
+// app config and the signing secret to verify deliveries.
 
 const API = "https://slack.com/api";
 // Slack's recommended per-message max for chat.postMessage text.
 const LIMIT = 4000;
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ab = enc.encode(a);
+  const bb = enc.encode(b);
+  let diff = ab.length ^ bb.length;
+  for (let i = 0; i < Math.max(ab.length, bb.length); i++) {
+    diff |= (ab[i % ab.length] ?? 0) ^ (bb[i % bb.length] ?? 0);
+  }
+  return diff === 0;
+}
+
+/** Inputs for {@linkcode verifySlackSignature}. */
+export interface SlackVerifyOptions {
+  /** The app's signing secret from the Slack app config. */
+  signingSecret: string;
+  /** The X-Slack-Request-Timestamp header: unix seconds. */
+  timestamp: string;
+  /** The X-Slack-Signature header: `v0=<hex>`. */
+  signature: string;
+  /** The raw request body — the signature is over the exact bytes. */
+  body: string;
+  /** Injectable clock for tests (unix seconds). */
+  now?: () => number;
+}
+
+/** Signatures older than this are replays, not slow networks. */
+const MAX_SIGNATURE_AGE_SECS = 300;
+
+/**
+ * Verify a Slack Events API request: HMAC-SHA256 over `v0:<timestamp>:<body>`
+ * with the signing secret, hex-encoded, compared timing-safe against the
+ * X-Slack-Signature header. Stale timestamps fail too — a valid signature
+ * from an hour ago is a replay. An unsigned request never reaches the parser.
+ */
+export async function verifySlackSignature(opts: SlackVerifyOptions): Promise<boolean> {
+  const now = opts.now ?? (() => Math.floor(Date.now() / 1000));
+  const age = Math.abs(now() - Number(opts.timestamp));
+  if (!Number.isFinite(age) || age > MAX_SIGNATURE_AGE_SECS) return false;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(opts.signingSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signed = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`v0:${opts.timestamp}:${opts.body}`),
+  );
+  const expected = "v0=" +
+    [...new Uint8Array(signed)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return timingSafeEqual(opts.signature, expected);
+}
 
 export interface SlackMessage {
   type: string;
@@ -135,8 +196,20 @@ export interface SlackSlashCommand {
 export interface SlackTriggerOptions extends SlackFilterOptions {
   /** Bot token (xoxb-…) — reads channel info, posts replies. */
   token: string;
-  /** App-level token (xapp-…, connections:write) — opens the Socket Mode connection. */
-  appToken: string;
+  /** App-level token (xapp-…, connections:write) — required by the socket transport. */
+  appToken?: string;
+  /** How events arrive: Socket Mode (default) or the Events API over inbound HTTP. */
+  transport?: "socket" | "events_api";
+  /** events_api transport: TCP port to listen on. */
+  port?: number;
+  /** events_api transport: URL path Slack POSTs event deliveries to. */
+  path?: string;
+  /** events_api transport: the app's signing secret — every delivery is verified. */
+  signingSecret?: string;
+  /** Injectable for tests: 0 picks an ephemeral port. */
+  onListen?: (addr: { port: number }) => void;
+  /** Injectable for tests: a fake Web API server stands in for slack.com/api. */
+  apiBase?: string;
   /** Post replies into this channel id instead of the source thread. */
   replyChannel?: string;
   /** Suppress the reply when the agent answers with the NO_REPLY sentinel (or nothing). */
@@ -154,10 +227,14 @@ export class SlackTrigger implements Trigger {
   readonly name = "slack";
   #opts: SlackTriggerOptions;
   #ws?: WebSocket;
+  #server?: Deno.HttpServer;
   #stopped = false;
   #botUserId = "";
   #channelNames = new Map<string, string | undefined>();
   #reconnectDelayMs = 1_000;
+  // Slack retries deliveries a cold boot or slow ack ate — insertion-ordered
+  // so pruning drops the oldest ids first.
+  #seenEventIds = new Set<string>();
 
   /** Create the trigger; nothing connects until {@linkcode start}. */
   constructor(opts: SlackTriggerOptions) {
@@ -168,7 +245,7 @@ export class SlackTrigger implements Trigger {
     // deno-lint-ignore no-explicit-any
     any
   > {
-    const res = await fetch(`${API}/${method}`, {
+    const res = await fetch(`${this.#opts.apiBase ?? API}/${method}`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,
@@ -298,19 +375,126 @@ export class SlackTrigger implements Trigger {
     }
   }
 
-  /** Open the Socket Mode connection; matching messages emit events and get replies. */
+  /** Start the configured transport; matching messages emit events and get replies. */
   async start(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
     const auth = await this.#api("auth.test");
     if (!auth.ok) {
       throw new Error(`slack: auth.test failed (${auth.error}) — check the bot token`);
     }
     this.#botUserId = auth.user_id;
+    if (this.#opts.transport === "events_api") {
+      this.#serveEvents(emit);
+      logInfo(`slack trigger connected as ${auth.user} (events_api)`);
+      return;
+    }
     await this.#connect(emit);
     logInfo(`slack trigger connected as ${auth.user}`);
   }
 
+  /** Seen before? Records the id; the set is pruned so it never grows unbounded. */
+  #alreadySeen(eventId: string): boolean {
+    if (this.#seenEventIds.has(eventId)) return true;
+    this.#seenEventIds.add(eventId);
+    if (this.#seenEventIds.size > 1_000) {
+      for (const id of this.#seenEventIds) {
+        this.#seenEventIds.delete(id);
+        if (this.#seenEventIds.size <= 1_000) break;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Serve Slack's Events API. Every delivery is verified against the signing
+   * secret before parsing, the url_verification handshake is answered so the
+   * request URL can be enabled in the app config, and everything else is
+   * acked within Slack's 3-second deadline — the run happens after. Slack
+   * retries deliveries it thinks failed (up to 3×, and a cold boot often eats
+   * the first attempt), so events are deduped on event_id. Slash commands
+   * arrive form-encoded on the same URL and reply through their response_url.
+   */
+  #serveEvents(emit: (event: AgentEvent) => Promise<RunResult>) {
+    const path = this.#opts.path ?? "/slack";
+    const signingSecret = this.#opts.signingSecret;
+    if (!signingSecret) {
+      throw new Error("slack: the events_api transport requires the signing secret");
+    }
+    this.#server = Deno.serve({
+      port: this.#opts.port ?? 8080,
+      onListen: this.#opts.onListen ?? ((addr) => {
+        logInfo(`slack trigger listening on :${addr.port}${path}`);
+      }),
+    }, async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname !== path) return Response.json({ error: "not found" }, { status: 404 });
+      if (req.method !== "POST") {
+        return Response.json({ error: "method not allowed" }, { status: 405 });
+      }
+
+      const body = await req.text();
+      const verified = await verifySlackSignature({
+        signingSecret,
+        timestamp: req.headers.get("x-slack-request-timestamp") ?? "",
+        signature: req.headers.get("x-slack-signature") ?? "",
+        body,
+      });
+      if (!verified) return Response.json({ error: "invalid signature" }, { status: 401 });
+
+      // Slash commands ride the same signature scheme but arrive form-encoded.
+      const contentType = req.headers.get("content-type") ?? "";
+      if (contentType.includes("application/x-www-form-urlencoded")) {
+        const form = new URLSearchParams(body);
+        const command = form.get("command");
+        if (command) {
+          this.#handleSlashCommand({
+            command,
+            text: form.get("text") ?? undefined,
+            user_id: form.get("user_id") ?? "",
+            channel_id: form.get("channel_id") ?? "",
+            response_url: form.get("response_url") ?? "",
+          }, emit).catch((err) => logError(`slack: slash command handling failed: ${err}`));
+        }
+        return new Response(null, { status: 200 });
+      }
+
+      let payload: {
+        type?: string;
+        challenge?: string;
+        event_id?: string;
+        event?: SlackMessage & { type?: string };
+      };
+      try {
+        payload = JSON.parse(body);
+      } catch {
+        return Response.json({ error: "body must be JSON" }, { status: 400 });
+      }
+
+      // The app-config handshake: echo the challenge, no model call.
+      if (payload.type === "url_verification") {
+        return Response.json({ challenge: payload.challenge });
+      }
+
+      if (payload.type === "event_callback") {
+        const eventId = payload.event_id;
+        if (eventId && this.#alreadySeen(eventId)) {
+          return Response.json({ deduplicated: true });
+        }
+        // app_mention duplicates the message event; handling both would double-run.
+        if (payload.event?.type === "message") {
+          this.#handle(payload.event, emit).catch((err) =>
+            logError(`slack: handling failed: ${err}`)
+          );
+        }
+      }
+      return Response.json({ ok: true });
+    });
+  }
+
   async #connect(emit: (event: AgentEvent) => Promise<RunResult>): Promise<void> {
     if (this.#stopped) return;
+    if (!this.#opts.appToken) {
+      throw new Error("slack: the socket transport requires the app-level token");
+    }
     // Socket Mode URLs are single-use — fetch a fresh one on every (re)connect.
     const open = await this.#api("apps.connections.open", undefined, this.#opts.appToken);
     if (!open.ok) {
@@ -368,10 +552,10 @@ export class SlackTrigger implements Trigger {
     }, delay);
   }
 
-  /** Close the socket and stop reconnecting. */
-  stop(): Promise<void> {
+  /** Stop the transport: close the socket (and stop reconnecting) or shut the server down. */
+  async stop(): Promise<void> {
     this.#stopped = true;
     this.#ws?.close();
-    return Promise.resolve();
+    await this.#server?.shutdown();
   }
 }
