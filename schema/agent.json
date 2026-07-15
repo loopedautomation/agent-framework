@@ -664,6 +664,11 @@
               "description": "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
               "type": "string",
               "minLength": 1
+            },
+            "base_url": {
+              "description": "Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs.",
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [
@@ -695,6 +700,11 @@
             },
             "api_key_env": {
               "description": "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
+              "type": "string",
+              "minLength": 1
+            },
+            "base_url": {
+              "description": "Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs.",
               "type": "string",
               "minLength": 1
             }

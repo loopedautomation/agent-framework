@@ -289,6 +289,9 @@ const VoiceSttSchema = z.strictObject({
   api_key_env: z.string().min(1).optional().describe(
     "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
   ),
+  base_url: z.string().min(1).optional().describe(
+    "Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs.",
+  ),
 }).describe("How incoming voice notes become text.");
 
 const VoiceTtsSchema = z.strictObject({
@@ -303,6 +306,9 @@ const VoiceTtsSchema = z.strictObject({
   ),
   api_key_env: z.string().min(1).optional().describe(
     "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider.",
+  ),
+  base_url: z.string().min(1).optional().describe(
+    "Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs.",
   ),
 }).describe(
   "How replies to voice notes become speech. Omit this block and voice notes get text replies.",
@@ -837,6 +843,8 @@ export interface VoiceSttConfig {
   model?: string;
   /** Name of the env var holding the API key. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider. */
   api_key_env?: string;
+  /** Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs. */
+  base_url?: string;
 }
 
 /** How replies to voice notes become speech. */
@@ -849,6 +857,8 @@ export interface VoiceTtsConfig {
   voice?: string;
   /** Name of the env var holding the API key. Defaults to OPENAI_API_KEY / ELEVENLABS_API_KEY per provider. */
   api_key_env?: string;
+  /** Endpoint override for the openai provider, e.g. a metering gateway. Ignored by elevenlabs. */
+  base_url?: string;
 }
 
 /** Live voice in Discord voice channels: the realtime model and its budget (plan 15). */

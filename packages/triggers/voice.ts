@@ -44,6 +44,11 @@ const DEFAULT_TTS_VOICE: Record<VoiceTtsConfig["provider"], string> = {
   elevenlabs: "21m00Tcm4TlvDq8ikWAM",
 };
 
+/** OpenAI-dialect endpoint root: config base_url (e.g. a metering gateway) or the real API. */
+function openaiBase(cfg: VoiceSttConfig | VoiceTtsConfig): string {
+  return (cfg.base_url ?? "https://api.openai.com/v1").replace(/\/+$/, "");
+}
+
 /** The filename a clip uploads under — some APIs sniff the container from it. */
 function fileName(mimeType: string): string {
   if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "voice.mp3";
@@ -67,7 +72,7 @@ function openaiTranscribe(cfg: VoiceSttConfig, key: string, fetchFn: typeof fetc
     const form = new FormData();
     form.append("model", cfg.model ?? DEFAULT_STT_MODEL.openai);
     form.append("file", new Blob([clip.audio], { type: clip.mimeType }), fileName(clip.mimeType));
-    const res = await fetchFn("https://api.openai.com/v1/audio/transcriptions", {
+    const res = await fetchFn(`${openaiBase(cfg)}/audio/transcriptions`, {
       method: "POST",
       headers: { authorization: `Bearer ${key}` },
       body: form,
@@ -102,7 +107,7 @@ function elevenlabsTranscribe(cfg: VoiceSttConfig, key: string, fetchFn: typeof 
 
 function openaiSpeak(cfg: VoiceTtsConfig, key: string, fetchFn: typeof fetch) {
   return async (text: string): Promise<VoiceClip> => {
-    const res = await fetchFn("https://api.openai.com/v1/audio/speech", {
+    const res = await fetchFn(`${openaiBase(cfg)}/audio/speech`, {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify({
