@@ -134,6 +134,7 @@ function triggerHosts(trigger: TriggerConfig, listenHost: string): string[] {
       return ["api.telegram.org"];
     case "webhook":
     case "github":
+    case "tty":
       return [`${listenHost}:${trigger.port}`];
     case "cron":
       return [];

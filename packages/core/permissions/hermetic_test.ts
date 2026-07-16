@@ -124,6 +124,7 @@ Deno.test("hermetic/triggers contribute the hosts they reach and the ports they 
         },
         { type: "telegram", token_env: "TELEGRAM_BOT_TOKEN", allow_silence: false },
         { type: "webhook", path: "/", port: 8080, token_env: "WEBHOOK_TOKEN" },
+        { type: "tty", path: "/tty", port: 8300, token_env: "TTY_TOKEN" },
         { type: "cron", schedule: "0 9 * * 1", prompt: "morning" },
       ] as AgentConfig["triggers"],
     }),
@@ -133,6 +134,7 @@ Deno.test("hermetic/triggers contribute the hosts they reach and the ports they 
   assert(hosts.includes("gateway.discord.gg")); // the gateway is a second host
   assert(hosts.includes("api.telegram.org"));
   assert(hosts.includes("0.0.0.0:8080")); // listen rights, not egress
+  assert(hosts.includes("0.0.0.0:8300")); // tty listens like webhook does
   assert(hosts.includes("0.0.0.0:9090")); // the status server
 });
 
