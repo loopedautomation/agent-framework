@@ -182,3 +182,67 @@ Deno.test("triggersFromConfig: builds tty trigger, fails loudly on missing token
   }
   assert(threw);
 });
+
+Deno.test("tty: input images reach the model; malformed images are rejected", async () => {
+  // A capturing provider so we can assert what the model actually saw.
+  const requests: CompletionRequest[] = [];
+  const provider: Provider = {
+    id: "mock",
+    complete(req: CompletionRequest): Promise<Completion> {
+      requests.push(req);
+      return Promise.resolve({
+        content: "I can see your screen.",
+        toolCalls: [],
+        stopReason: "end",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      });
+    },
+  };
+  const dataDir = await Deno.makeTempDir();
+  const service = new AgentService({
+    config: CONFIG,
+    provider,
+    dataDir,
+    identity: { name: "tty-bot", isNew: false },
+  });
+  let port = 0;
+  const trigger = new TtyTrigger({
+    path: "/tty",
+    port: 0,
+    token: "s3cret",
+    handle: "tty-bot",
+    onListen: (addr) => (port = addr.port),
+  });
+  await service.start([trigger]);
+
+  const term = connect(`ws://127.0.0.1:${port}/tty?conversation_id=img`, ["bearer.s3cret"]);
+  await term.opened;
+  await term.until((f) => f.type === "hello");
+
+  // A bad image is refused before any run starts.
+  const errSeen = term.until((f) => f.type === "error" && f.error.includes("images"));
+  term.socket.send(JSON.stringify({
+    type: "input",
+    text: "look",
+    images: [{ mediaType: "image/tiff", data: "AAAA" }],
+  }));
+  await errSeen;
+  assertEquals(requests.length, 0);
+
+  // A valid image rides the turn into the model request.
+  const resultSeen = term.until((f) => f.type === "result");
+  term.socket.send(JSON.stringify({
+    type: "input",
+    text: "what's on my screen?",
+    images: [{ mediaType: "image/jpeg", data: "aGVsbG8=" }],
+  }));
+  await resultSeen;
+  assertEquals(requests.length, 1);
+  const userMsg = requests[0].messages.find((m) => m.role === "user" && m.content.includes("screen"));
+  assert(userMsg && userMsg.role === "user");
+  assertEquals(userMsg.images?.length, 1);
+  assertEquals(userMsg.images?.[0].mediaType, "image/jpeg");
+
+  term.socket.close();
+  await service.stop();
+});

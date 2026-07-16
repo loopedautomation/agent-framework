@@ -34,6 +34,12 @@ Send input:
 {"type": "input", "text": "what's on the calendar today?"}
 ```
 
+Input may carry images for the turn — a screenshot, a shared-screen frame — as base64 (no `data:` prefix), at most 4 per turn:
+
+```json
+{"type": "input", "text": "what's on my screen?", "images": [{"mediaType": "image/jpeg", "data": "<base64>"}]}
+```
+
 While the run executes, the server streams its progress — the same events the local TUI renders:
 
 ```json

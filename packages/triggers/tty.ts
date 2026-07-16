@@ -1,5 +1,11 @@
 import { logInfo } from "@looped/core";
-import type { AgentEvent, HandleOptions, RunResult, Trigger } from "@looped/core";
+import type {
+  AgentEvent,
+  HandleOptions,
+  ImageContent,
+  RunResult,
+  Trigger,
+} from "@looped/core";
 
 /** Options for {@linkcode TtyTrigger}. */
 export interface TtyTriggerOptions {
@@ -32,7 +38,31 @@ export type TtyServerFrame =
   | { type: "error"; error: string };
 
 /** A frame a terminal sends to the server. */
-export type TtyClientFrame = { type: "input"; text: string };
+export type TtyClientFrame = {
+  type: "input";
+  text: string;
+  /** Optional images for the turn (e.g. a meeting screenshare frame). */
+  images?: { mediaType: string; data: string }[];
+};
+
+/** Image formats every provider dialect accepts (mirrors ImageContent). */
+const TTY_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+/** Guardrails: a screen frame, not a photo dump. */
+const TTY_MAX_IMAGES = 4;
+const TTY_MAX_IMAGE_BYTES = 8 * 1024 * 1024; // of base64 text, ~6MB of pixels
+
+function validImages(
+  images: unknown,
+): images is { mediaType: ImageContent["mediaType"]; data: string }[] {
+  if (images === undefined) return true;
+  return Array.isArray(images) && images.length <= TTY_MAX_IMAGES &&
+    images.every((i) =>
+      typeof i === "object" && i !== null &&
+      TTY_IMAGE_TYPES.includes((i as { mediaType?: string }).mediaType ?? "") &&
+      typeof (i as { data?: string }).data === "string" &&
+      (i as { data: string }).data.length <= TTY_MAX_IMAGE_BYTES
+    );
+}
 
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder();
@@ -147,6 +177,13 @@ export class TtyTrigger implements Trigger {
       if (frame.type !== "input" || typeof frame.text !== "string" || !frame.text.trim()) {
         return send({ type: "error", error: 'expected {type: "input", text: "..."}' });
       }
+      if (!validImages(frame.images)) {
+        return send({
+          type: "error",
+          error:
+            `images must be at most ${TTY_MAX_IMAGES} of {mediaType: png|jpeg|gif|webp, data: base64}`,
+        });
+      }
       // One run at a time per socket — the terminal is a conversation, not a queue.
       if (running) return send({ type: "error", error: "a run is already in progress" });
       running = true;
@@ -156,6 +193,7 @@ export class TtyTrigger implements Trigger {
             id: crypto.randomUUID(),
             trigger: this.name,
             input: frame.text,
+            images: frame.images?.length ? frame.images : undefined,
             conversationKey,
           },
           {
