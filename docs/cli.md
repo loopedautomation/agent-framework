@@ -46,7 +46,7 @@ docker run -d --restart unless-stopped \
   -v agent-data:/data \
   -p 127.0.0.1:0:9090 \
   --read-only --tmpfs /tmp \
-  ghcr.io/loopedautomation/agent:0.9.0
+  ghcr.io/loopedautomation/agent:0.9.1
 ```
 
 That's the config and any `skills:` mounted read-only, the `<handle>-data` volume so identity survives restarts, the `.env` next to the agent file, the [status surface](docker-run.md#the-status-surface) on an ephemeral loopback port so fleets never collide, and a read-only root filesystem. The image tag matches the CLI's version — never `:latest`, so a cached image can't drift out from under a newer CLI (`--image` overrides). `af ps` and `af down` find containers by the `af.agent` label. Because it's all plain Docker, everything you know still works: `docker logs af-<handle>`, `docker stats`, restart policies, volume backups.

@@ -1,0 +1,34 @@
+name: Publish action tags
+
+# The GitHub Action (action.yml) is consumed by git ref. Releases create the
+# immutable vX.Y.Z tag; this workflow moves the floating channel tags to match,
+# so consumers can pin at their preferred stability:
+#   @vX.Y.Z — immutable release tag (created by the release itself)
+#   @vX.Y   — latest patch of a minor
+#   @vX     — latest release of a major
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  tags:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move floating tags
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"        # e.g. 0.9.1
+          MINOR="v${VERSION%.*}"                # e.g. v0.9
+          MAJOR="v${VERSION%%.*}"               # e.g. v0
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f "$MINOR" "$GITHUB_SHA"
+          git tag -f "$MAJOR" "$GITHUB_SHA"
+          git push -f origin "$MINOR" "$MAJOR"
