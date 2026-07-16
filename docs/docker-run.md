@@ -65,7 +65,7 @@ af up -d --image my-agent agent.yaml
 
 Every service agent exposes:
 
-- `GET /healthz` - liveness and identity (handle, chosen name, model, triggers, uptime). Unauthenticated.
+- `GET /healthz` (or `/health`) - liveness and identity (handle, chosen name, model, triggers, uptime). Unauthenticated.
 - `GET /runs` and `GET /audit` - the run history and the permission decisions. Loopback-only unless `AF_STATUS_TOKEN` is set, and then they take bearer-token access.
 
 `af ps` shows each agent's status address — `af up` publishes port 9090 on an ephemeral loopback port so agents never collide:

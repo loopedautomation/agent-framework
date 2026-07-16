@@ -16,7 +16,7 @@ export interface StatusServerOptions {
 /**
  * The agent's status surface (server-first architecture, v0):
  *   GET /healthz — liveness + identity; unauthenticated (it leaks nothing
- *                  a process list wouldn't)
+ *                  a process list wouldn't). /health is an alias.
  *   GET /runs    — recent run history from the audit store
  *   GET /audit   — recent permission decisions
  * Docker HEALTHCHECK hits /healthz from inside the container.
@@ -45,6 +45,7 @@ export function startStatusServer(
     const remoteHost = info.remoteAddr.transport === "tcp" ? info.remoteAddr.hostname : "";
 
     switch (path) {
+      case "/health":
       case "/healthz":
         return Response.json({
           ok: true,

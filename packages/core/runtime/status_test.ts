@@ -44,6 +44,9 @@ Deno.test("status surface: healthz open, runs/audit token-gated", async () => {
   assertEquals(health.handle, "status-bot");
   assertEquals(health.name, "Nova");
 
+  const healthAlias = await (await fetch(`${base}/health`)).json();
+  assertEquals(healthAlias.ok, true);
+
   const unauthorized = await fetch(`${base}/runs`);
   assertEquals(unauthorized.status, 401);
   await unauthorized.body?.cancel();
