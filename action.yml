@@ -1,6 +1,6 @@
 # The Looped AF GitHub Action: a one-shot, stateless agent run in CI.
 #
-#   - uses: loopedautomation/agent-framework@v0.8.0
+#   - uses: loopedautomation/agent-framework@v0.9.0
 #     with:
 #       agent: ./agent.yaml
 #       prompt: "Summarize the open issues."
