@@ -1,7 +1,7 @@
 # The whole deployment story: docker compose up -d
 #
 # .env next to this file (see .env.example):
-#   OPENAI_API_KEY, DISCORD_BOT_TOKEN, GITHUB_TOKEN
+#   OPENAI_API_KEY, DISCORD_BOT_TOKEN, GITHUB_TOKEN, TTY_TOKEN
 services:
   gh-issues-bot:
     build:
@@ -12,12 +12,17 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - TTY_TOKEN=${TTY_TOKEN}
     volumes:
       - gh-issues-bot-data:/data
-    ports:
-      # Status surface: curl localhost:9090/healthz
-      # If host port 9090 is taken, change only the left side (e.g. "127.0.0.1:9091:9090").
-      - "127.0.0.1:9090:9090"
+    # No host port bindings: Coolify's proxy reaches the container over the
+    # internal network. Set "Ports Exposes" to 8090 and attach your domain —
+    # clients then connect via wss://<domain>/tty (bearer auth via TTY_TOKEN).
+    expose:
+      # TTY trigger WebSocket
+      - "8090"
+      # Status surface (internal health checks: /healthz)
+      - "9090"
     restart: unless-stopped
     read_only: true
     tmpfs:
