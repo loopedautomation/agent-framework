@@ -23,6 +23,8 @@ triggers:
     channels: ["looped-agent"]
     allow_silence: true
     show_typing: true
+  - type: tty
+    token_env: TTY_TOKEN
 
 skills:
   - ../../skills/gh-issues.md # first-party skill: teaches the gh CLI; the binary comes from the image
