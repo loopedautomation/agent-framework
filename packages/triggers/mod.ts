@@ -60,7 +60,7 @@ export type {
   VoiceTtsConfig,
   WebhookTriggerConfig,
 } from "@looped/core";
-export { NO_REPLY } from "./text.ts";
+export { NO_REPLY, TEXT_REPLY, VOICE_REPLY } from "./text.ts";
 export { CronTrigger, type CronTriggerOptions } from "./cron.ts";
 export { WebhookTrigger, type WebhookTriggerOptions } from "./webhook.ts";
 export {

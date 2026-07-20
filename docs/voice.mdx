@@ -32,6 +32,8 @@ The trigger downloads the audio, sends it to the transcription API and emits the
 
 Some replies stay text on purpose. A reply longer than 4000 characters reads better than it listens, so it posts as text. A reply routed elsewhere via `reply_chat` or `reply_channel` stays text too, because it quotes the message it answers. And when the speech API errors, the trigger logs the failure and posts the text instead, so the reply still arrives. `allow_silence` applies before any of this: a `__NO_REPLY__` answer posts nothing, voice or text.
 
+The default follows the message: a voice note comes back as a voice note, a typed message comes back as text. The agent can override that for a single reply by leading with a marker. `__VOICE__` has the reply spoken, even in answer to a typed message; `__TEXT__` sends it as text, even in answer to a voice note. This is what "reply with a voice note" or "just text me back" turns into once the agent decides to honor it. The trigger strips the marker before the reply goes out, the way `__NO_REPLY__` works, so you tell the agent about the markers in its purpose. Forcing voice runs through the same gates as any other spoken reply: it lands as text when `tts` is off, when the reply is too long to speak, or when it's routed to another chat.
+
 One gate to know about: `require_mention`. A voice note has no text to carry an @-mention, so in a mention-gated group voice notes drop before the model is called. Private chats and DMs always address the bot, and that's where voice conversations naturally live.
 
 | Key | Default | What it does |

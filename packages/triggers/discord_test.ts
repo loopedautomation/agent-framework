@@ -13,7 +13,7 @@ import {
   typingLoop,
 } from "./discord.ts";
 import { resolveAttachments, withNotes } from "@looped/core";
-import { isSilence } from "./text.ts";
+import { isSilence, replyModality, TEXT_REPLY, VOICE_REPLY } from "./text.ts";
 
 const LIMITS = { maxImageBytes: 1_000, maxImagesPerMessage: 2 };
 
@@ -253,4 +253,24 @@ Deno.test("isSilence: tolerates punctuation and whitespace around the sentinel",
   assert(!isSilence(`${NO_REPLY} but here is my actual answer`));
   assert(!isSilence(`I would reply ${NO_REPLY} to this`));
   assert(!isSilence("a normal reply."));
+});
+
+Deno.test("replyModality: a leading marker picks the delivery and is stripped", () => {
+  // No marker: the trigger keeps its incoming-modality default, text untouched.
+  assertEquals(replyModality("here you go"), { mode: undefined, text: "here you go" });
+
+  // A leading marker sets the mode and comes off the reply the recipient sees.
+  assertEquals(replyModality(`${VOICE_REPLY} here you go`), { mode: "voice", text: "here you go" });
+  assertEquals(replyModality(`${TEXT_REPLY}\nhere you go`), { mode: "text", text: "here you go" });
+  // Leading whitespace before the marker is tolerated.
+  assertEquals(replyModality(`  ${VOICE_REPLY} spoken`), { mode: "voice", text: "spoken" });
+
+  // A marker inside real content is left alone — only a leading one counts.
+  assertEquals(replyModality(`say ${VOICE_REPLY} out loud`), {
+    mode: undefined,
+    text: `say ${VOICE_REPLY} out loud`,
+  });
+
+  // A marker with nothing after it strips to empty, so silence still reads.
+  assertEquals(replyModality(VOICE_REPLY), { mode: "voice", text: "" });
 });

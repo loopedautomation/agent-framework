@@ -7,7 +7,7 @@ import type {
   RunResult,
   Trigger,
 } from "@looped/core";
-import { NO_REPLY, splitMessage } from "./text.ts";
+import { NO_REPLY, replyModality, splitMessage } from "./text.ts";
 import { SPEAK_MAX_CHARS, type VoiceEngines } from "./voice.ts";
 
 // A deliberately minimal Telegram Bot API client: getMe, sendMessage, and one
@@ -361,7 +361,9 @@ export class TelegramTrigger implements Trigger {
   }
 
   async #reply(msg: TelegramMessage, result: RunResult, asVoice = false) {
-    const reply = (result.reply ?? "").trim();
+    // A leading __VOICE__/__TEXT__ marker overrides the default modality and is
+    // stripped from the reply the recipient sees.
+    const { mode, text: reply } = replyModality((result.reply ?? "").trim());
 
     // The agent had nothing to say — with allow_silence, say nothing.
     if (this.#opts.allowSilence && (reply === NO_REPLY || reply === "")) return;
@@ -370,11 +372,13 @@ export class TelegramTrigger implements Trigger {
     const target = this.#opts.replyChat ?? msg.chat.id;
     const inSourceChat = String(target) === String(msg.chat.id);
 
-    // A voice note gets a voice note back when speak is configured. Failures
-    // and replies too long to speak fall through to the text path; replies
-    // routed to another chat stay text, since they quote their context.
+    // A voice note gets a voice note back by default; __VOICE__ forces one and
+    // __TEXT__ opts out. Failures and replies too long to speak fall through to
+    // the text path; replies routed to another chat stay text, since they quote
+    // their context.
+    const wantsVoice = mode === "voice" || (mode === undefined && asVoice);
     if (
-      asVoice && this.#opts.voice?.speak && inSourceChat &&
+      wantsVoice && this.#opts.voice?.speak && inSourceChat &&
       reply !== "" && reply.length <= SPEAK_MAX_CHARS &&
       await this.#sendVoiceReply(msg, reply)
     ) return;
