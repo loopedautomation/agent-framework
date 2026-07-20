@@ -238,7 +238,9 @@ Deno.test("tty: input images reach the model; malformed images are rejected", as
   }));
   await resultSeen;
   assertEquals(requests.length, 1);
-  const userMsg = requests[0].messages.find((m) => m.role === "user" && m.content.includes("screen"));
+  const userMsg = requests[0].messages.find((m) =>
+    m.role === "user" && m.content.includes("screen")
+  );
   assert(userMsg && userMsg.role === "user");
   assertEquals(userMsg.images?.length, 1);
   assertEquals(userMsg.images?.[0].mediaType, "image/jpeg");
