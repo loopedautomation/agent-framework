@@ -168,6 +168,74 @@ Deno.test("tty: malformed frames get errors, deliver reaches an open terminal", 
   await service.stop();
 });
 
+Deno.test("tty: a cancel frame aborts the in-flight run; the socket keeps going", async () => {
+  const dataDir = await Deno.makeTempDir();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let calls = 0;
+  // The first turn holds at its provider call until the test cancels it; the
+  // second runs to completion, proving the socket accepts input after a cancel.
+  const provider: Provider = {
+    id: "mock",
+    async complete(): Promise<Completion> {
+      calls++;
+      if (calls === 1) await gate;
+      return {
+        content: calls === 1 ? "" : "second turn ran",
+        toolCalls: calls === 1 ? [{ id: "t1", name: "nonexistent", arguments: "{}" }] : [],
+        stopReason: calls === 1 ? "tool_calls" : "end",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    },
+  };
+  const service = new AgentService({
+    config: CONFIG,
+    provider,
+    dataDir,
+    identity: { name: "tty-bot", isNew: false },
+  });
+  let port = 0;
+  const trigger = new TtyTrigger({
+    path: "/tty",
+    port: 0,
+    token: "s3cret",
+    handle: "tty-bot",
+    onListen: (addr) => (port = addr.port),
+  });
+  await service.start([trigger]);
+
+  const term = connect(`ws://127.0.0.1:${port}/tty?conversation_id=cancel`, ["bearer.s3cret"]);
+  await term.opened;
+  await term.until((f) => f.type === "hello");
+
+  const abortedSeen = term.until((f) => f.type === "result");
+  term.socket.send(JSON.stringify({ type: "input", text: "count forever" }));
+  // Wait until the run holds its provider call, then cancel it from the socket.
+  while (calls === 0) await new Promise((r) => setTimeout(r, 5));
+  term.socket.send(JSON.stringify({ type: "cancel" }));
+  // Frames are ordered per socket, so an empty input queued right after cancel
+  // answers only once the server has processed the cancel. Awaiting its error
+  // frame is our fence: the abort has fired before we release the gate.
+  const fenceSeen = term.until((f) => f.type === "error");
+  term.socket.send(JSON.stringify({ type: "input", text: "" }));
+  await fenceSeen;
+  release();
+  await abortedSeen;
+
+  const aborted = term.frames.find((f) => f.type === "result");
+  assert(aborted && aborted.type === "result");
+  assertEquals(aborted.status, "aborted");
+  assertEquals(calls, 1); // the aborted loop made no further provider call
+
+  // No reconnect: the next input runs on the same socket.
+  const okSeen = term.until((f) => f.type === "result" && f.reply === "second turn ran");
+  term.socket.send(JSON.stringify({ type: "input", text: "again" }));
+  await okSeen;
+
+  term.socket.close();
+  await service.stop();
+});
+
 Deno.test("triggersFromConfig: builds tty trigger, fails loudly on missing token", () => {
   const built = triggersFromConfig(CONFIG, (name) => name === "TTY_TOKEN" ? "tok" : undefined);
   assertEquals(built.length, 1);
@@ -238,7 +306,9 @@ Deno.test("tty: input images reach the model; malformed images are rejected", as
   }));
   await resultSeen;
   assertEquals(requests.length, 1);
-  const userMsg = requests[0].messages.find((m) => m.role === "user" && m.content.includes("screen"));
+  const userMsg = requests[0].messages.find((m) =>
+    m.role === "user" && m.content.includes("screen")
+  );
   assert(userMsg && userMsg.role === "user");
   assertEquals(userMsg.images?.length, 1);
   assertEquals(userMsg.images?.[0].mediaType, "image/jpeg");

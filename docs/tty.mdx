@@ -52,6 +52,18 @@ While the run executes, the server streams its progress — the same events the 
 
 `result` ends the turn; send the next `input` after it. One run at a time per socket — an `input` sent mid-run gets `{"type": "error", ...}` back rather than queueing.
 
+## Cancelling a run
+
+While a run is in flight you can stop it. Send:
+
+```json
+{"type": "cancel"}
+```
+
+This fires the same abort the [`/stop`](slash-commands.md) command does. The run halts at its next step boundary and ends with `{"type": "result", "status": "aborted", ...}`, the normal terminal frame, so a client that streams until `result` needs no new handling beyond the added status. The socket takes the next `input` right after, no reconnect. A cancel with nothing running is a no-op.
+
+This is what a barge-in looks like from the other side: a participant tells a meeting agent to stop, and the bridge sends `cancel` instead of dropping the connection. The abandoned run stops burning tokens and stops running tool calls the moment it reaches a step boundary, rather than executing to completion with its reply going nowhere.
+
 ## Sessions
 
 Each connection is a conversation. By default a new socket gets a fresh `conversation_id`; pass `?conversation_id=<id>` in the URL to resume one across reconnects (with `memory.scope: thread` — [Memory](memory.md)), so a dropped connection or a page reload picks up where it left off.

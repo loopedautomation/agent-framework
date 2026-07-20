@@ -93,9 +93,14 @@ export interface Trigger {
   /**
    * Connect and begin emitting events; `emit` runs the agent and resolves
    * with the result. Interactive triggers pass `opts.onEvent` to stream the
-   * run's inner-loop progress to their surface.
+   * run's inner-loop progress to their surface. `stop(conversationKey)` aborts
+   * the in-flight run on that lane — the same signal /stop fires — for triggers
+   * that expose an out-of-band cancel while a run holds the connection.
    */
-  start(emit: (event: AgentEvent, opts?: HandleOptions) => Promise<RunResult>): Promise<void>;
+  start(
+    emit: (event: AgentEvent, opts?: HandleOptions) => Promise<RunResult>,
+    stop: (conversationKey: string) => boolean,
+  ): Promise<void>;
   /** Disconnect and stop emitting. */
   stop(): Promise<void>;
   /**
@@ -742,8 +747,30 @@ export class AgentService {
   async start(triggers: Trigger[]) {
     this.#triggers = triggers;
     for (const trigger of triggers) {
-      await trigger.start((event, opts) => this.handle(event, opts));
+      await trigger.start(
+        (event, opts) => this.handle(event, opts),
+        (conversationKey) => this.stopRun(conversationKey),
+      );
     }
+  }
+
+  /**
+   * Abort the in-flight run on a conversation's lane — the same signal the
+   * /stop command fires. Returns whether a run was actually aborted (false
+   * when the lane holds nothing). The run halts at its next step boundary and
+   * resolves with status "aborted" through its own event; queued events are
+   * left alone.
+   *
+   * Unlike /stop this records nothing of its own: the aborted run is what shows
+   * up in the history. It's the seam an interactive trigger uses to expose a
+   * cancel while a run holds the connection (the tty cancel frame), without
+   * routing a synthetic command through the queue.
+   */
+  stopRun(conversationKey: string): boolean {
+    const controller = this.#aborts.get(conversationKey);
+    if (!controller) return false;
+    controller.abort();
+    return true;
   }
 
   /** Stop triggers and schedules, close MCP connections, and close the store. */
