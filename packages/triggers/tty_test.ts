@@ -59,6 +59,8 @@ async function startService(script: Partial<Completion>[]) {
     port: 0, // ephemeral; captured via onListen
     token: "s3cret",
     handle: "tty-bot",
+    name: "Juniper", // the self-chosen name, distinct from the handle
+    description: "tty trigger test agent",
     onListen: (addr) => (port = addr.port),
   });
   await service.start([trigger]);
@@ -121,6 +123,8 @@ Deno.test("tty: auth, streamed run frames, and session memory", async () => {
   const hello = term.frames.find((f) => f.type === "hello");
   assert(hello && hello.type === "hello");
   assertEquals(hello.handle, "tty-bot");
+  assertEquals(hello.name, "Juniper"); // the self-chosen name, not the handle
+  assertEquals(hello.description, "tty trigger test agent");
   assertEquals(hello.conversation_id, "demo");
 
   // The run streamed live: a tool_result frame arrived before the result.
@@ -279,6 +283,7 @@ Deno.test("tty: input images reach the model; malformed images are rejected", as
     port: 0,
     token: "s3cret",
     handle: "tty-bot",
+    name: "tty-bot",
     onListen: (addr) => (port = addr.port),
   });
   await service.start([trigger]);
