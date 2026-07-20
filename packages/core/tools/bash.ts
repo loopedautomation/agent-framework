@@ -18,11 +18,20 @@ export function extractExecutables(command: string): { ok: true; executables: st
   let word = "";
   let hasWord = false; // distinguishes "" (empty quoted word) from no word at all
   let sawCommand = false; // current segment already yielded its executable
+  let awaitRedirectTarget = false; // the next word is a redirection target, not a command
   let inSingle = false;
   let inDouble = false;
 
   const endWord = () => {
     if (!hasWord) return;
+    // A redirection's target is a filename or fd, never an executable: `>out`,
+    // and the `1` in `2>&1`, are consumed here, not checked against the allowlist.
+    if (awaitRedirectTarget) {
+      awaitRedirectTarget = false;
+      word = "";
+      hasWord = false;
+      return;
+    }
     // Skip leading VAR=value assignments.
     if (!sawCommand && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
       executables.push(word);
@@ -69,6 +78,18 @@ export function extractExecutables(command: string): { ok: true; executables: st
       hasWord = true;
       continue;
     }
+    // Redirections: the operator and its target name no command. `2>&1`, `>&2`,
+    // `&>log` and friends must not leak a phantom executable — without this the
+    // `&` reads as a separator and the fd or filename after it looks like the
+    // next command (the reported `run access to "1"` denial). A lone `&` (no
+    // `>` after) is still a separator, handled below.
+    if (c === ">" || c === "<" || (c === "&" && command[i + 1] === ">")) {
+      endWord(); // close the command word (`echo>x`) or fd number (`2>&1`) first
+      while (i + 1 < command.length && "<>&".includes(command[i + 1])) i++; // >>, >&, &>>, <& …
+      if (command[i + 1] === "|") i++; // >| clobber
+      awaitRedirectTarget = true;
+      continue;
+    }
     // Segment separators: ; | newline, and & — both background (`a & b`) and
     // and-lists (`a && b`). A lone & must split like the others, or the command
     // after it (`gh ... & curl evil.com`) runs unchecked past the allowlist.
@@ -76,6 +97,7 @@ export function extractExecutables(command: string): { ok: true; executables: st
       if (c === "&" && command[i + 1] === "&") i++; // consume the second &
       endWord();
       sawCommand = false;
+      awaitRedirectTarget = false; // a new segment; any dangling redirect had no target
       continue;
     }
     if (/\s/.test(c)) {
