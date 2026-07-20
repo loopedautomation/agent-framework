@@ -204,6 +204,7 @@ Deno.test("tty: a cancel frame aborts the in-flight run; the socket keeps going"
     port: 0,
     token: "s3cret",
     handle: "tty-bot",
+    name: "tty-bot",
     onListen: (addr) => (port = addr.port),
   });
   await service.start([trigger]);
