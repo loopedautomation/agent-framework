@@ -149,10 +149,15 @@ export type { RealtimeSessionOptions } from "./realtime.ts";
 /**
  * Instantiate the triggers a config declares.
  * Tokens resolve from *_env here — startup, not first request.
+ *
+ * `identityName` is the agent's self-chosen name (resolved at boot); the tty
+ * trigger announces it in its hello frame. It defaults to the handle, the same
+ * fallback /healthz uses before the naming ritual has run.
  */
 export function triggersFromConfig(
   config: AgentConfig,
   getEnv: (name: string) => string | undefined = Deno.env.get,
+  identityName: string = config.handle,
 ): Trigger[] {
   const triggers: Trigger[] = [];
   // Built-ins plus config-defined commands, registered natively on the chat
@@ -200,7 +205,14 @@ export function triggersFromConfig(
           );
         }
         triggers.push(
-          new TtyTrigger({ path: t.path, port: t.port, token, handle: config.handle }),
+          new TtyTrigger({
+            path: t.path,
+            port: t.port,
+            token,
+            handle: config.handle,
+            name: identityName,
+            description: config.description,
+          }),
         );
         break;
       }

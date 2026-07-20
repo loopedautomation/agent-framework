@@ -25,8 +25,10 @@ Connect with a WebSocket to `ws://host:8090/tty`. Auth is the usual bearer token
 Every frame in both directions is JSON. On connect the server announces itself:
 
 ```json
-{"type": "hello", "handle": "task-bot", "conversation_id": "8b1f..."}
+{"type": "hello", "handle": "task-bot", "name": "Juniper", "description": "Triages inbound support tickets", "conversation_id": "8b1f..."}
 ```
+
+`handle` is the operator's handle for the agent; `name` is the name the agent [chose for itself](agent-file.md) on first boot (it falls back to the handle until that ritual runs), and `description` is its job. A client can label the agent by `name` instead of the raw handle, which is what Looped Meet shows for an agent in a call. `description` is omitted when the agent has none. Older clients that only read `handle` keep working, since the extra fields are additive.
 
 Send input:
 

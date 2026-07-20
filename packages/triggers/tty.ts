@@ -1,11 +1,5 @@
 import { logInfo } from "@looped/core";
-import type {
-  AgentEvent,
-  HandleOptions,
-  ImageContent,
-  RunResult,
-  Trigger,
-} from "@looped/core";
+import type { AgentEvent, HandleOptions, ImageContent, RunResult, Trigger } from "@looped/core";
 
 /** Options for {@linkcode TtyTrigger}. */
 export interface TtyTriggerOptions {
@@ -15,16 +9,28 @@ export interface TtyTriggerOptions {
   port: number;
   /** The expected bearer token (already resolved from token_env). */
   token: string;
-  /** The agent's handle, announced in the hello frame. */
+  /** The operator's handle for this agent, announced in the hello frame. */
   handle: string;
+  /**
+   * The agent's self-chosen identity name (the same value /healthz serves),
+   * announced in the hello frame so clients can label it by name, not handle.
+   * Falls back to the handle before the naming ritual has run.
+   */
+  name: string;
+  /** The agent's job description, announced in the hello frame when set. */
+  description?: string;
   /** Injectable for tests: 0 picks an ephemeral port. */
   onListen?: (addr: { port: number }) => void;
 }
 
 /** A frame the server sends to a connected terminal. */
 export type TtyServerFrame =
-  /** Sent once on connect. */
-  | { type: "hello"; handle: string; conversation_id: string }
+  /**
+   * Sent once on connect. `name` is the agent's self-chosen identity (handle
+   * before the naming ritual); `description` its job. Older clients ignore the
+   * added fields, so the frame stays backwards compatible.
+   */
+  | { type: "hello"; handle: string; name: string; description?: string; conversation_id: string }
   /** The run's inner-loop progress, mirrored from RunEvent. */
   | { type: "step"; n: number }
   | { type: "assistant"; content: string }
@@ -160,7 +166,14 @@ export class TtyTrigger implements Trigger {
       let set = this.#sockets.get(conversationKey);
       if (!set) this.#sockets.set(conversationKey, set = new Set());
       set.add(socket);
-      send({ type: "hello", handle: this.#opts.handle, conversation_id: conversationId });
+      const { handle, name, description } = this.#opts;
+      send({
+        type: "hello",
+        handle,
+        name,
+        ...(description ? { description } : {}),
+        conversation_id: conversationId,
+      });
     };
     socket.onclose = () => {
       const set = this.#sockets.get(conversationKey);
