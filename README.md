@@ -6,7 +6,7 @@
 
 <div align="center">
 
-# Looped Agent Framework<br/><sub><b>Contained, event-driven AI agents — an agent is a file.</b></sub><br/><br/>[![CI](https://github.com/loopedautomation/agent-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/loopedautomation/agent-framework/actions/workflows/ci.yml) [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE) [![Docs](https://img.shields.io/badge/docs-looped.sh-8b5cf6)](https://docs.looped.sh/agent-framework)
+# Looped Agent Framework<br/><sub><b>An agent is a file.</b></sub><br/><br/>[![CI](https://github.com/loopedautomation/agent-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/loopedautomation/agent-framework/actions/workflows/ci.yml) [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE) [![Docs](https://img.shields.io/badge/docs-looped.sh-8b5cf6)](https://docs.looped.sh/agent-framework)
 
 </div>
 
