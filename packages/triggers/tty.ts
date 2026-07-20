@@ -1,11 +1,5 @@
 import { logInfo } from "@looped/core";
-import type {
-  AgentEvent,
-  HandleOptions,
-  ImageContent,
-  RunResult,
-  Trigger,
-} from "@looped/core";
+import type { AgentEvent, HandleOptions, ImageContent, RunResult, Trigger } from "@looped/core";
 
 /** Options for {@linkcode TtyTrigger}. */
 export interface TtyTriggerOptions {
@@ -38,12 +32,20 @@ export type TtyServerFrame =
   | { type: "error"; error: string };
 
 /** A frame a terminal sends to the server. */
-export type TtyClientFrame = {
-  type: "input";
-  text: string;
-  /** Optional images for the turn (e.g. a meeting screenshare frame). */
-  images?: { mediaType: string; data: string }[];
-};
+export type TtyClientFrame =
+  | {
+    type: "input";
+    text: string;
+    /** Optional images for the turn (e.g. a meeting screenshare frame). */
+    images?: { mediaType: string; data: string }[];
+  }
+  /**
+   * Abort the run in flight on this socket. Accepted while a run is executing
+   * (it's the one frame that bypasses the one-run-at-a-time guard); a no-op
+   * when nothing is running. The aborted run halts at its next step boundary
+   * and sends its own `{type: "result", status: "aborted"}` terminal frame.
+   */
+  | { type: "cancel" };
 
 /** Image formats every provider dialect accepts (mirrors ImageContent). */
 const TTY_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
@@ -115,7 +117,10 @@ export class TtyTrigger implements Trigger {
   }
 
   /** Start the server; each authorized upgrade becomes an interactive session. */
-  start(emit: (event: AgentEvent, opts?: HandleOptions) => Promise<RunResult>): Promise<void> {
+  start(
+    emit: (event: AgentEvent, opts?: HandleOptions) => Promise<RunResult>,
+    stop: (conversationKey: string) => boolean,
+  ): Promise<void> {
     const { path, port } = this.#opts;
     this.#server = Deno.serve({
       port,
@@ -139,7 +144,7 @@ export class TtyTrigger implements Trigger {
       );
       const conversationId = url.searchParams.get("conversation_id") ?? crypto.randomUUID();
       const conversationKey = `tty:${conversationId}`;
-      this.#attach(socket, emit, conversationId, conversationKey);
+      this.#attach(socket, emit, stop, conversationId, conversationKey);
       return response;
     });
     return Promise.resolve();
@@ -148,6 +153,7 @@ export class TtyTrigger implements Trigger {
   #attach(
     socket: WebSocket,
     emit: (event: AgentEvent, opts?: HandleOptions) => Promise<RunResult>,
+    stop: (conversationKey: string) => boolean,
     conversationId: string,
     conversationKey: string,
   ): void {
@@ -173,6 +179,13 @@ export class TtyTrigger implements Trigger {
         frame = JSON.parse(String(msg.data));
       } catch {
         return send({ type: "error", error: "frames must be JSON" });
+      }
+      // Cancel is the one frame allowed through mid-run: it fires the lane's
+      // abort so the in-flight run halts and sends its own aborted result. A
+      // no-op when nothing is running, so a stray cancel is harmless.
+      if (frame.type === "cancel") {
+        stop(conversationKey);
+        return;
       }
       if (frame.type !== "input" || typeof frame.text !== "string" || !frame.text.trim()) {
         return send({ type: "error", error: 'expected {type: "input", text: "..."}' });
