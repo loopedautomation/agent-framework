@@ -8,7 +8,7 @@ import type {
   Trigger,
 } from "@looped/core";
 import type { ImageContent } from "@looped/core";
-import { isSilence, NO_REPLY, splitMessage } from "./text.ts";
+import { isSilence, NO_REPLY, replyModality, splitMessage } from "./text.ts";
 import { placeholderWaveform, SPEAK_MAX_CHARS, type VoiceEngines } from "./voice.ts";
 import type { DiscordVoiceSession } from "./discord_voice.ts";
 
@@ -376,7 +376,9 @@ export class DiscordTrigger implements Trigger {
   }
 
   async #reply(msg: DiscordMessage, result: RunResult, asVoice = false) {
-    const reply = (result.reply ?? "").trim();
+    // A leading __VOICE__/__TEXT__ marker overrides the default modality and is
+    // stripped from the reply the recipient sees.
+    const { mode, text: reply } = replyModality((result.reply ?? "").trim());
 
     // The agent had nothing to say — with allow_silence, say nothing.
     if (this.#opts.allowSilence && isSilence(reply)) return;
@@ -385,11 +387,13 @@ export class DiscordTrigger implements Trigger {
     const target = this.#opts.replyChannel ?? msg.channel_id;
     const inSourceChannel = target === msg.channel_id;
 
-    // A voice message gets a voice message back when speak is configured.
-    // Failures and replies too long to speak fall through to the text path;
-    // replies routed to another channel stay text, since they quote context.
+    // A voice message gets a voice message back by default; __VOICE__ forces one
+    // and __TEXT__ opts out. Failures and replies too long to speak fall through
+    // to the text path; replies routed to another channel stay text, since they
+    // quote context.
+    const wantsVoice = mode === "voice" || (mode === undefined && asVoice);
     if (
-      asVoice && this.#opts.voice?.speak && inSourceChannel &&
+      wantsVoice && this.#opts.voice?.speak && inSourceChannel &&
       reply !== "" && reply.length <= SPEAK_MAX_CHARS &&
       await this.#sendVoiceReply(msg, reply)
     ) return;
