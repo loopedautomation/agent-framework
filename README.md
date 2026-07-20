@@ -1,12 +1,24 @@
-# Looped Agent Framework
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/readme-cover.png">
+  <source media="(prefers-color-scheme: light)" srcset=".github/readme-cover-light.png">
+  <img alt="Agent Framework" src=".github/readme-cover-light.png">
+</picture>
+
+<div align="center">
+
+# Looped Agent Framework<br/><sub><b>Contained, event-driven AI agents — an agent is a file.</b></sub><br/><br/>[![CI](https://github.com/loopedautomation/agent-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/loopedautomation/agent-framework/actions/workflows/ci.yml) [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE) [![Docs](https://img.shields.io/badge/docs-looped.sh-8b5cf6)](https://docs.looped.sh/agent-framework)
+
+</div>
 
 Looped AF lets you build contained, event-driven AI agents. Define your agent in a single config file, run it in a container and deploy it anywhere.
+
+**Contents:** [Demo](#demo) · [What's here](#whats-here) · [Docs](#docs) · [Contributing](#contributing)
 
 > 🚧 **This is alpha software** 🚧 
 >
 > We're still in the early stages, and things are going to change and sometimes break: interfaces, config fields, defaults. If you're up for experimenting anyway, welcome. File an issue when something breaks and we'll sort it out.
 
-## 🎥 Demo
+## Demo
 <a href="https://www.youtube.com/watch?v=2t-z1yFO9lE" target="_blank">
 <img width="1920" height="1080" alt="introducing-thumbnail-with-play-button" src="https://github.com/user-attachments/assets/15f58b18-4653-4ced-b0bb-0baae2b9df67" />
 </a>
