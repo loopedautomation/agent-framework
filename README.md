@@ -12,7 +12,7 @@
 
 Looped AF lets you build contained, event-driven AI agents. Define your agent in a single config file, run it in a container and deploy it anywhere.
 
-**Contents:** [Demo](#demo) · [What's here](#whats-here) · [Docs](#docs) · [Contributing](#contributing)
+**Contents:** [Demo](#demo) · [What's here](#whats-here) · [Docs](#docs) · [Contributing](#contributing) · [License](#license)
 
 > 🚧 **This is alpha software** 🚧 
 >
@@ -64,3 +64,7 @@ The runtime is [Deno](https://deno.com) + TypeScript, built in the open.
 ## Contributing
 
 Setup, local development tasks and what CI checks are covered in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[Apache 2.0](./LICENSE)
