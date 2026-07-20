@@ -63,6 +63,39 @@ Deno.test("extractExecutables: background '&' is a separator, not swallowed text
   assertEquals(andList.executables, ["gh", "curl"]);
 });
 
+Deno.test("extractExecutables: redirections don't leak a phantom executable", () => {
+  // Regression for #151: the `&` in `2>&1` read as a separator, so the trailing
+  // `1` looked like a command — `permission denied: run access to "1"`.
+  const merged = extractExecutables("gh issue list 2>&1");
+  assert(merged.ok);
+  assertEquals(merged.executables, ["gh"]);
+
+  // Every fd-duplication and combined-redirect shape lands the same way.
+  for (const command of ["cmd >&2", "cmd 1>&2", "cmd &> log", "cmd &>> log", "cmd >| out"]) {
+    const r = extractExecutables(command);
+    assert(r.ok, command);
+    assertEquals(r.executables, ["cmd"], command);
+  }
+
+  // A file target, spaced or tight, is a filename — not a command.
+  const spaced = extractExecutables("cmd 2> err.log");
+  assert(spaced.ok);
+  assertEquals(spaced.executables, ["cmd"]);
+  const tight = extractExecutables("echo hi>out.txt");
+  assert(tight.ok);
+  assertEquals(tight.executables, ["echo"]);
+
+  // A redirect on the first command doesn't hide the real command after `|`.
+  const piped = extractExecutables("cat x 2>&1 | grep y");
+  assert(piped.ok);
+  assertEquals(piped.executables, ["cat", "grep"]);
+
+  // A leading redirection still finds the command that follows its target.
+  const leading = extractExecutables("> out.txt gh issue list");
+  assert(leading.ok);
+  assertEquals(leading.executables, ["gh"]);
+});
+
 Deno.test("run_bash: permitted command runs with a scoped environment only", async () => {
   const tool = createRunBashTool({
     permissions: new PermissionEngine({ run: ["bash", "env"] }),
