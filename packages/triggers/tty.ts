@@ -1,11 +1,5 @@
 import { logInfo } from "@looped/core";
-import type {
-  AgentEvent,
-  HandleOptions,
-  ImageContent,
-  RunResult,
-  Trigger,
-} from "@looped/core";
+import type { AgentEvent, HandleOptions, ImageContent, RunResult, Trigger } from "@looped/core";
 
 /** Options for {@linkcode TtyTrigger}. */
 export interface TtyTriggerOptions {
