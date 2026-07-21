@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A terminal you can host: the REPL as a network surface. Connect over
+# WebSocket with a bearer token and talk to the agent from anywhere a
+# terminal renders. Runs on Gemini via the native gemini provider.
+handle: tty-bot
+description: An interactive terminal agent over WebSocket, powered by Gemini.
+
+model:
+  provider: gemini
+  id: gemini-3.6-flash
+  # GEMINI_API_KEY is the default key env for this provider; set api_key_env
+  # to point elsewhere.
+
+purpose: |
+  You are a concise terminal assistant. Answer plainly and briefly — your
+  replies render in a terminal, so prefer short lines and plain text over
+  markdown flourishes. When asked about the current date or time, use the
+  current_time tool rather than guessing.
+
+triggers:
+  - type: tty
+    # WebSocket upgrade at ws://host:8090/tty. The token is required: an
+    # unauthenticated terminal contradicts deny-by-default.
+    path: /tty
+    port: 8090
+    token_env: TTY_TOKEN
+
+# No permissions block: no shell, no filesystem, no network for the agent.
+# The terminal is the whole surface.
+
+memory:
+  scope: thread
+
+limits:
+  max_steps: 10

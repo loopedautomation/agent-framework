@@ -3,11 +3,13 @@ import { type Provider, ProviderError } from "./types.ts";
 import { OpenAICompatibleProvider } from "./openai.ts";
 import { AnthropicProvider } from "./anthropic.ts";
 import { CodexProvider } from "./codex.ts";
+import { GeminiProvider } from "./gemini.ts";
 
 export * from "./types.ts";
 export { OpenAICompatibleProvider } from "./openai.ts";
 export { AnthropicProvider } from "./anthropic.ts";
 export { CodexProvider } from "./codex.ts";
+export { GeminiProvider } from "./gemini.ts";
 export { type RetryOptions, withRetry } from "./retry.ts";
 
 /**
@@ -46,5 +48,7 @@ export function createProvider(
       return new OpenAICompatibleProvider({ apiKey: apiKey ?? "", baseUrl: model.base_url });
     case "anthropic":
       return new AnthropicProvider({ apiKey: apiKey!, baseUrl: model.base_url });
+    case "gemini":
+      return new GeminiProvider({ apiKey: apiKey!, baseUrl: model.base_url });
   }
 }

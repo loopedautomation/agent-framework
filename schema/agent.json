@@ -20,9 +20,10 @@
           "enum": [
             "openai-compatible",
             "anthropic",
+            "gemini",
             "codex"
           ],
-          "description": "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy. codex uses an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login` (no API key)."
+          "description": "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy. gemini is the native Gemini API (generateContent). codex uses an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login` (no API key)."
         },
         "id": {
           "type": "string",
@@ -40,7 +41,7 @@
           "format": "uri"
         },
         "api_key_env": {
-          "description": "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ANTHROPIC_API_KEY per provider.",
+          "description": "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY per provider.",
           "type": "string",
           "minLength": 1
         },

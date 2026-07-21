@@ -2,6 +2,7 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 import { OpenAICompatibleProvider } from "./openai.ts";
 import { AnthropicProvider } from "./anthropic.ts";
 import { CodexProvider } from "./codex.ts";
+import { GeminiProvider } from "./gemini.ts";
 import { createProvider, ProviderError, withRetry } from "./mod.ts";
 import { parseAgentConfig } from "../config/load.ts";
 
@@ -129,6 +130,86 @@ Deno.test("anthropic adapter: parses tool_use blocks into tool calls", async () 
   assertEquals(completion.stopReason, "tool_calls");
   assertEquals(completion.toolCalls[0].id, "t9");
   assertEquals(completion.content, "let me check");
+});
+
+Deno.test("gemini adapter: maps request and parses function calls", async () => {
+  const f = fakeFetch(200, {
+    candidates: [{
+      content: {
+        parts: [
+          { text: "let me check" },
+          { functionCall: { name: "echo", args: { message: "hi" } } },
+        ],
+      },
+      finishReason: "STOP",
+    }],
+    usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 3, thoughtsTokenCount: 2 },
+  });
+  const provider = new GeminiProvider({ apiKey: "k", fetch: f });
+  const completion = await provider.complete({
+    model: "gemini-3.6-flash",
+    system: "sys",
+    messages: [{ role: "user", content: "hello" }],
+    tools: [{ name: "echo", description: "d", inputSchema: { type: "object" } }],
+  });
+
+  assertEquals(completion.stopReason, "tool_calls");
+  assertEquals(completion.toolCalls[0].name, "echo");
+  assertEquals(completion.toolCalls[0].arguments, '{"message":"hi"}');
+  assertEquals(completion.content, "let me check");
+  assertEquals(completion.usage, { inputTokens: 12, outputTokens: 5 });
+
+  const call = f.calls[0];
+  assert(call.url.endsWith("/v1beta/models/gemini-3.6-flash:generateContent"));
+  assertEquals(call.headers.get("x-goog-api-key"), "k");
+  const sent = await call.json();
+  assertEquals(sent.systemInstruction, { parts: [{ text: "sys" }] });
+  assertEquals(sent.contents[0], { role: "user", parts: [{ text: "hello" }] });
+  assertEquals(sent.tools[0].functionDeclarations[0].name, "echo");
+});
+
+Deno.test("gemini adapter: tool results become functionResponse parts with the name recovered from the id", async () => {
+  const f = fakeFetch(200, {
+    candidates: [{ content: { parts: [{ text: "done" }] }, finishReason: "STOP" }],
+    usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+  });
+  const provider = new GeminiProvider({ apiKey: "k", fetch: f });
+  await provider.complete({
+    model: "gemini-3.6-flash",
+    messages: [
+      { role: "user", content: "run the tool" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "echo#0", name: "echo", arguments: '{"message":"hi"}' }],
+      },
+      { role: "tool", toolCallId: "echo#0", content: "hi" },
+    ],
+  });
+
+  const sent = await f.calls[0].json();
+  assertEquals(sent.contents.length, 3);
+  assertEquals(sent.contents[1].role, "model");
+  assertEquals(sent.contents[1].parts[0].functionCall.name, "echo");
+  assertEquals(sent.contents[2].role, "user");
+  assertEquals(sent.contents[2].parts[0].functionResponse, {
+    id: "echo#0",
+    name: "echo",
+    response: { result: "hi" },
+  });
+});
+
+Deno.test("gemini adapter: 401 maps to a non-retryable auth error", async () => {
+  const provider = new GeminiProvider({
+    apiKey: "bad",
+    fetch: fakeFetch(401, { error: "nope" }),
+  });
+  const err = await assertRejects(
+    () => provider.complete({ model: "m", messages: [{ role: "user", content: "x" }] }),
+    ProviderError,
+  );
+  assertEquals(err.kind, "auth");
+  assertEquals(err.retryable, false);
 });
 
 /** An unsigned JWT with the given payload — the provider only decodes, never verifies. */
