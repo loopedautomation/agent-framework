@@ -38,6 +38,49 @@ function toolNameFromId(id: string): string {
   return hash === -1 ? id : id.slice(0, hash);
 }
 
+// Gemini's function-declaration parameters are an OpenAPI-style subset, not
+// full JSON Schema: unknown keys like $schema or additionalProperties are a
+// 400, not ignored. Keep only the fields the Schema proto accepts, recursing
+// where subschemas live.
+const SCHEMA_FIELDS = new Set([
+  "type",
+  "format",
+  "title",
+  "description",
+  "nullable",
+  "enum",
+  "items",
+  "properties",
+  "required",
+  "anyOf",
+  "minimum",
+  "maximum",
+  "minItems",
+  "maxItems",
+  "minLength",
+  "maxLength",
+  "pattern",
+]);
+
+function sanitizeSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(sanitizeSchema);
+  if (schema === null || typeof schema !== "object") return schema;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (!SCHEMA_FIELDS.has(key)) continue;
+    if (key === "properties" && value && typeof value === "object") {
+      out[key] = Object.fromEntries(
+        Object.entries(value).map(([name, sub]) => [name, sanitizeSchema(sub)]),
+      );
+    } else if (key === "items" || key === "anyOf") {
+      out[key] = sanitizeSchema(value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 /**
  * Gemini's dialect has two roles (user/model): tool results are
  * functionResponse parts in a user turn, and consecutive same-role
@@ -114,7 +157,7 @@ export class GeminiProvider implements Provider {
           functionDeclarations: req.tools.map((t) => ({
             name: t.name,
             description: t.description,
-            parameters: t.inputSchema,
+            parameters: sanitizeSchema(t.inputSchema),
           })),
         }]
         : undefined,
