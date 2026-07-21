@@ -4,7 +4,7 @@
 // server — files live in git or on your laptop, or nowhere (env-var deploy).
 
 export const TRIGGERS = ["discord", "slack", "telegram", "webhook", "cron", "none"] as const;
-export const PROVIDERS = ["openai-compatible", "anthropic", "codex", "local"] as const;
+export const PROVIDERS = ["openai-compatible", "anthropic", "gemini", "codex", "local"] as const;
 export const DEPLOYS = [
   "local",
   "docker",
@@ -31,6 +31,7 @@ const IMAGE = "ghcr.io/loopedautomation/agent:latest";
 const DEFAULT_MODELS: Record<InitOptions["provider"], string> = {
   "openai-compatible": "gpt-5.4-mini",
   anthropic: "claude-sonnet-5",
+  gemini: "gemini-3.6-flash",
   codex: "gpt-5-codex",
   local: "llama3.1",
 };
@@ -38,6 +39,7 @@ const DEFAULT_MODELS: Record<InitOptions["provider"], string> = {
 function keyEnv(provider: InitOptions["provider"]): string | undefined {
   if (provider === "openai-compatible") return "OPENAI_API_KEY";
   if (provider === "anthropic") return "ANTHROPIC_API_KEY";
+  if (provider === "gemini") return "GEMINI_API_KEY";
   return undefined; // local endpoints need no key; codex uses `codex login` credentials
 }
 

@@ -9,8 +9,9 @@ import { z } from "zod";
 // don't let the two drift.
 
 const ModelConfigSchema = z.strictObject({
-  provider: z.enum(["openai-compatible", "anthropic", "codex"]).describe(
+  provider: z.enum(["openai-compatible", "anthropic", "gemini", "codex"]).describe(
     "LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM, and any compatible proxy. " +
+      "gemini is the native Gemini API (generateContent). " +
       "codex uses an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login` (no API key).",
   ),
   id: z.string().min(1).describe("Model identifier, e.g. gpt-5.4-mini or claude-sonnet-5."),
@@ -21,7 +22,7 @@ const ModelConfigSchema = z.strictObject({
     "Endpoint override, e.g. http://localhost:11434/v1 for Ollama with openai-compatible (no API key required with a base_url).",
   ),
   api_key_env: z.string().min(1).optional().describe(
-    "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ANTHROPIC_API_KEY per provider.",
+    "Name of the env var holding the API key — a reference, never a value. Defaults to OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY per provider.",
   ),
   fallbacks: z.array(z.string().min(1)).optional().describe(
     "Model ids to fall back to when the primary fails.",
@@ -685,9 +686,10 @@ const agentConfigSchema = z.strictObject({
 export interface ModelConfig {
   /**
    * LLM provider dialect. openai-compatible covers OpenAI, Ollama, vLLM and compatible proxies;
-   * codex uses an OpenAI Codex (ChatGPT) subscription via the credentials from `codex login`.
+   * gemini is the native Gemini API; codex uses an OpenAI Codex (ChatGPT) subscription via the
+   * credentials from `codex login`.
    */
-  provider: "openai-compatible" | "anthropic" | "codex";
+  provider: "openai-compatible" | "anthropic" | "gemini" | "codex";
   /** Model identifier, e.g. gpt-5.4-mini or claude-sonnet-5. */
   id: string;
   /** Model for cheap internal calls. Defaults to the main model. */
@@ -1169,6 +1171,7 @@ export interface AgentConfigValidator {
 export const DEFAULT_API_KEY_ENV: Record<Exclude<ModelConfig["provider"], "codex">, string> = {
   "openai-compatible": "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
+  gemini: "GEMINI_API_KEY",
 };
 
 /** The env var each voice provider reads its API key from when api_key_env is omitted. */

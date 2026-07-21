@@ -77,6 +77,7 @@ export const IMAGE_ENV: Env = (key) => (key === "AF_STATUS_HOST" ? "0.0.0.0" : u
 const PROVIDER_HOSTS: Record<ModelConfig["provider"], string[]> = {
   "openai-compatible": ["api.openai.com"],
   "anthropic": ["api.anthropic.com"],
+  "gemini": ["generativelanguage.googleapis.com"],
   // codex authenticates against the OAuth endpoint, then calls the backend.
   "codex": ["auth.openai.com", "chatgpt.com"],
 };
