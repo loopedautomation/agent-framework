@@ -168,6 +168,42 @@ Deno.test("gemini adapter: maps request and parses function calls", async () => 
   assertEquals(sent.tools[0].functionDeclarations[0].name, "echo");
 });
 
+Deno.test("gemini adapter: strips JSON Schema keywords Gemini rejects from tool parameters", async () => {
+  const f = fakeFetch(200, {
+    candidates: [{ content: { parts: [{ text: "ok" }] }, finishReason: "STOP" }],
+    usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+  });
+  const provider = new GeminiProvider({ apiKey: "k", fetch: f });
+  await provider.complete({
+    model: "gemini-3.6-flash",
+    messages: [{ role: "user", content: "x" }],
+    tools: [{
+      name: "echo",
+      description: "d",
+      inputSchema: {
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          message: { type: "string", default: "hi", examples: ["hi"] },
+          tags: { type: "array", items: { type: "string", $comment: "x" } },
+        },
+        required: ["message"],
+      },
+    }],
+  });
+
+  const sent = await f.calls[0].json();
+  assertEquals(sent.tools[0].functionDeclarations[0].parameters, {
+    type: "object",
+    properties: {
+      message: { type: "string" },
+      tags: { type: "array", items: { type: "string" } },
+    },
+    required: ["message"],
+  });
+});
+
 Deno.test("gemini adapter: tool results become functionResponse parts with the name recovered from the id", async () => {
   const f = fakeFetch(200, {
     candidates: [{ content: { parts: [{ text: "done" }] }, finishReason: "STOP" }],
