@@ -3,28 +3,28 @@ title: "Overview"
 description: "The provider dialects, how API keys are supplied, and retry behavior."
 ---
 
-Every agent names its model in the required `model:` block; there is no fleet-wide default. The `provider` field is a **dialect**: three dialects cover effectively every hosted and local endpoint, and swapping providers is a one-line change. The short version lives in [Agent Config](agent-file.md#model); this page covers what the dialects share, and each provider has its own page: [OpenAI](openai.md), [Anthropic](anthropic.md) and [Codex](codex.md).
+Every agent names its model in the required `model:` block; there is no fleet-wide default. The `provider` field is a **dialect**: four dialects cover effectively every hosted and local endpoint, and swapping providers is a one-line change. The short version lives in [Agent Config](agent-file.md#model); this page covers what the dialects share, and each provider has its own page: [OpenAI](openai.md), [Anthropic](anthropic.md), [Gemini](gemini.md) and [Codex](codex.md).
 
 ```yaml
 model:
-  provider: openai-compatible   # or: anthropic, codex
+  provider: openai-compatible   # or: anthropic, gemini, codex
   id: gpt-5.4-mini
 ```
 
-## The three dialects
+## The four dialects
 
-| | [`openai-compatible`](openai.md) | [`anthropic`](anthropic.md) | [`codex`](codex.md) |
-| --- | --- | --- | --- |
-| Speaks to | OpenAI, Ollama, vLLM, LiteLLM, OpenRouter — anything serving the chat-completions API | The native Anthropic Messages API | The ChatGPT Codex backend |
-| Default endpoint | `https://api.openai.com/v1` | `https://api.anthropic.com` | `https://chatgpt.com/backend-api/codex` |
-| Auth | `OPENAI_API_KEY` | `ANTHROPIC_API_KEY` | `codex login` credentials (no key) |
-| `base_url` | Any compatible endpoint — this is how local models work | Anthropic-compatible proxies | Rarely needed |
+| | [`openai-compatible`](openai.md) | [`anthropic`](anthropic.md) | [`gemini`](gemini.md) | [`codex`](codex.md) |
+| --- | --- | --- | --- | --- |
+| Speaks to | OpenAI, Ollama, vLLM, LiteLLM, OpenRouter — anything serving the chat-completions API | The native Anthropic Messages API | The native Gemini API (`generateContent`) | The ChatGPT Codex backend |
+| Default endpoint | `https://api.openai.com/v1` | `https://api.anthropic.com` | `https://generativelanguage.googleapis.com` | `https://chatgpt.com/backend-api/codex` |
+| Auth | `OPENAI_API_KEY` | `ANTHROPIC_API_KEY` | `GEMINI_API_KEY` | `codex login` credentials (no key) |
+| `base_url` | Any compatible endpoint — this is how local models work | Anthropic-compatible proxies | Gemini-compatible proxies | Rarely needed |
 
 `id` is the plain model identifier the endpoint expects — `gpt-5.4-mini`, `claude-sonnet-5`, `llama3.1`. There is no combined `provider/model` string syntax; the two fields stay separate, which is what makes `base_url` proxies transparent.
 
 ## API keys
 
-The config names an environment variable; the key itself stays out of the file. At startup the runtime reads the key from the environment variable named by `api_key_env`, defaulting to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` per provider:
+The config names an environment variable; the key itself stays out of the file. At startup the runtime reads the key from the environment variable named by `api_key_env`, defaulting to `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` per provider:
 
 ```yaml
 model:
@@ -64,4 +64,4 @@ A call that still fails ends the run with status `error_provider` and a one-line
 
 ## What is deliberately not configurable
 
-There are no `temperature` or max-output-token fields; requests use the provider's defaults (the `anthropic` dialect caps output at 4096 tokens per call). If you need one of these controls, put a rewriting proxy such as LiteLLM behind `base_url`. The exhaustive field list is the [JSON Schema](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json), enforced [in your editor](agent-file.md#editor-support) as you type.
+There are no `temperature` or max-output-token fields; requests use the provider's defaults (the `anthropic` and `gemini` dialects cap output at 4096 tokens per call). If you need one of these controls, put a rewriting proxy such as LiteLLM behind `base_url`. The exhaustive field list is the [JSON Schema](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json), enforced [in your editor](agent-file.md#editor-support) as you type.

@@ -38,6 +38,7 @@
     "models",
     "openai",
     "anthropic",
+    "gemini",
     "codex"
   ]
 }
