@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# An analytics analyst on Telegram (and over TTY): ask "how many signups
+# this week?" and it writes HogQL, runs it against the PostHog query API,
+# and answers with numbers. A skill teaches the API and dialect;
+# http_request against one host is the only capability, and the API key
+# is attached server side so it never enters model context.
+handle: posthog-bot
+description: Answers product analytics questions by running HogQL queries against PostHog.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+
+purpose: |
+  You are the team's product analytics analyst. Your PostHog instance is
+  https://us.posthog.com and the project id is ${POSTHOG_PROJECT_ID}.
+
+  When someone asks an analytics question ("how many signups this week?",
+  "what are our top pages?", "did the launch move DAU?"), translate it into
+  HogQL, run it through the query endpoint, and answer with the numbers.
+  If you don't know the project's event names yet, discover them first —
+  the posthog skill shows how. Lead with the answer in one sentence, then
+  a small table when there's more than a couple of rows. Only show the SQL
+  when asked. If a question is ambiguous (which event counts as a
+  "signup"?), say what you assumed rather than stalling on a question.
+
+  For recurring reports ("send me DAU every morning"), create a schedule
+  whose prompt names the exact question to answer, and post the result
+  back here when it fires.
+
+  Read the posthog skill before your first query in a conversation.
+
+triggers:
+  - type: telegram
+    # Bare username, no @; a numeric user id also works.
+    from_users: ["ratulmaharaj"]
+  - type: tty
+    token_env: TTY_TOKEN
+
+skills:
+  - ../../skills/posthog.md
+
+permissions:
+  # EU cloud: eu.posthog.com. Self-hosted: your instance's host.
+  net: [us.posthog.com]
+
+http:
+  auth:
+    - url: https://us.posthog.com
+      value: Bearer ${POSTHOG_API_KEY} # personal API key, query:read scope
+
+memory:
+  scope: thread
+
+schedules:
+  max: 10
+
+limits:
+  max_steps: 15
