@@ -463,3 +463,46 @@ Deno.test("service: persisted schedules survive a restart, and a missed one-shot
   assert(inputs.includes("upcoming reminder"));
   await service.stop();
 });
+
+Deno.test("service: ${VAR} references in purpose expand at construction", async () => {
+  Deno.env.set("TEST_PURPOSE_PROJECT_ID", "12345");
+  try {
+    const config = parseAgentConfig(`
+handle: purpose-bot
+description: purpose expansion test agent
+model:
+  provider: openai-compatible
+  id: test-model
+purpose: The project id is \${TEST_PURPOSE_PROJECT_ID}. Reply tersely.
+`);
+    const service = new AgentService({
+      config,
+      provider: new GatedProvider(),
+      dataDir: await Deno.makeTempDir(),
+    });
+    assertEquals(service.config.purpose.trim(), "The project id is 12345. Reply tersely.");
+    await service.stop();
+  } finally {
+    Deno.env.delete("TEST_PURPOSE_PROJECT_ID");
+  }
+});
+
+Deno.test("service: a missing purpose reference fails at construction, not mid-run", async () => {
+  const config = parseAgentConfig(`
+handle: purpose-bot
+description: purpose expansion test agent
+model:
+  provider: openai-compatible
+  id: test-model
+purpose: The project id is \${TEST_PURPOSE_UNSET_REF}.
+`);
+  const dataDir = await Deno.makeTempDir();
+  let failed = false;
+  try {
+    new AgentService({ config, provider: new GatedProvider(), dataDir });
+  } catch (err) {
+    failed = true;
+    assert((err as Error).message.includes("TEST_PURPOSE_UNSET_REF"));
+  }
+  assert(failed, "constructor should throw on a missing purpose reference");
+});

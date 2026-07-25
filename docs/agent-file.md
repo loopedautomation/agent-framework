@@ -54,6 +54,8 @@ You don't choose the agent's display name. On first boot the agent names itself 
 
 `purpose` is the agent's job description and becomes its system prompt: what it does, how it behaves, and — just as important for event-driven agents — when to stay quiet. Be specific; this is the entire brief the model works from. A narrow, concrete purpose is what lets a small model be reliable.
 
+`${VAR}` references in purpose resolve at startup the same way an `env:` block's do — process env first, then `/run/secrets/<VAR>`, failing on boot when missing. Use them for non-secret configuration that varies per deployment: a project id, a hostname, a repo name. The expanded text is the system prompt, fully visible to the model and not treated as a secret by the [redactor](secrets.md) — never reference a credential here; for authenticated APIs use [`http.auth`](secrets.md#credentials-for-http-attached-server-side) instead.
+
 ## Model
 
 ```yaml
