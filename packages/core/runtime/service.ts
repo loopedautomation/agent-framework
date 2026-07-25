@@ -165,7 +165,13 @@ export class AgentService {
 
   /** Resolves env references, opens the store, and builds the provider. */
   constructor(opts: AgentServiceOptions) {
-    this.config = opts.config;
+    // Purpose may carry ${VAR} references for non-secret configuration — a
+    // project id, a hostname — resolved at startup like an env block's. The
+    // expanded text becomes the system prompt, so it is model-visible and
+    // never redacted: don't put credentials here.
+    this.config = /\$\{[A-Za-z_][A-Za-z0-9_]*\}/.test(opts.config.purpose)
+      ? { ...opts.config, purpose: expandEnvRefs(opts.config.purpose, "purpose") }
+      : opts.config;
     this.#provider = opts.provider ?? createProvider(opts.config.model);
     // Resolve env references at startup — a missing secret fails here,
     // not mid-run in front of the model.
