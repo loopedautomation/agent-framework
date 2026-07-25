@@ -150,3 +150,42 @@ export function collectEnvRefs(config: AgentConfig): string[] {
   for (const server of config.tools?.mcp ?? []) scan(server.env);
   return [...refs].sort();
 }
+
+/**
+ * Every `*_env` name anywhere in the config — trigger tokens, voice keys,
+ * whatever a future block adds. These are credentials by convention, so the
+ * redactor learns them and a deploy surface should ask for them.
+ */
+export function credentialEnvNames(value: unknown, out: Set<string> = new Set()): Set<string> {
+  if (Array.isArray(value)) {
+    for (const v of value) credentialEnvNames(v, out);
+  } else if (value && typeof value === "object") {
+    for (const [key, v] of Object.entries(value)) {
+      if (key.endsWith("_env") && typeof v === "string") out.add(v);
+      else credentialEnvNames(v, out);
+    }
+  }
+  return out;
+}
+
+const ENV_REF_ANY = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+
+/**
+ * Every env var name the agent needs at startup, secret or not: everything
+ * collectEnvRefs finds, plus every `*_env` credential name, the `${VAR}`
+ * references in `http.auth` values, and the ones in `purpose`. This is the
+ * list a deploy surface should prompt for — a name missing here is a boot
+ * failure the operator finds out about mid-deploy.
+ *
+ * Purpose references are the non-secret entries: they expand into the system
+ * prompt, so they're required at startup but never join the redactor's list.
+ */
+export function requiredEnvRefs(config: AgentConfig): string[] {
+  const refs = new Set<string>(collectEnvRefs(config));
+  for (const name of credentialEnvNames(config)) refs.add(name);
+  for (const auth of config.http?.auth ?? []) {
+    for (const m of auth.value.matchAll(ENV_REF_ANY)) refs.add(m[1]);
+  }
+  for (const m of config.purpose.matchAll(ENV_REF_ANY)) refs.add(m[1]);
+  return [...refs].sort();
+}

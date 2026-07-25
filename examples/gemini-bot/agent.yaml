@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A terminal you can host: the REPL as a network surface. Connect over
+# WebSocket with a bearer token and talk to the agent from anywhere a
+# terminal renders. Runs on Gemini via the native gemini provider.
+handle: gemini-bot
+description: An interactive agent powered by Gemini 3.6 Flash
+
+model:
+  provider: gemini
+  id: gemini-3.6-flash
+
+triggers:
+  - type: telegram
+
+purpose: |
+  You are a concise. assistant. Answer plainly and briefly — your
+  replies are telegram messages, so prefer short lines and plain text over markdown flourishes.
+
+memory:
+  scope: thread
+
+limits:
+  max_steps: 10

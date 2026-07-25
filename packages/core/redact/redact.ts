@@ -1,5 +1,5 @@
 import type { AgentConfig } from "../config/schema.ts";
-import { collectEnvRefs } from "../config/load.ts";
+import { collectEnvRefs, credentialEnvNames } from "../config/load.ts";
 import { envRefsIn, lookupSecret, type ResolveEnvOptions } from "../config/env.ts";
 
 /** What replaces a secret wherever one surfaces. */
@@ -157,19 +157,6 @@ export function defaultRedactor(): Redactor {
 /** Scrub a string with the process-wide redactor. */
 export function redactText(value: string): string {
   return current.text(value);
-}
-
-/** Every `<something>_env` value in the config: the env var names holding credentials. */
-function credentialEnvNames(value: unknown, out: Set<string> = new Set()): Set<string> {
-  if (Array.isArray(value)) {
-    for (const v of value) credentialEnvNames(v, out);
-  } else if (value && typeof value === "object") {
-    for (const [key, v] of Object.entries(value)) {
-      if (key.endsWith("_env") && typeof v === "string") out.add(v);
-      else credentialEnvNames(v, out);
-    }
-  }
-  return out;
 }
 
 /**

@@ -8,9 +8,9 @@ services:
     env_file: .env
     volumes:
       - ./agent.yaml:/agent/agent.yaml:ro
-      # agent.yaml references the skill as ../../skills/posthog.md,
-      # which resolves to /skills inside the container.
-      - ../../skills/posthog.md:/skills/posthog.md:ro
+      # The skill lives next to agent.yaml and is referenced as posthog.md,
+      # so it mounts next to the config inside the container too.
+      - ./posthog.md:/agent/posthog.md:ro
       - posthog-bot-data:/data
     ports:
       # TTY trigger WebSocket: ws://localhost:8090/tty (bearer auth via TTY_TOKEN)
