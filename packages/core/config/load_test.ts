@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { agentConfigJsonSchema } from "./schema.ts";
-import { collectEnvRefs, ConfigError, parseAgentConfig, resolveAgentConfig } from "./load.ts";
+import { collectEnvRefs, ConfigError, parseAgentConfig, requiredEnvRefs, resolveAgentConfig } from "./load.ts";
 
 const MINIMAL = `
 handle: test-bot
@@ -467,4 +467,32 @@ Deno.test("chat transports: defaults apply, telegram webhook demands a https pub
   assertEquals(slack.transport, "events_api");
   assertEquals(slack.path, "/slack");
   assertEquals(slack.signing_secret_env, "SLACK_SIGNING_SECRET");
+});
+
+Deno.test("requiredEnvRefs: purpose refs, http.auth refs, and *_env names join the list", () => {
+  const config = parseAgentConfig(`
+handle: refs-bot
+description: env refs test agent
+model:
+  provider: openai-compatible
+  id: test-model
+purpose: The project id is \${PROJECT_ID}.
+triggers:
+  - type: tty
+    token_env: TTY_TOKEN
+permissions:
+  net: [api.example.com]
+http:
+  auth:
+    - url: https://api.example.com
+      value: Bearer \${EXAMPLE_KEY}
+`);
+  assertEquals(requiredEnvRefs(config), [
+    "EXAMPLE_KEY",
+    "OPENAI_API_KEY",
+    "PROJECT_ID",
+    "TTY_TOKEN",
+  ]);
+  // collectEnvRefs keeps its narrower, secrets-oriented view.
+  assertEquals(collectEnvRefs(config), ["OPENAI_API_KEY"]);
 });

@@ -40,7 +40,10 @@ triggers:
     token_env: TTY_TOKEN
 
 skills:
-  - ../../skills/posthog.md
+  # Colocated with the config: relative skill paths resolve against the
+  # config's directory, and hosted platforms reject ".." traversal — a
+  # skill next to agent.yaml works everywhere.
+  - posthog.md
 
 permissions:
   # EU cloud: eu.posthog.com. Self-hosted: your instance's host.

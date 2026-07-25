@@ -42,8 +42,10 @@ export {
 export {
   collectEnvRefs,
   ConfigError,
+  credentialEnvNames,
   loadAgentConfig,
   parseAgentConfig,
+  requiredEnvRefs,
   resolveAgentConfig,
 } from "./config/load.ts";
 export {

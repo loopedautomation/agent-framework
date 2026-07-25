@@ -2,7 +2,7 @@
 
 Goal: an analytics analyst you can ask plain-language questions — "how many signups this week?", "what are our top pages?" — over Telegram or a hosted terminal. It writes HogQL, runs it against PostHog's query API, and answers with the numbers. Say "send me DAU every morning" and a [schedule](../../docs/scheduling.md) does exactly that. Budget ~10 minutes.
 
-The agent's only capability is `http_request` against one PostHog host, and a [skill](../../skills/posthog.md) teaches it the query endpoint and the HogQL dialect. The API key is declared in `http.auth`, so the runtime attaches it server side and the key never appears in model context ([secrets](../../docs/secrets.md)).
+The agent's only capability is `http_request` against one PostHog host, and a [skill](posthog.md) teaches it the query endpoint and the HogQL dialect. The skill lives next to `agent.yaml` and is referenced by bare filename — relative skill paths resolve against the config's directory, and keeping them free of `..` is what lets the same config run hosted, where path traversal is rejected. The API key is declared in `http.auth`, so the runtime attaches it server side and the key never appears in model context ([secrets](../../docs/secrets.md)).
 
 ## What you need before starting
 

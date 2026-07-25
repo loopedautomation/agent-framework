@@ -4,9 +4,9 @@
 import {
   type AgentConfig,
   AgentService,
-  collectEnvRefs,
   hermeticPlan,
   IMAGE_ENV,
+  requiredEnvRefs,
   resolveAgentConfig,
   runGrantAdvisories,
   type RunResult,
@@ -40,7 +40,7 @@ export async function validate(path: string) {
   for (const advisory of runGrantAdvisories(config.permissions?.run)) {
     console.log(`  ${warn("⚠")} ${advisory.advice}`);
   }
-  const refs = collectEnvRefs(config);
+  const refs = requiredEnvRefs(config);
   if (refs.length) {
     const missing = refs.filter((name) => Deno.env.get(name) === undefined);
     console.log(`  env refs: ${refs.join(", ")}`);

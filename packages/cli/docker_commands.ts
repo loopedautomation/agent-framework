@@ -1,6 +1,6 @@
 // docker plumbing + the run/up/ps/down commands (af's docker frontend over @looped/core).
 
-import { type AgentConfig, collectEnvRefs, resolveAgentConfig } from "@looped/core";
+import { type AgentConfig, requiredEnvRefs, resolveAgentConfig } from "@looped/core";
 import { dirname, join } from "@std/path";
 import {
   dockerPortArgs,
@@ -96,7 +96,7 @@ async function prepare(path: string, mode: RunMode, f: CommandFlags): Promise<Pr
   }
 
   // The container only sees the env file — warn on refs it won't find there.
-  const refs = collectEnvRefs(config);
+  const refs = requiredEnvRefs(config);
   if (refs.length) {
     const provided = new Set<string>();
     if (envFile) {
