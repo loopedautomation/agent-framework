@@ -51,7 +51,7 @@ async function startService(script: Partial<Completion>[]) {
     provider: scripted(script),
     dataDir,
     // Skip the naming ritual so the script isn't consumed by it.
-    identity: { name: "tty-bot", isNew: false },
+    identity: { name: "tty-bot", isNew: false, source: "chosen" },
   });
   let port = 0;
   const trigger = new TtyTrigger({
@@ -196,7 +196,7 @@ Deno.test("tty: a cancel frame aborts the in-flight run; the socket keeps going"
     config: CONFIG,
     provider,
     dataDir,
-    identity: { name: "tty-bot", isNew: false },
+    identity: { name: "tty-bot", isNew: false, source: "chosen" },
   });
   let port = 0;
   const trigger = new TtyTrigger({
@@ -276,7 +276,7 @@ Deno.test("tty: input images reach the model; malformed images are rejected", as
     config: CONFIG,
     provider,
     dataDir,
-    identity: { name: "tty-bot", isNew: false },
+    identity: { name: "tty-bot", isNew: false, source: "chosen" },
   });
   let port = 0;
   const trigger = new TtyTrigger({

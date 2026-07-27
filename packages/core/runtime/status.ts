@@ -50,7 +50,7 @@ export function startStatusServer(
         return Response.json({
           ok: true,
           handle: service.config.handle,
-          name: service.store.getIdentity("name") ?? service.config.handle,
+          name: service.config.name ?? service.store.getIdentity("name") ?? service.config.handle,
           model: `${service.config.model.provider}/${service.config.model.id}`,
           triggers: service.config.triggers?.map((t) => t.type) ?? [],
           uptime_s: Math.floor((Date.now() - startedAt) / 1000),

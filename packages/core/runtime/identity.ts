@@ -4,10 +4,12 @@ import type { Store } from "../store/store.ts";
 
 /** The agent's persistent identity, established on first boot. */
 export interface AgentIdentity {
-  /** The agent's self-chosen name. */
+  /** The agent's name. */
   name: string;
   /** True when the naming ritual just happened — the agent's first boot. */
   isNew: boolean;
+  /** Where the name came from: set by the operator in config, or self-chosen. */
+  source: "config" | "chosen";
 }
 
 const NAME_KEY = "name";
@@ -93,18 +95,22 @@ function cleanName(raw: string): string | undefined {
 }
 
 /**
- * The naming ritual: users don't name agents — agents name themselves.
- * Runs once on first boot (one LLM call, routed to the small model role),
- * persists for life in the identity table. If the provider is unreachable
- * the agent temporarily goes by its handle and retries next boot.
+ * The naming ritual: by default agents name themselves. Runs once on first
+ * boot (one LLM call, routed to the small model role), persists for life in
+ * the identity table. If the provider is unreachable the agent temporarily
+ * goes by its handle and retries next boot. An operator-set `config.name`
+ * skips all of this — it wins over any persisted self-chosen name, but never
+ * overwrites it, so removing `name` restores the chosen one.
  */
 export async function ensureIdentity(
   config: AgentConfig,
   provider: Provider,
   store: Store,
 ): Promise<AgentIdentity> {
+  if (config.name) return { name: config.name, isNew: false, source: "config" };
+
   const existing = store.getIdentity(NAME_KEY);
-  if (existing) return { name: existing, isNew: false };
+  if (existing) return { name: existing, isNew: false, source: "chosen" };
 
   let name: string | undefined;
   try {
@@ -131,16 +137,19 @@ export async function ensureIdentity(
   } catch {
     // Provider unreachable: no ritual today. Go by the handle, persist
     // nothing, retry next boot.
-    return { name: config.handle, isNew: false };
+    return { name: config.handle, isNew: false, source: "chosen" };
   }
 
   store.setIdentity(NAME_KEY, name);
-  return { name, isNew: true };
+  return { name, isNew: true, source: "chosen" };
 }
 
 /** The identity note appended to the agent's system prompt every run. */
-export function identityNote(config: AgentConfig, name: string): string {
-  return `\n\nYour name is ${name} — you chose it yourself when you were created. ` +
-    `Your operator handle is "${config.handle}". Sign off or introduce yourself as ${name} ` +
+export function identityNote(config: AgentConfig, identity: AgentIdentity): string {
+  const origin = identity.source === "config"
+    ? "given to you by your operator"
+    : "you chose it yourself when you were created";
+  return `\n\nYour name is ${identity.name} — ${origin}. ` +
+    `Your operator handle is "${config.handle}". Sign off or introduce yourself as ${identity.name} ` +
     `when it's natural to do so.`;
 }

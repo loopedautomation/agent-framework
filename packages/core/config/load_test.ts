@@ -21,6 +21,13 @@ Deno.test("parses a minimal config and applies defaults", () => {
   assertEquals(config.permissions, undefined); // deny-by-default: nothing granted
 });
 
+Deno.test("name: optional, parsed when set, bounds enforced", () => {
+  assertEquals(parseAgentConfig(MINIMAL).name, undefined);
+  assertEquals(parseAgentConfig(MINIMAL + "name: Marlow\n").name, "Marlow");
+  assertThrows(() => parseAgentConfig(MINIMAL + "name: X\n"), ConfigError); // too short
+  assertThrows(() => parseAgentConfig(MINIMAL + `name: ${"x".repeat(41)}\n`), ConfigError); // too long
+});
+
 Deno.test("limits: concurrency fields parse, keep sibling defaults, and reject zero runs", () => {
   const config = parseAgentConfig(MINIMAL + "limits:\n  concurrent_runs: 1\n  queue_depth: 0\n");
   assertEquals(config.limits.concurrent_runs, 1); // whole-agent serialization
@@ -137,13 +144,6 @@ Deno.test("rejects unknown keys loudly (typos must not silently no-op)", () => {
 Deno.test("rejects an unknown trigger type", () => {
   assertThrows(
     () => parseAgentConfig(MINIMAL + `triggers:\n  - type: teams\n`),
-    ConfigError,
-  );
-});
-
-Deno.test("rejects a user-chosen name field (agents name themselves)", () => {
-  assertThrows(
-    () => parseAgentConfig(MINIMAL + `name: my-agent\n`),
     ConfigError,
   );
 });
