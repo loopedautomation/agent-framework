@@ -594,8 +594,11 @@ const agentConfigSchema = z.strictObject({
       "handle must be alphanumeric with hyphens (it names volumes, services, and log streams)",
     )
     .describe(
-      "The operator's handle for this agent (compose service, logs, CLI, session keys). The agent chooses its own name on first boot.",
+      "The operator's handle for this agent (compose service, logs, CLI, session keys). Unless `name` is set, the agent chooses its own name on first boot.",
     ),
+  name: z.string().min(2).max(40).optional().describe(
+    "Display name for the agent. When set, the agent skips the naming ritual and uses this name. Omit to let the agent choose its own name on first boot.",
+  ),
   description: z.string().min(1).describe(
     "One line: what job this agent does. Also shown to the agent during the naming ritual.",
   ),
@@ -1107,6 +1110,8 @@ export interface LimitsConfig {
 export interface AgentConfig {
   /** The operator's handle for this agent (compose service, logs, CLI, session keys). */
   handle: string;
+  /** Operator-set display name. When present, the naming ritual is skipped. */
+  name?: string;
   /** One line: what job this agent does. */
   description: string;
   /** Which model runs this agent, and how to reach it. */

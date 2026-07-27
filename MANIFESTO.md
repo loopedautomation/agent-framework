@@ -40,7 +40,7 @@ Models improve monthly and vendors change their terms overnight. Swapping provid
 
 ## Agents name themselves
 
-You give an agent a job and a handle. On first boot it chooses its own name and keeps it for life. This costs nothing, and it changes how the whole thing feels: you hire someone and they get to work. There's no persona to design and no identity questionnaire to fill in before the agent does anything useful; it names itself and gets on with the job.
+You give an agent a job and a handle. On first boot it chooses its own name and keeps it for life. This costs nothing, and it changes how the whole thing feels: you hire someone and they get to work. There's no persona to design and no identity questionnaire to fill in before the agent does anything useful; it names itself and gets on with the job. If you do have a name in mind, one line of config sets it and the agent skips the ritual.
 
 ---
 

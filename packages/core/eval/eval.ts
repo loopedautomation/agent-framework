@@ -148,7 +148,7 @@ export async function runEvalCases(
     provider: opts.provider,
     baseDir: opts.baseDir,
     store: new Store(":memory:"),
-    identity: { name: opts.config.handle, isNew: false },
+    identity: { name: opts.config.handle, isNew: false, source: "config" },
     wrapTool: (tool: NativeTool): NativeTool => ({
       def: tool.def,
       execute: (rawArgs: string) => {

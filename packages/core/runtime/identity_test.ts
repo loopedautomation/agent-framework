@@ -37,11 +37,11 @@ Deno.test("naming ritual: happens once, persists, uses the small model role", as
   const provider = namer('"Ada."\nextra line');
 
   const first = await ensureIdentity(CONFIG, provider, store);
-  assertEquals(first, { name: "Ada", isNew: true }); // cleaned: quotes/dot/extra line dropped
+  assertEquals(first, { name: "Ada", isNew: true, source: "chosen" }); // cleaned: quotes/dot/extra line dropped
   assertEquals(provider.requests[0].model, "small-model"); // cheap calls go to the small role
 
   const second = await ensureIdentity(CONFIG, provider, store);
-  assertEquals(second, { name: "Ada", isNew: false });
+  assertEquals(second, { name: "Ada", isNew: false, source: "chosen" });
   assertEquals(provider.requests.length, 1); // no second LLM call, ever
   store.close();
 });
@@ -91,11 +91,48 @@ Deno.test("naming ritual: provider failure falls back to handle, retries next bo
     },
   };
   const identity = await ensureIdentity(CONFIG, failing, store);
-  assertEquals(identity, { name: "name-bot", isNew: false });
+  assertEquals(identity, { name: "name-bot", isNew: false, source: "chosen" });
   assertEquals(store.getIdentity("name"), undefined); // nothing persisted — ritual retries
 
   const recovered = await ensureIdentity(CONFIG, namer("Iris"), store);
   assert(recovered.isNew);
   assertEquals(recovered.name, "Iris");
+  store.close();
+});
+
+const NAMED_CONFIG = parseAgentConfig(`
+handle: name-bot
+name: Marlow
+description: a test agent
+model:
+  provider: openai-compatible
+  id: big-model
+  small: small-model
+purpose: test
+`);
+
+Deno.test("config name: skips the ritual entirely — no LLM call, nothing persisted", async () => {
+  const store = new Store(":memory:");
+  const provider = namer("Ada");
+  const identity = await ensureIdentity(NAMED_CONFIG, provider, store);
+  assertEquals(identity, { name: "Marlow", isNew: false, source: "config" });
+  assertEquals(provider.requests.length, 0);
+  assertEquals(store.getIdentity("name"), undefined);
+  store.close();
+});
+
+Deno.test("config name: overrides a chosen name without overwriting it", async () => {
+  const store = new Store(":memory:");
+  const chosen = await ensureIdentity(CONFIG, namer("Ada"), store);
+  assertEquals(chosen.name, "Ada");
+
+  // Operator sets name: config wins, store untouched.
+  const named = await ensureIdentity(NAMED_CONFIG, namer("Ignored"), store);
+  assertEquals(named, { name: "Marlow", isNew: false, source: "config" });
+  assertEquals(store.getIdentity("name"), "Ada");
+
+  // Operator removes name: the chosen name comes back.
+  const restored = await ensureIdentity(CONFIG, namer("Ignored"), store);
+  assertEquals(restored, { name: "Ada", isNew: false, source: "chosen" });
   store.close();
 });
