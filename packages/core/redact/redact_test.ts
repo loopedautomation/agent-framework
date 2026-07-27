@@ -156,7 +156,7 @@ env:
     provider,
     dataDir,
     redactor: new Redactor({ values: [SECRET] }),
-    identity: { name: "bashy", isNew: false },
+    identity: { name: "bashy", isNew: false, source: "chosen" },
   });
 
   const events: string[] = [];

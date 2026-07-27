@@ -5,7 +5,13 @@
     "handle": {
       "type": "string",
       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]*$",
-      "description": "The operator's handle for this agent (compose service, logs, CLI, session keys). The agent chooses its own name on first boot."
+      "description": "The operator's handle for this agent (compose service, logs, CLI, session keys). Unless `name` is set, the agent chooses its own name on first boot."
+    },
+    "name": {
+      "description": "Display name for the agent. When set, the agent skips the naming ritual and uses this name. Omit to let the agent choose its own name on first boot.",
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 40
     },
     "description": {
       "type": "string",

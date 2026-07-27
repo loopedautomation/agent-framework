@@ -677,7 +677,7 @@ export class AgentService {
             (this.config.schedules
               ? schedulesPromptSection(this.store.countSchedules(), this.config.schedules.max)
               : "") +
-            identityNote(this.config, identity.name),
+            identityNote(this.config, identity),
         },
         provider: this.#provider,
         tools: this.#buildTools(

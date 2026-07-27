@@ -203,7 +203,7 @@ Deno.test("/stop aborts the in-flight run in its conversation", async () => {
     config: CONFIG,
     provider,
     dataDir,
-    identity: { name: "Nova", isNew: false },
+    identity: { name: "Nova", isNew: false, source: "chosen" },
   });
 
   const running = service.handle({
@@ -243,7 +243,7 @@ Deno.test("/stop with nothing running says so", async () => {
     config: CONFIG,
     provider,
     dataDir,
-    identity: { name: "Nova", isNew: false },
+    identity: { name: "Nova", isNew: false, source: "chosen" },
   });
   const result = await service.handle({
     id: "e1",
