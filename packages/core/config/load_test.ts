@@ -1,6 +1,12 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { agentConfigJsonSchema } from "./schema.ts";
-import { collectEnvRefs, ConfigError, parseAgentConfig, requiredEnvRefs, resolveAgentConfig } from "./load.ts";
+import {
+  collectEnvRefs,
+  ConfigError,
+  parseAgentConfig,
+  requiredEnvRefs,
+  resolveAgentConfig,
+} from "./load.ts";
 
 const MINIMAL = `
 handle: test-bot
