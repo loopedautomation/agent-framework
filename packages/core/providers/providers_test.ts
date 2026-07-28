@@ -113,6 +113,36 @@ Deno.test("anthropic adapter: converts tool results into user content blocks", a
   assertEquals(sent.messages[2].content[0].tool_use_id, "t1");
 });
 
+Deno.test("anthropic adapter: sends OAuth tokens as Bearer with the oauth beta header", async () => {
+  const f = fakeFetch(200, {
+    content: [{ type: "text", text: "hi" }],
+    stop_reason: "end_turn",
+    usage: { input_tokens: 1, output_tokens: 1 },
+  });
+  const provider = new AnthropicProvider({ apiKey: "sk-ant-oat01-abc", fetch: f });
+  await provider.complete({ model: "m", messages: [{ role: "user", content: "x" }] });
+
+  const headers = f.calls[0].headers;
+  assertEquals(headers.get("authorization"), "Bearer sk-ant-oat01-abc");
+  assertEquals(headers.get("anthropic-beta"), "oauth-2025-04-20");
+  assertEquals(headers.get("x-api-key"), null);
+});
+
+Deno.test("anthropic adapter: sends API keys on x-api-key with no oauth header", async () => {
+  const f = fakeFetch(200, {
+    content: [{ type: "text", text: "hi" }],
+    stop_reason: "end_turn",
+    usage: { input_tokens: 1, output_tokens: 1 },
+  });
+  const provider = new AnthropicProvider({ apiKey: "sk-ant-api03-abc", fetch: f });
+  await provider.complete({ model: "m", messages: [{ role: "user", content: "x" }] });
+
+  const headers = f.calls[0].headers;
+  assertEquals(headers.get("x-api-key"), "sk-ant-api03-abc");
+  assertEquals(headers.get("authorization"), null);
+  assertEquals(headers.get("anthropic-beta"), null);
+});
+
 Deno.test("anthropic adapter: parses tool_use blocks into tool calls", async () => {
   const f = fakeFetch(200, {
     content: [
@@ -552,6 +582,41 @@ purpose: s
 `).model;
   const provider = createProvider(model, (n) => (n === "CODEX_HOME" ? "/tmp/codex" : undefined));
   assertEquals(provider.id, "codex");
+});
+
+Deno.test("createProvider builds anthropic from CLAUDE_CODE_OAUTH_TOKEN without an API key", () => {
+  const model = parseAgentConfig(`
+handle: p
+description: d
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+purpose: s
+`).model;
+  const provider = createProvider(
+    model,
+    (n) => (n === "CLAUDE_CODE_OAUTH_TOKEN" ? "sk-ant-oat01-abc" : undefined),
+  );
+  assertEquals(provider.id, "anthropic");
+
+  // ANTHROPIC_API_KEY wins over the OAuth token when both are set
+  assertEquals(
+    createProvider(model, (n) => (n === "ANTHROPIC_API_KEY" ? "sk-ant-api03-k" : "sk-ant-oat01-t"))
+      .id,
+    "anthropic",
+  );
+
+  // neither set → auth error mentioning both env vars
+  let threw = false;
+  try {
+    createProvider(model, () => undefined);
+  } catch (err) {
+    threw = true;
+    assert(err instanceof ProviderError && err.kind === "auth");
+    assert(err.message.includes("ANTHROPIC_API_KEY"));
+    assert(err.message.includes("CLAUDE_CODE_OAUTH_TOKEN"));
+  }
+  assert(threw);
 });
 
 Deno.test("withRetry retries retryable errors and gives up on the rest", async () => {

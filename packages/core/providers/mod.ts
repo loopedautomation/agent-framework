@@ -20,7 +20,9 @@ export { type RetryOptions, withRetry } from "./retry.ts";
  * at all: it authenticates with the OAuth credentials the Codex CLI stores
  * under CODEX_HOME (default ~/.codex), with the same JSON pasted into
  * CODEX_AUTH_JSON for file-less deploys, or with a Business/Enterprise
- * machine token in CODEX_ACCESS_TOKEN (which wins over both).
+ * machine token in CODEX_ACCESS_TOKEN (which wins over both). The anthropic
+ * provider additionally accepts a Claude subscription OAuth token (from
+ * `claude setup-token`), read from the key env var or CLAUDE_CODE_OAUTH_TOKEN.
  */
 export function createProvider(
   model: ModelConfig,
@@ -36,10 +38,17 @@ export function createProvider(
     });
   }
   const keyEnv = model.api_key_env ?? DEFAULT_API_KEY_ENV[model.provider];
-  const apiKey = getEnv(keyEnv);
+  let apiKey = getEnv(keyEnv);
+  // Claude subscription auth: an OAuth token from `claude setup-token` can
+  // stand in for an API key. CLAUDE_CODE_OAUTH_TOKEN is the conventional env
+  // var; the adapter switches to Bearer auth when it sees the oat prefix.
+  if (!apiKey && model.provider === "anthropic" && !model.api_key_env) {
+    apiKey = getEnv("CLAUDE_CODE_OAUTH_TOKEN");
+  }
   if (!apiKey && !(model.provider === "openai-compatible" && model.base_url)) {
+    const hint = model.provider === "anthropic" ? ` or CLAUDE_CODE_OAUTH_TOKEN` : "";
     throw new ProviderError(
-      `missing API key: set ${keyEnv} (or point model.api_key_env at the right env var)`,
+      `missing API key: set ${keyEnv}${hint} (or point model.api_key_env at the right env var)`,
       "auth",
     );
   }

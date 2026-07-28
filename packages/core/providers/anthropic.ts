@@ -18,6 +18,13 @@ export interface AnthropicOptions {
   fetch?: typeof fetch;
 }
 
+/**
+ * Claude subscription OAuth tokens (from `claude setup-token`) start with
+ * this prefix; API keys start with sk-ant-api. OAuth tokens go on the
+ * Authorization header with the oauth beta flag, not on x-api-key.
+ */
+const OAUTH_TOKEN_PREFIX = "sk-ant-oat";
+
 type ContentBlock =
   | { type: "text"; text: string }
   | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
@@ -93,6 +100,21 @@ export class AnthropicProvider implements Provider {
     this.#fetch = opts.fetch ?? fetch;
   }
 
+  #headers(): Record<string, string> {
+    const base = {
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+    };
+    if (this.#apiKey.startsWith(OAUTH_TOKEN_PREFIX)) {
+      return {
+        ...base,
+        authorization: `Bearer ${this.#apiKey}`,
+        "anthropic-beta": "oauth-2025-04-20",
+      };
+    }
+    return { ...base, "x-api-key": this.#apiKey };
+  }
+
   /** Run one completion, with retry on retryable provider errors. */
   complete(req: CompletionRequest): Promise<Completion> {
     return withRetry(() => this.#completeOnce(req));
@@ -118,11 +140,7 @@ export class AnthropicProvider implements Provider {
     try {
       res = await this.#fetch(`${this.#baseUrl}/v1/messages`, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": this.#apiKey,
-          "anthropic-version": "2023-06-01",
-        },
+        headers: this.#headers(),
         body: JSON.stringify(body),
       });
     } catch (err) {
