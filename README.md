@@ -48,7 +48,7 @@ permissions:
 - **Capability, added deliberately.** Markdown [skills](skills/), MCP servers, a small native toolset and tool search, which keeps tool schemas out of a small model's context.
 - **Deny-by-default permissions.** You allowlist the hosts, executables and paths an agent is allowed to touch. Secrets are scoped, and their values stay out of the model's context. Every permission decision lands in a SQLite audit trail.
 - **Docker-native deployment.** We publish a hardened base image (`ghcr.io/loopedautomation/agent`), a one-`apk add` recipe for custom images and a status surface at `/healthz`, `/runs` and `/audit`. Deploys can be file-less, with everything passed through env vars.
-- **A GitHub Action.** For agents that should exist for exactly one run: `uses: loopedautomation/agent-framework@v0.11.1` pipes a prompt into the agent in CI and hands the reply back as a step output. See [GitHub Actions](docs/github-actions.md).
+- **A GitHub Action.** For agents that should exist for exactly one run: `uses: loopedautomation/agent-framework@v0.12.0` pipes a prompt into the agent in CI and hands the reply back as a step output. See [GitHub Actions](docs/github-actions.md).
 - **Budgets by default.** Every run has a step cap and cheap models are the default, so you know roughly what an agent costs before you deploy it.
 
 ## Docs
