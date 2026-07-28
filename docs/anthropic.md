@@ -21,4 +21,16 @@ model:
   api_key_env: PROXY_API_KEY
 ```
 
+## Claude subscription auth
+
+Instead of an API key, the provider accepts an OAuth token from a Claude Pro/Max subscription. Generate one with the Claude Code CLI:
+
+```bash
+claude setup-token
+```
+
+and export it as `CLAUDE_CODE_OAUTH_TOKEN` (no config change needed — the provider falls back to it when `ANTHROPIC_API_KEY` is unset). A token pasted into `ANTHROPIC_API_KEY`, or any env var named by `api_key_env`, also works: the provider recognizes the `sk-ant-oat` prefix and switches to Bearer auth with the `oauth-2025-04-20` beta header automatically.
+
+> **Disclaimer.** Anthropic officially supports subscription usage through Claude Code and the Claude Agent SDK — not through direct Messages API calls. This token path works today, but Anthropic may restrict or reject non-Claude-Code use of subscription tokens at any time, and relying on it may be against their terms of service. Use it at your own risk, prefer an API key for anything production-critical, and expect requests to fail with an auth error if enforcement changes. Subscription tokens also draw from your plan's 5-hour/weekly usage windows rather than metered billing, so a busy agent competes with your own interactive usage.
+
 One behavior worth knowing: this dialect caps output at 4096 tokens per call. The Messages API requires an explicit maximum and the framework deliberately has no config field for it, so we picked a fixed value. If a run needs longer single responses, put a rewriting proxy such as LiteLLM behind `base_url`; the reasoning is in [what is deliberately not configurable](models.md#what-is-deliberately-not-configurable).
