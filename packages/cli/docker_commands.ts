@@ -27,6 +27,8 @@ export interface CommandFlags {
   dryRun: boolean;
   image?: string;
   envFile?: string;
+  /** deploy/status: hosted agent handle, when the repo hosts several. */
+  agent?: string;
 }
 
 /** Positionals + the run/up/down flag set, from everything after the command. */
@@ -39,6 +41,7 @@ export function parseCommandArgs(tokens: string[]): { flags: CommandFlags; posit
     else if (t === "--dry-run") flags.dryRun = true;
     else if (t === "--image") flags.image = tokens[++i] ?? fail("--image needs a value");
     else if (t === "--env-file") flags.envFile = tokens[++i] ?? fail("--env-file needs a value");
+    else if (t === "--agent") flags.agent = tokens[++i] ?? fail("--agent needs a value");
     else if (t.startsWith("-")) fail(`unknown flag ${t} (af --help for usage)`);
     else positional.push(t);
   }
