@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A release manager backed by Claude Code. The looped agent is the
+# orchestrator — triggers, conversation, scheduling — and delegates the
+# actual release work to headless `claude -p` runs. Both the orchestrator
+# (via an sk-ant-oat token) and the embedded CLI draw from a Claude
+# subscription; the CLI is the officially supported way to do so.
+handle: release-bot
+description: Cuts releases for the team's repos by delegating to headless Claude Code runs.
+
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+  # A Claude subscription OAuth token works here too (see docs/anthropic.md);
+  # the same env var authenticates the embedded CLI below.
+  api_key_env: CLAUDE_CODE_OAUTH_TOKEN
+
+purpose: |
+  You cut releases for the team's repositories. You do not do the release
+  work yourself: you delegate each release to a headless Claude Code run
+  and report its outcome.
+
+  When asked to cut a release (e.g. "release v0.12 of owner/repo"), run:
+
+    claude -p "<task>" --output-format json --dangerously-skip-permissions
+
+  with a task that names the repository, tells it to clone into /data/work
+  using gh, follow the repo's RELEASING.md if present, bump the version,
+  update the changelog, tag, push, and open the release PR — then print the
+  PR URL. Parse the JSON result and reply with the PR link and a one-line
+  summary. A run can take several minutes; that is normal.
+
+  If the run reports a failure, relay the error verbatim and stop — never
+  retry a partially completed release without being asked. For questions
+  about release state ("did v0.12 go out?"), delegate a read-only check the
+  same way.
+
+triggers:
+  - type: telegram
+    from_users: ["ratulmaharaj"]
+
+permissions:
+  # The orchestrator only ever spawns the CLI; everything claude does
+  # internally (git, gh, editing) is contained by the container, which is
+  # the isolation wall. /data is the writable workdir and claude's HOME.
+  run: [claude]
+  read: [/data]
+  write: [/data]
+
+env:
+  CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN} # subscription token for the embedded CLI
+  GH_TOKEN: ${GH_TOKEN} # lets claude's gh calls clone and open PRs
+
+memory:
+  scope: thread
+  persistent: true
+
+limits:
+  # One delegation is one step; the many-step work happens inside claude.
+  max_steps: 8
