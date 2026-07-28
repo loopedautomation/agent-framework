@@ -37,6 +37,7 @@ import {
 } from "./docker_commands.ts";
 import { init } from "./init_command.ts";
 import { runLocal, validate } from "./local.ts";
+import { deploy, hostedStatus, listHostedAgents, login, logout } from "./platform.ts";
 import { test } from "./test_command.ts";
 import { accent, dim, table } from "./style.ts";
 import { update } from "./update_command.ts";
@@ -58,6 +59,10 @@ function usage(): string {
     ["af flags [agent.yaml]", "Print the Deno sandbox flags this agent runs under"],
     ["af schema", "Print the agent.yaml JSON Schema"],
     ["af discord-invite [agent.yaml]", "Print the bot's OAuth invite URL (no bitfield math)"],
+    ["af login [key]", "Store a Looped platform API key (from the dashboard)"],
+    ["af deploy [agent.yaml]", "Deploy the connected repo's branch head to Looped Agents"],
+    ["af agents", "List the team's hosted agents"],
+    ["af status [agent.yaml]", "Live status of the hosted agent for this checkout"],
     ["af update", "Reinstall af at the latest published version"],
     ["af version", "Print the af version (also --version, -v)"],
   ];
@@ -132,6 +137,25 @@ async function main() {
         if (!arg) fail("usage: af discord-invite [agent.yaml]");
         await discordInvite(arg);
         break;
+      case "login":
+        await login(arg?.startsWith("--") ? undefined : arg);
+        break;
+      case "logout":
+        await logout();
+        break;
+      case "deploy": {
+        const { flags, positional } = rest();
+        await deploy(positional[0] ?? DEFAULT_CONFIG, flags.agent);
+        break;
+      }
+      case "agents":
+        await listHostedAgents();
+        break;
+      case "status": {
+        const { flags, positional } = rest();
+        await hostedStatus(positional[0] ?? DEFAULT_CONFIG, flags.agent);
+        break;
+      }
       case "update":
         await update();
         break;

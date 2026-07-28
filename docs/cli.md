@@ -149,6 +149,16 @@ If the agent has a `permissions.run` grant or a stdio MCP server, then a subproc
 
 `af schema` prints the agent.yaml [JSON Schema](https://github.com/loopedautomation/agent-framework/blob/main/schema/agent.json). It's the same schema the runtime enforces and the one [editors validate against](agent-file.md#editor-support).
 
+## af login / af deploy / af agents / af status
+
+These commands drive [Looped Agents](https://agents.looped.sh), the hosted platform. In v1 the platform deploys **GitHub-connected agents only**: you connect a repo once in the dashboard (a GitHub App install), and from then on the platform deploys whatever is on the connected branch. `af deploy` is the terminal end of that flow — it never uploads your working tree.
+
+`af login [key]` verifies and stores a team API key (minted in the dashboard with the `read:agent` and `write:agent` scopes) in `~/.config/looped/credentials.json`. In CI, set `LOOPED_API_KEY` instead; `LOOPED_API_URL` overrides the gateway for staging.
+
+`af deploy [agent.yaml] [--agent <handle>]` matches your checkout to a hosted agent — by the `origin` remote's `owner/repo`, then the current branch, then the config's handle when one repo hosts several agents — triggers a deploy of the branch head, and polls until the deployment is healthy or failed (surfacing the platform's boot error on failure). It warns when the working tree is dirty or the branch has unpushed commits, because those won't be in the deploy. `--agent <handle>` picks the target explicitly.
+
+`af agents` lists the team's hosted agents with their connected repos. `af status [agent.yaml] [--agent <handle>]` prints the matched agent's live machine status without waking a sleeping agent.
+
 ## af discord-invite
 
 `af discord-invite` prints the bot's OAuth invite URL with the correct scopes and permissions (View Channels, Send Messages and Read Message History), so you don't have to do the bitfield math yourself. It needs the config, to find the Discord trigger's `token_env`, and that token set in the environment; it looks up the application id from the token. It's part of the [Discord setup](discord.mdx#setup).
