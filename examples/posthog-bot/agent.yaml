@@ -54,6 +54,15 @@ http:
     - url: https://us.posthog.com
       value: Bearer ${POSTHOG_API_KEY} # personal API key, query:read scope
 
+public:
+  # Configuration, not a secret. `purpose` references it too, which is what
+  # puts the id in the system prompt; declaring it here is what makes it
+  # visible to every surface that provisions an agent's environment. It must
+  # not go in `env:` — everything there is redacted, and a project id of six
+  # characters or more would be scrubbed out of the very URLs and responses
+  # the agent has to read.
+  POSTHOG_PROJECT_ID: ${POSTHOG_PROJECT_ID}
+
 memory:
   scope: thread
 

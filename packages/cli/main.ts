@@ -19,6 +19,7 @@
 import {
   agentConfigJsonSchema,
   ConfigError,
+  expandConfigHosts,
   hermeticPlan,
   IMAGE_ENV,
   ProviderError,
@@ -115,7 +116,12 @@ async function main() {
         await test(arg ?? DEFAULT_CONFIG);
         break;
       case "flags": {
-        const config = await resolveAgentConfig(arg ?? DEFAULT_CONFIG);
+        // Lenient like validate: this describes the sandbox rather than
+        // entering it, and is often run away from the deployment's env.
+        const config = expandConfigHosts(
+          await resolveAgentConfig(arg ?? DEFAULT_CONFIG),
+          { lenient: true },
+        );
         const plan = hermeticPlan(config, IMAGE_ENV);
         // stderr, so the flags themselves stay pipeable.
         if (!plan.eligible) {

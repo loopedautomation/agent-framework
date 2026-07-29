@@ -175,7 +175,10 @@ export class AgentService {
     this.#provider = opts.provider ?? createProvider(opts.config.model);
     // Resolve env references at startup — a missing secret fails here,
     // not mid-run in front of the model.
-    this.#env = resolveEnv(opts.config.env);
+    // Both blocks scope into subprocesses identically; the only difference is
+    // that `public` never reaches the redactor. `env` wins a collision, so a
+    // name that is a secret anywhere stays a secret.
+    this.#env = { ...resolveEnv(opts.config.public), ...resolveEnv(opts.config.env) };
     // Credentials the runtime attaches to outbound requests itself, so an
     // authenticated API needs no secret in a model-visible header.
     this.#credentials = (opts.config.http?.auth ?? []).map((auth) => ({

@@ -1004,13 +1004,33 @@
       "description": "Deny-by-default allowlists. Omitting this block means the agent can touch nothing; denials are surfaced to the model as tool results."
     },
     "env": {
-      "description": "Env for tools and MCP servers. Values may be ${VAR} references, resolved at startup (env var, then /run/secrets/<VAR>) and scoped per tool.",
+      "description": "Secret env for tools and MCP servers. Values may be ${VAR} references, resolved at startup (env var, then /run/secrets/<VAR>) and scoped per tool. Everything here is treated as a secret and redacted from tool results, logs and traces — use `public` for configuration the agent must be able to read.",
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {
         "type": "string"
+      }
+    },
+    "public": {
+      "description": "Non-secret env, scoped to tools exactly like `env` but never redacted. For configuration the agent has to see in its own output — a project id, an account number, a region. Redacting one of these scrubs it out of the URLs and responses the agent needs to read.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
       }
     },
     "http": {

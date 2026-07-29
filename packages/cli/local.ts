@@ -4,6 +4,7 @@
 import {
   type AgentConfig,
   AgentService,
+  expandConfigHosts,
   hermeticPlan,
   IMAGE_ENV,
   requiredEnvRefs,
@@ -24,7 +25,11 @@ function statusLine(result: RunResult): string {
 }
 
 export async function validate(path: string) {
-  const config = await resolveAgentConfig(path);
+  // Lenient: validate describes a config, and it is routinely run somewhere
+  // other than the host that holds the deployment's env. An unresolved
+  // ${VAR} host stays visible in the egress line rather than failing here —
+  // the "not set in this environment" warning below is what reports it.
+  const config = expandConfigHosts(await resolveAgentConfig(path), { lenient: true });
   console.log(`${ok("✓")} ${path} is a valid agent definition`);
   console.log(`  handle:   ${accent(config.handle)}`);
   console.log(`  model:    ${config.model.provider} / ${config.model.id}`);
@@ -158,7 +163,11 @@ async function reexecHermetic(config: AgentConfig, path: string): Promise<boolea
 
 /** In-process execution: only inside the container (or AF_CONTAINER=1 for framework dev). */
 export async function runLocal(path: string) {
-  const config = await resolveAgentConfig(path);
+  // Before anything reads permissions.net — the hermetic re-exec compiles it
+  // into --allow-net, and a host still holding ${VAR} would allowlist a
+  // literal no DNS name matches. Strict here: a missing host fails at
+  // startup, like every other env reference on a running path.
+  const config = expandConfigHosts(await resolveAgentConfig(path));
 
   // Hermetic mode is the container's business: on a dev machine there are no
   // image flags to narrow, and re-execing would only confuse the REPL.

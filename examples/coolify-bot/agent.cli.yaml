@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# The CLI variant of coolify-bot. Same job, same skill, plus headless Claude
+# Code for the work that happens *before* a deploy: "fix the build failure
+# and redeploy" means cloning the repo, making the change, pushing, then
+# hitting POST /deploy.
+#
+# The trade: `permissions.run` means the agent spawns subprocesses, and a
+# subprocess opens its own sockets that permissions.net never sees. That
+# disqualifies the agent from hermetic mode — the container becomes the
+# egress boundary instead of the Deno sandbox. `af flags agent.cli.yaml`
+# prints the grant that caused it. Run agent.yaml if you want the sandbox to
+# be the wall; run this one if you want the capability.
+#
+# Needs the Dockerfile in this directory (compose.cli.yaml builds it).
+handle: coolify-bot
+description: Operates your Coolify instance, with Claude Code on hand for the code side of a fix.
+
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+  small: claude-haiku-4-5-20251001
+  # Swap to CLAUDE_CODE_OAUTH_TOKEN to run the orchestrator on a Claude
+  # subscription instead of metered billing — see docs/anthropic.md and the
+  # disclaimer there.
+  api_key_env: ANTHROPIC_API_KEY
+
+purpose: |
+  You operate the Coolify instance at https://${COOLIFY_HOST}. Its API
+  lives under /api/v1; read the coolify skill before your first call in a
+  conversation. Coolify addresses everything by UUID and has no
+  lookup-by-name, so start with GET /resources and cache what you resolve.
+
+  Two ways to act:
+
+  1. **http_request against the Coolify API.** Everything operational —
+     status, logs, deploys, restarts, env vars. This is the default and
+     usually the whole job.
+
+  2. **Headless Claude Code**, when the fix is in the code rather than the
+     platform ("the build is failing on a type error — fix it and redeploy"):
+
+       claude -p "<task>" --output-format json --dangerously-skip-permissions
+
+     Give it a task naming the repository, telling it to clone into
+     /data/work with gh, make the change, and push or open a PR — then print
+     what it did. Parse the JSON result. Only after that push lands do you
+     trigger POST /deploy, and say so as two separate steps. A run takes
+     minutes; that is normal. On failure, relay the error verbatim and stop.
+
+  Lead with the state — "api is running:healthy, web is running:unhealthy" —
+  then the detail. Deployments are asynchronous: hand back the deployment
+  UUID, poll a few times, and report "still building" rather than looping.
+
+  Status, logs and listings are read-only. Deploy, restart, stop, env
+  changes and anything with DELETE are real actions on running
+  infrastructure: restate the resource name and UUID and get a yes first.
+  Never delete a database on a casual instruction.
+
+  Never print the value of an environment variable — report the key and
+  whether it's set.
+
+triggers:
+  - type: telegram
+    from_users: ["ratulmaharaj"]
+  - type: tty
+    token_env: TTY_TOKEN
+
+skills:
+  - coolify.md
+
+permissions:
+  net: ["${COOLIFY_HOST}"]
+  # These grants are what cost hermetic mode. Everything claude does is
+  # bounded by the container and by what the tokens allow, not by net:.
+  run: [claude]
+  read: [/data]
+  write: [/data]
+
+http:
+  auth:
+    - url: https://${COOLIFY_HOST}
+      value: Bearer ${COOLIFY_API_TOKEN}
+
+env:
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY} # authenticates the embedded claude CLI
+  GH_TOKEN: ${GH_TOKEN} # lets claude's gh calls clone and push
+
+memory:
+  scope: thread
+  persistent: true
+
+schedules:
+  max: 10
+
+limits:
+  max_steps: 20

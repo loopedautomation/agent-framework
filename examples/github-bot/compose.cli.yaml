@@ -1,0 +1,25 @@
+# The CLI variant: docker compose -f compose.cli.yaml up -d --build
+#
+# Builds the Dockerfile in this directory (base image + git + gh + the
+# claude CLI) and runs agent.cli.yaml, which the Dockerfile bakes in as
+# /agent/agent.yaml. This variant is NOT hermetic — see agent.cli.yaml.
+#
+# .env next to this file (see .env.example).
+services:
+  github-bot:
+    build:
+      context: ../..
+      dockerfile: examples/github-bot/Dockerfile
+    env_file: .env
+    volumes:
+      - github-bot-data:/data
+    ports:
+      - "127.0.0.1:8090:8090"
+      - "127.0.0.1:9096:9090"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  github-bot-data:

@@ -37,6 +37,31 @@ The list of secrets is built from what the config already tells us: the `${VAR}`
 
 A literal you write directly into the config is not treated as a secret. It's committed to your repo, so it isn't one, and redacting `LOG_LEVEL: debug` would shred ordinary tool output for nothing. Values shorter than six characters are skipped for the same reason.
 
+## Configuration the agent has to read: `public`
+
+Everything in `env` is a secret by definition, and that coupling is usually what you want. It is wrong for one class of value: configuration the agent must be able to see in its own output. A PostHog project id, an AWS account number, a region. Redact one of those and it disappears from the URLs the agent builds and the responses it reads back — which looks, from the outside, like an agent that cannot see its own configuration.
+
+`public` is the same scoping without the redaction:
+
+```yaml
+env:
+  POSTHOG_API_KEY: ${POSTHOG_API_KEY}     # secret — scoped, redacted
+public:
+  POSTHOG_PROJECT_ID: ${POSTHOG_PROJECT_ID}  # config — scoped, visible
+```
+
+Both blocks resolve at startup the same way, both fail on a missing reference the same way, and both are scoped into `run_bash` subprocesses and MCP servers. The only difference is that `public` values never enter the redactor. A name in both blocks takes the `env` value, so anything that is a secret somewhere stays a secret.
+
+`public` also takes numbers and booleans without quoting — these are ids, ports and regions, and YAML reads a bare `12345` as a number:
+
+```yaml
+public:
+  POSTHOG_PROJECT_ID: 12345
+  AWS_REGION: eu-west-1
+```
+
+Two things follow from `public` being visible. It is reported by the same boot-time env list as everything else, so a deploy surface provisioning an agent still knows to ask for it. And it is genuinely not protected — anything you put here can reach a tool result, a log line and a trace. If you find yourself reaching for it to silence a redaction that is getting in your way, the value probably belongs in `env` and the problem is elsewhere.
+
 ## Credentials for HTTP, attached server side
 
 `http_request` is the case where scoped environment doesn't help you. The tool takes headers from the model, so an authenticated API means the model has to know the key and type it into an argument. That puts the secret straight back into the context you were keeping it out of.
@@ -58,7 +83,19 @@ The model asks for a URL. After the tool call comes back, the runtime matches th
 
 The tool's description tells the model which URLs are already authenticated, so it stops trying to help. The value never appears in the description, the arguments or the result.
 
-The host still has to be in `permissions.net`. Credentials say how to authenticate; [permissions](permissions.md) still say where the agent is allowed to go. Redirects are not followed, so a redirect can't carry your credential to a host you never allowed.
+The host still has to be in `permissions.net`. Credentials say how to authenticate; [permissions](permissions.md) still say where the agent is allowed to go. Both take env references, so a self-hosted instance's address need not be committed either:
+
+```yaml
+permissions:
+  net: ["${COOLIFY_HOST}"]
+
+http:
+  auth:
+    - url: https://${COOLIFY_HOST}
+      value: Bearer ${COOLIFY_API_TOKEN}
+```
+
+The `url` is not a secret and is not redacted — it names where requests go, and scrubbing it would blank the host out of every tool result. Only `value` is treated as a credential. Redirects are not followed, so a redirect can't carry your credential to a host you never allowed.
 
 ## Redacting something the config doesn't name
 
