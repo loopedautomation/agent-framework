@@ -7,6 +7,8 @@ import {
   requiredEnvRefs,
   resolveAgentConfig,
 } from "./load.ts";
+import { expandConfigHosts } from "./env.ts";
+import { hermeticPlan, IMAGE_ENV } from "../permissions/hermetic.ts";
 
 const MINIMAL = `
 handle: test-bot
@@ -306,6 +308,103 @@ Deno.test("the shipped standup-bot example is a valid agent definition", async (
   assertEquals(config.voice?.live?.provider, "openai");
   const discord = config.triggers?.[0];
   assert(discord?.type === "discord" && discord.voice_channels?.length);
+});
+
+Deno.test("the shipped github-bot example is a valid, hermetic agent definition", async () => {
+  const path = new URL("../../../examples/github-bot/agent.yaml", import.meta.url);
+  const config = parseAgentConfig(
+    await Deno.readTextFile(path),
+    "examples/github-bot/agent.yaml",
+  );
+  assertEquals(config.handle, "github-bot");
+  assertEquals(requiredEnvRefs(config), [
+    "ANTHROPIC_API_KEY",
+    "GITHUB_TOKEN",
+    "TELEGRAM_BOT_TOKEN",
+    "TTY_TOKEN",
+  ]);
+  // The README's claim: one exactly-matched host and nothing else. A `run:`
+  // grant or a wildcard here would cost hermetic mode and make it a lie —
+  // the CLI variant (agent.cli.yaml) is where that trade is made on purpose.
+  assertEquals(config.permissions?.net, ["api.github.com"]);
+  assertEquals(config.permissions?.run, undefined);
+  assert(hermeticPlan(config, IMAGE_ENV).eligible);
+});
+
+Deno.test("the shipped coolify-bot example is a valid, hermetic agent definition", async () => {
+  const path = new URL("../../../examples/coolify-bot/agent.yaml", import.meta.url);
+  const config = parseAgentConfig(
+    await Deno.readTextFile(path),
+    "examples/coolify-bot/agent.yaml",
+  );
+  assertEquals(config.handle, "coolify-bot");
+  assertEquals(requiredEnvRefs(config), [
+    "ANTHROPIC_API_KEY",
+    "COOLIFY_API_TOKEN",
+    "COOLIFY_HOST",
+    "TELEGRAM_BOT_TOKEN",
+    "TTY_TOKEN",
+  ]);
+  // The host is deployment configuration, not something to commit — the
+  // committed file carries the reference and nothing else.
+  assertEquals(config.permissions?.net, ["${COOLIFY_HOST}"]);
+  assertEquals(config.http?.auth?.[0].url, "https://${COOLIFY_HOST}");
+  assertEquals(config.permissions?.run, undefined);
+  // The token is attached server side, so the model never sees it — the
+  // whole reason the example can hand a deploy button to a chat trigger.
+  assertEquals(config.http?.auth?.length, 1);
+  // Hermetic eligibility is decided on the expanded config: the host that
+  // reaches --allow-net has to be the real one, not the reference.
+  const getEnv = (name: string) => name === "COOLIFY_HOST" ? "coolify.looped.sh" : undefined;
+  const expanded = expandConfigHosts(config, { getEnv, secretsDir: "/nonexistent" });
+  const plan = hermeticPlan(expanded, IMAGE_ENV);
+  assert(plan.eligible);
+  assert(plan.hosts.includes("coolify.looped.sh"));
+  assert(plan.flags.some((f) => f.includes("coolify.looped.sh")));
+});
+
+Deno.test("expandConfigHosts resolves permissions.net and http.auth urls", () => {
+  const config = parseAgentConfig(`
+handle: host-bot
+description: env-referenced host
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+purpose: You operate the instance at https://\${APP_HOST}.
+permissions:
+  net: ["\${APP_HOST}", api.github.com]
+http:
+  auth:
+    - url: https://\${APP_HOST}/api/v1
+      value: Bearer \${APP_TOKEN}
+`);
+  const opts = {
+    getEnv: (n: string) => n === "APP_HOST" ? "coolify.looped.sh" : undefined,
+    secretsDir: "/nonexistent",
+  };
+  const expanded = expandConfigHosts(config, opts);
+  assertEquals(expanded.permissions?.net, ["coolify.looped.sh", "api.github.com"]);
+  assertEquals(expanded.http?.auth?.[0].url, "https://coolify.looped.sh/api/v1");
+  // The credential is the service's business, not this function's — expanding
+  // it here would put a secret in the config object the sandbox is built from.
+  assertEquals(expanded.http?.auth?.[0].value, "Bearer ${APP_TOKEN}");
+  // The reference has to be reported, or `af validate` would call a config
+  // complete that cannot start.
+  assert(requiredEnvRefs(config).includes("APP_HOST"));
+
+  // Missing: a running path fails at startup, a describing path keeps the
+  // reference visible instead.
+  const none = { getEnv: () => undefined, secretsDir: "/nonexistent" };
+  assertThrows(() => expandConfigHosts(config, none), ConfigError, "APP_HOST");
+  assertEquals(
+    expandConfigHosts(config, { ...none, lenient: true }).permissions?.net,
+    ["${APP_HOST}", "api.github.com"],
+  );
+});
+
+Deno.test("expandConfigHosts returns the config untouched when nothing references anything", () => {
+  const config = parseAgentConfig(MINIMAL + `permissions:\n  net: [api.github.com]\n`);
+  assertEquals(expandConfigHosts(config), config);
 });
 
 Deno.test("emits a JSON schema with the top-level fields", () => {

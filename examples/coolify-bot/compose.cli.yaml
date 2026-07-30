@@ -1,0 +1,25 @@
+# The CLI variant: docker compose -f compose.cli.yaml up -d --build
+#
+# Builds the Dockerfile in this directory (base image + git + gh + the
+# claude CLI) and runs agent.cli.yaml, which the Dockerfile bakes in as
+# /agent/agent.yaml. This variant is NOT hermetic — see agent.cli.yaml.
+#
+# .env next to this file (see .env.example), plus GH_TOKEN.
+services:
+  coolify-bot:
+    build:
+      context: ../..
+      dockerfile: examples/coolify-bot/Dockerfile
+    env_file: .env
+    volumes:
+      - coolify-bot-data:/data
+    ports:
+      - "127.0.0.1:8091:8090"
+      - "127.0.0.1:9097:9090"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  coolify-bot-data:

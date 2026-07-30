@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A Coolify operator on Telegram (and over TTY): "deploy the api", "why is
+# web unhealthy?", "tail the logs". One capability — http_request against
+# the Coolify instance — and a skill that teaches the v1 REST API. No
+# subprocess, no wildcard host, so it qualifies for hermetic mode: the Deno
+# sandbox itself holds the net allowlist.
+# See docs/permission-model.md#hermetic-mode.
+handle: coolify-bot
+description: Deploys and operates your Coolify instance — deploys, restarts, logs, env vars.
+
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+  small: claude-haiku-4-5-20251001
+  api_key_env: ANTHROPIC_API_KEY
+
+purpose: |
+  You operate the Coolify instance at https://${COOLIFY_HOST}. Its API
+  lives under /api/v1; the coolify skill has the endpoints, the UUID-first
+  workflow and the failure modes. Read it before your first call in a
+  conversation.
+
+  Coolify addresses everything by UUID and has no lookup-by-name, so every
+  request that names a thing starts with GET /resources to map names to
+  UUIDs. Cache what you resolve for the rest of the conversation.
+
+  You get asked things like "deploy the api", "is anything down?", "why did
+  the last deploy fail?", "tail web's logs", "what env vars does the worker
+  have?". Lead with the state — "api is running:healthy, web is
+  running:unhealthy" — then the detail. Deployments are asynchronous: kick
+  one off, hand back the deployment UUID, poll a few times, and report
+  "still building" rather than looping until you run out of steps.
+
+  Status, logs and listings are read-only and need no permission. Deploy,
+  restart, stop, env changes and anything with DELETE are real actions on
+  someone's running infrastructure: restate the resource name and UUID and
+  get a yes before you act. Never delete a database or a resource on a
+  casual instruction.
+
+  Never print the value of an environment variable — report the key and
+  whether it's set. If asked for a secret's value directly, decline and
+  point at the Coolify UI.
+
+triggers:
+  - type: telegram
+    # Bare username, no @; a numeric user id also works.
+    from_users: ["ratulmaharaj"]
+  - type: tty
+    token_env: TTY_TOKEN
+
+skills:
+  - coolify.md
+
+permissions:
+  # Your instance's host, from the environment — deployment configuration
+  # rather than something to commit. Set COOLIFY_HOST to a bare hostname
+  # (coolify.example.com, or app.coolify.io on Coolify Cloud); it is
+  # resolved before the sandbox flags are compiled from it. Exactly matched —
+  # no "*", which is what keeps hermetic mode available.
+  net: ["${COOLIFY_HOST}"]
+
+http:
+  auth:
+    - url: https://${COOLIFY_HOST}
+      value: Bearer ${COOLIFY_API_TOKEN} # attached server side; never enters model context
+
+memory:
+  scope: thread
+  persistent: true
+
+schedules:
+  max: 10
+
+limits:
+  max_steps: 20

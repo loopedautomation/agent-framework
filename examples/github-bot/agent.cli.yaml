@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# The CLI variant of github-bot. Same job, same skill, plus the `gh` CLI and
+# headless Claude Code for the work the REST API can't do well: reading raw
+# Actions logs, cloning a repo, making an actual code change on a branch.
+#
+# The trade: `permissions.run` means the agent spawns subprocesses, and a
+# subprocess opens its own sockets that permissions.net never sees. That
+# disqualifies the agent from hermetic mode — the container becomes the
+# egress boundary instead of the Deno sandbox. `af flags agent.cli.yaml`
+# prints the grant that caused it. Run agent.yaml if you want the sandbox to
+# be the wall; run this one if you want the capability.
+#
+# Needs the Dockerfile in this directory (compose.cli.yaml builds it).
+handle: github-bot
+description: Works across your whole GitHub account, with the gh CLI and Claude Code on hand.
+
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+  small: claude-haiku-4-5-20251001
+  # Swap to CLAUDE_CODE_OAUTH_TOKEN to run the orchestrator on a Claude
+  # subscription instead of metered billing — see docs/anthropic.md and the
+  # disclaimer there.
+  api_key_env: ANTHROPIC_API_KEY
+
+purpose: |
+  You are the operator's GitHub assistant, and you work across their entire
+  account rather than a single repository. Read the github-profile skill
+  before your first call in a conversation.
+
+  You have three ways to act, in order of preference:
+
+  1. **http_request against https://api.github.com.** The default for
+     everything: reading, searching, creating issues, commenting, checking
+     CI. The skill covers it.
+
+  2. **The `gh` CLI**, for the handful of things the API is bad at through
+     an 8k response cap — raw Actions logs above all:
+
+       gh run view <run-id> --repo owner/repo --log-failed
+       gh pr diff <n> --repo owner/repo
+       gh api graphql -f query='...'
+
+     `gh` authenticates from GITHUB_TOKEN in the environment; never look for
+     credentials and never print them.
+
+  3. **Headless Claude Code**, for work that needs a checkout — "fix the
+     lint failure on that PR", "bump the dependency across my repos":
+
+       claude -p "<task>" --output-format json --dangerously-skip-permissions
+
+     Give it a task naming the repository, telling it to clone into
+     /data/work with gh, make the change on a branch, and open a PR — then
+     print the PR URL. Parse the JSON result and reply with the link. A run
+     takes minutes; that is normal. If it reports a failure, relay the error
+     verbatim and stop rather than retrying half-finished work.
+
+  Default to read-only. Merging, closing, deleting and marking notifications
+  read are irreversible: restate exactly what you're about to do and get a
+  yes first. Never run a bulk mutation, and never delegate one to Claude
+  Code either.
+
+triggers:
+  - type: telegram
+    from_users: ["ratulmaharaj"]
+  - type: tty
+    token_env: TTY_TOKEN
+
+skills:
+  - github-profile.md
+
+permissions:
+  net: [api.github.com]
+  # These grants are what cost hermetic mode. Everything gh and claude do is
+  # bounded by the container and by what the tokens allow, not by net:.
+  run: [gh, claude]
+  read: [/data]
+  write: [/data]
+
+http:
+  auth:
+    - url: https://api.github.com
+      value: Bearer ${GITHUB_TOKEN}
+
+env:
+  GITHUB_TOKEN: ${GITHUB_TOKEN} # scoped to the subprocesses; gh reads it directly
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY} # authenticates the embedded claude CLI
+
+memory:
+  scope: thread
+  persistent: true
+
+schedules:
+  max: 10
+
+limits:
+  max_steps: 20

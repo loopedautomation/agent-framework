@@ -185,6 +185,20 @@ export function requiredEnvRefs(config: AgentConfig): string[] {
   for (const name of credentialEnvNames(config)) refs.add(name);
   for (const auth of config.http?.auth ?? []) {
     for (const m of auth.value.matchAll(ENV_REF_ANY)) refs.add(m[1]);
+    // The url takes references too: an instance hostname is deployment
+    // configuration, and expandConfigHosts resolves it before the sandbox
+    // flags are compiled from it.
+    for (const m of auth.url.matchAll(ENV_REF_ANY)) refs.add(m[1]);
+  }
+  for (const host of config.permissions?.net ?? []) {
+    for (const m of host.matchAll(ENV_REF_ANY)) refs.add(m[1]);
+  }
+  // Deliberately not in collectEnvRefs: that seeds the redactor, and the whole
+  // point of `public` is that these values reach the agent's own output intact.
+  // They are still required — an unset one fails at startup like any other —
+  // so every surface that provisions an agent's environment has to see them.
+  for (const value of Object.values(config.public ?? {})) {
+    for (const m of value.matchAll(ENV_REF_ANY)) refs.add(m[1]);
   }
   for (const m of config.purpose.matchAll(ENV_REF_ANY)) refs.add(m[1]);
   return [...refs].sort();

@@ -1,0 +1,29 @@
+# The whole deployment story: docker compose up -d
+#
+# .env next to this file (see .env.example):
+#   ANTHROPIC_API_KEY, COOLIFY_HOST, COOLIFY_API_TOKEN, TELEGRAM_BOT_TOKEN, TTY_TOKEN
+#
+# This is the hermetic variant: the stock image, no build step. For the
+# Claude Code variant, use compose.cli.yaml instead.
+services:
+  coolify-bot:
+    image: ghcr.io/loopedautomation/agent:latest
+    env_file: .env
+    volumes:
+      - ./agent.yaml:/agent/agent.yaml:ro
+      # The skill lives next to agent.yaml and is referenced as coolify.md,
+      # so it mounts next to the config inside the container too.
+      - ./coolify.md:/agent/coolify.md:ro
+      - coolify-bot-data:/data
+    ports:
+      # TTY trigger WebSocket: ws://localhost:8091/tty (bearer auth via TTY_TOKEN)
+      - "127.0.0.1:8091:8090"
+      # Status surface: curl localhost:9097/healthz
+      - "127.0.0.1:9097:9090"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  coolify-bot-data:

@@ -626,7 +626,16 @@ const agentConfigSchema = z.strictObject({
   commands: CommandsSchema.optional(),
   permissions: PermissionsSchema.optional(),
   env: z.record(z.string(), z.string()).optional().describe(
-    "Env for tools and MCP servers. Values may be ${VAR} references, resolved at startup (env var, then /run/secrets/<VAR>) and scoped per tool.",
+    "Secret env for tools and MCP servers. Values may be ${VAR} references, resolved at startup (env var, then /run/secrets/<VAR>) and scoped per tool. Everything here is treated as a secret and redacted from tool results, logs and traces — use `public` for configuration the agent must be able to read.",
+  ),
+  // Coerced, unlike `env`: this block holds ids, ports and regions, and YAML
+  // reads a bare 12345 as a number. Quoting every project id would be a
+  // papercut with nothing behind it — the value becomes a string either way.
+  public: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean()]).transform(String),
+  ).optional().describe(
+    "Non-secret env, scoped to tools exactly like `env` but never redacted. For configuration the agent has to see in its own output — a project id, an account number, a region. Redacting one of these scrubs it out of the URLs and responses the agent needs to read.",
   ),
   http: HttpConfigSchema.optional(),
   redact: RedactConfigSchema.optional(),
@@ -1135,8 +1144,14 @@ export interface AgentConfig {
   commands?: CommandConfig[];
   /** Deny-by-default permission allowlists. */
   permissions?: Permissions;
-  /** Env for tools and MCP servers; values may be ${VAR} references. */
+  /**
+   * Secret env for tools and MCP servers; values may be ${VAR} references.
+   * Everything here is a secret by definition and is redacted on the way out —
+   * that coupling is why {@linkcode AgentConfig.public} exists.
+   */
   env?: Record<string, string>;
+  /** Non-secret env, scoped like `env` but never redacted: configuration the agent must be able to read. */
+  public?: Record<string, string>;
   /** Credentials the runtime attaches to outbound requests, so the model never holds them. */
   http?: HttpConfig;
   /** Additions to the redaction the framework already does. */
