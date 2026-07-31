@@ -27,6 +27,15 @@ const ModelConfigSchema = z.strictObject({
   fallbacks: z.array(z.string().min(1)).optional().describe(
     "Model ids to fall back to when the primary fails.",
   ),
+  pricing: z.strictObject({
+    input_per_mtok: z.number().nonnegative().describe("USD per million input tokens."),
+    output_per_mtok: z.number().nonnegative().describe("USD per million output tokens."),
+  }).optional().describe(
+    "What this model costs, in USD per million tokens, overriding the built-in price list. " +
+      "Set it when the model isn't in the list, when you're behind a proxy or a negotiated rate, " +
+      "or whenever limits.max_cost has to be exact — the built-in list is published list prices " +
+      "and can go stale.",
+  ),
 }).describe("Which model runs this agent, and how to reach it.");
 
 const DiscordTriggerSchema = z.strictObject({
@@ -584,6 +593,18 @@ const LimitsSchema = z.strictObject({
     "Images one message may carry into the context. An image costs thousands of input tokens, " +
       "and a channel will happily deliver twenty. The rest are named and not read; 0 reads none.",
   ),
+  max_cost: z.number().nonnegative().default(5).describe(
+    "Most one run may spend on model calls, in USD. Checked before each call using what the run " +
+      "has already spent, so the cap is a ceiling on committed spend rather than a prediction. " +
+      "The run ends with error_max_cost. 0 disables the cap; there is a non-zero default because " +
+      "an unattended agent with no ceiling is one loop away from an unbounded bill.",
+  ),
+  max_runtime: z.number().nonnegative().default(0).describe(
+    "Wall-clock seconds one run may take, measured from when it starts. Checked at step " +
+      "boundaries, so a single long tool call can overshoot it. The run ends with " +
+      "error_max_runtime. 0 disables it, which is the default: unlike spend, a slow run costs " +
+      "nothing extra and legitimate work can be slow.",
+  ),
 }).describe("Per-run budgets — the dead-man's switches for unattended operation.");
 
 const agentConfigSchema = z.strictObject({
@@ -647,6 +668,8 @@ const agentConfigSchema = z.strictObject({
     queue_depth: 10,
     max_image_bytes: 5_000_000,
     max_images_per_message: 4,
+    max_cost: 5,
+    max_runtime: 0,
   }),
 }).describe(
   "A Looped AF agent: one job, one file. https://github.com/loopedautomation/agent-framework",
@@ -712,6 +735,17 @@ export interface ModelConfig {
   api_key_env?: string;
   /** Model ids to fall back to when the primary fails. */
   fallbacks?: string[];
+  /**
+   * What this model costs, in USD per million tokens, overriding the built-in price list.
+   * Set it when the model isn't listed, when a proxy or negotiated rate applies, or whenever
+   * limits.max_cost has to be exact.
+   */
+  pricing?: {
+    /** USD per million input tokens. */
+    input_per_mtok: number;
+    /** USD per million output tokens. */
+    output_per_mtok: number;
+  };
 }
 
 /** A Discord trigger: listen to messages via the gateway. */
@@ -1113,6 +1147,16 @@ export interface LimitsConfig {
    * Images one message may carry into the context. The rest are named and not read; 0 reads none.
    */
   max_images_per_message: number;
+  /**
+   * Most one run may spend on model calls, in USD, checked before each call. The run ends with
+   * error_max_cost. 0 disables the cap.
+   */
+  max_cost: number;
+  /**
+   * Wall-clock seconds one run may take, checked at step boundaries. The run ends with
+   * error_max_runtime. 0 disables it, which is the default.
+   */
+  max_runtime: number;
 }
 
 /** A parsed and validated agent.yaml, with defaults applied. */

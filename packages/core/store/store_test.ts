@@ -162,7 +162,13 @@ Deno.test("schedules round-trip: create, list, count, delete", () => {
 
 Deno.test("runStats aggregates run count and token totals", () => {
   const store = tempStore();
-  assertEquals(store.runStats(), { runs: 0, inputTokens: 0, outputTokens: 0 });
+  assertEquals(store.runStats(), {
+    runs: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cost: 0,
+    pricedRuns: 0,
+  });
   const run = {
     trigger: "cli",
     input: "hi",
@@ -173,7 +179,13 @@ Deno.test("runStats aggregates run count and token totals", () => {
   };
   store.recordRun({ ...run, usage: { inputTokens: 10, outputTokens: 5 } });
   store.recordRun({ ...run, usage: { inputTokens: 7, outputTokens: 3 } });
-  assertEquals(store.runStats(), { runs: 2, inputTokens: 17, outputTokens: 8 });
+  assertEquals(store.runStats(), {
+    runs: 2,
+    inputTokens: 17,
+    outputTokens: 8,
+    cost: 0,
+    pricedRuns: 0,
+  });
   store.close();
 });
 
@@ -257,5 +269,32 @@ Deno.test("appendMessages continues the transcript instead of replacing it", () 
   // saveMessages stays the authority: it replaces whatever the appends wrote.
   store.saveMessages(session, [{ role: "user", content: "only" }]);
   assertEquals(store.loadMessages(session).map((m) => m.content), ["only"]);
+  store.close();
+});
+
+Deno.test("run cost is recorded, and unpriced runs stay out of the totals", () => {
+  const store = tempStore();
+  const priced = store.openRun({ trigger: "cli", input: "a", startedAt: "2026-08-01T00:00:00Z" });
+  store.closeRun(priced, {
+    status: "ok",
+    reply: "done",
+    steps: 1,
+    usage: { inputTokens: 100, outputTokens: 50 },
+    cost: 1.25,
+  });
+  const unpriced = store.openRun({ trigger: "cli", input: "b", startedAt: "2026-08-01T00:00:00Z" });
+  store.closeRun(unpriced, {
+    status: "ok",
+    reply: "done",
+    steps: 1,
+    usage: { inputTokens: 10, outputTokens: 5 },
+  });
+
+  const stats = store.runStats();
+  assertEquals(stats.runs, 2);
+  assertEquals(stats.cost, 1.25);
+  // The unpriced run is not counted as free, it is not counted at all.
+  assertEquals(stats.pricedRuns, 1);
+  assertEquals(store.recentRuns().find((r) => r.id === unpriced)!.cost_usd, null);
   store.close();
 });

@@ -317,3 +317,149 @@ Deno.test("onPersist still fires for the steps a failed run completed", async ()
   // The step that did happen is durable even though the run ended badly.
   assertEquals(batches[0], ["go", "", "echo: kept"]);
 });
+
+/** CONFIG with a known price and whatever budgets the test needs. */
+function budgetConfig(
+  limits: string,
+  pricing = "\n  pricing:\n    input_per_mtok: 5\n    output_per_mtok: 25",
+) {
+  return parseAgentConfig(`
+handle: budget-bot
+description: budget test agent
+model:
+  provider: openai-compatible
+  id: test-model${pricing}
+purpose: You are a test agent.
+limits:
+${limits}
+`);
+}
+
+Deno.test("max_cost ends the run before the call that would breach it", async () => {
+  // 100k in + 50k out at $5/$25 per Mtok is $1.75 a step.
+  const usage = { inputTokens: 100_000, outputTokens: 50_000 };
+  const provider = scripted([
+    { toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"a"}' }], usage },
+    { toolCalls: [{ id: "c2", name: "echo", arguments: '{"message":"b"}' }], usage },
+    { content: "never reached", usage },
+  ]);
+  const result = await runAgent({
+    config: budgetConfig("  max_steps: 10\n  max_cost: 3"),
+    provider,
+    tools: [echoTool],
+    input: "spend",
+  });
+
+  assertEquals(result.status, "error_max_cost");
+  // Two calls put the run at $3.50, over the $3 cap, so the third never runs.
+  assertEquals(provider.requests.length, 2);
+  assertEquals(result.steps, 2);
+  assertEquals(result.cost, 3.5);
+  assert(result.reply.includes("$3.50"));
+  assert(result.reply.includes("$3.00"));
+});
+
+Deno.test("max_cost of 0 disables the cap", async () => {
+  const usage = { inputTokens: 100_000, outputTokens: 50_000 };
+  const provider = scripted([
+    { toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"a"}' }], usage },
+    { content: "done", usage },
+  ]);
+  const result = await runAgent({
+    config: budgetConfig("  max_steps: 10\n  max_cost: 0"),
+    provider,
+    tools: [echoTool],
+    input: "spend",
+  });
+  assertEquals(result.status, "ok");
+  assertEquals(result.cost, 3.5);
+});
+
+Deno.test("an unpriced model reports no cost and cannot be capped", async () => {
+  const provider = scripted([
+    { toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"a"}' }] },
+    { toolCalls: [{ id: "c2", name: "echo", arguments: '{"message":"b"}' }] },
+    { content: "reached anyway" },
+  ]);
+  const result = await runAgent({
+    config: budgetConfig("  max_steps: 10\n  max_cost: 0.01", ""),
+    provider,
+    tools: [echoTool],
+    input: "spend",
+  });
+
+  // The cap is set and tiny, but nothing knows what this model costs, so it
+  // cannot fire. The run completes and reports no cost rather than zero.
+  assertEquals(result.status, "ok");
+  assertEquals(result.cost, undefined);
+});
+
+Deno.test("model.pricing overrides the built-in price list", async () => {
+  const provider = scripted([{
+    content: "done",
+    usage: { inputTokens: 100_000, outputTokens: 50_000 },
+  }]);
+  const result = await runAgent({
+    // claude-opus-5 is in the built-in list at $5/$25; this says otherwise.
+    config: parseAgentConfig(`
+handle: budget-bot
+description: budget test agent
+model:
+  provider: anthropic
+  id: claude-opus-5
+  pricing:
+    input_per_mtok: 1
+    output_per_mtok: 2
+purpose: You are a test agent.
+`),
+    provider,
+    input: "hi",
+  });
+  // 100k in at $1 + 50k out at $2 = $0.20, not the list price's $1.75.
+  assertEquals(result.cost, 0.2);
+});
+
+Deno.test("max_runtime stops the run at the next step boundary", async () => {
+  const slow: Provider = {
+    id: "slow",
+    async complete(): Promise<Completion> {
+      await new Promise((r) => setTimeout(r, 60));
+      return {
+        content: "",
+        toolCalls: [{ id: crypto.randomUUID(), name: "echo", arguments: '{"message":"x"}' }],
+        stopReason: "tool_calls",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      };
+    },
+  };
+  const result = await runAgent({
+    config: budgetConfig("  max_steps: 50\n  max_runtime: 0.1"),
+    provider: slow,
+    tools: [echoTool],
+    input: "go",
+  });
+
+  assertEquals(result.status, "error_max_runtime");
+  // It stopped early rather than running all 50 steps.
+  assert(result.steps < 50);
+  assert(result.reply.includes("over its 0.1s budget"));
+});
+
+Deno.test("a budgeted-out run skips the wrap-up call", async () => {
+  const usage = { inputTokens: 100_000, outputTokens: 50_000 };
+  const provider = scripted([
+    { toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"a"}' }], usage },
+    { toolCalls: [{ id: "c2", name: "echo", arguments: '{"message":"b"}' }], usage },
+  ]);
+  const result = await runAgent({
+    config: budgetConfig("  max_steps: 2\n  max_cost: 3"),
+    provider,
+    tools: [echoTool],
+    input: "spend",
+  });
+
+  // max_steps would spend a third call to summarize. Being out of money is
+  // the one case where that call is exactly what must not happen.
+  assertEquals(result.status, "error_max_cost");
+  assertEquals(provider.requests.length, 2);
+});

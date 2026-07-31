@@ -94,6 +94,8 @@ memory:
 ```yaml
 limits:
   max_steps: 20        # default: 20 LLM calls per run
+  max_cost: 5          # default: $5 of model spend per run; 0 disables
+  max_runtime: 0       # default: off. Wall-clock seconds per run
   concurrent_runs: 4   # default: 4 conversations running at once
   queue_depth: 10      # default: 10 waiting events per conversation
 ```
@@ -101,6 +103,25 @@ limits:
 `max_steps` caps how many LLM calls a run can make, so an unattended agent can only spend what you've allowed. The cap is on by default.
 
 When a run hits the cap mid-task, the agent gets one final call with its tools removed and is asked to summarize what it has done, what remains unfinished and what should happen next. That summary becomes the run's reply, so a capped run hands you a progress report you can pick up from. If the wrap-up call fails or produces no text, the reply falls back to a plain "run ended after N steps" line. The wrap-up counts toward the recorded step count, which is why a capped run shows `max_steps + 1` calls.
+
+`max_cost` is the same idea in dollars. Before each LLM call the run adds up what it has spent so far, and if that has reached the cap the run stops with `error_max_cost`. Checking before the call rather than after means the call that would take you over the line is the one that never happens. There is no wrap-up call here: spending another call to explain that you ran out of money is the wrong trade, so the status and the reply say what happened instead.
+
+The default is $5 per run. That number is a runaway guard rather than a budget - `max_steps: 20` already bounds a normal run well below it - and it exists because an agent nobody is watching should not be able to spend without a ceiling. Set `max_cost: 0` to turn it off.
+
+Costs come from a built-in price list covering the current Claude models. If your model isn't on that list, or you're behind a proxy or a negotiated rate, tell the agent what it costs:
+
+```yaml
+model:
+  provider: openai-compatible
+  id: my-hosted-model
+  pricing:
+    input_per_mtok: 0.60
+    output_per_mtok: 2.40
+```
+
+Without a price the runtime can't compute spend, so `max_cost` can't be enforced. It says so on startup and names the model, rather than leaving a cap in your agent file that quietly does nothing. Run costs are recorded per run and totalled in `/status`, where an unpriced run is left out of the total rather than counted as free.
+
+`max_runtime` caps wall-clock seconds per run, checked at step boundaries. It's off by default: a slow run costs nothing extra, and legitimate work can be slow. Turn it on when a run holding a lane matters more than the run finishing - a cron schedule that must not overlap the next firing, say. A single long tool call can overshoot the limit, because the check happens between steps rather than interrupting work in flight.
 
 `concurrent_runs` and `queue_depth` decide what happens when events arrive faster than the agent finishes them. Within one conversation, runs are serial and ordered: a message that arrives mid-run waits its turn, and each run loads the history its predecessor saved, so message four's run sees what messages one through three did. Across conversations the agent runs in parallel, up to `concurrent_runs` at a time, so one person's long task doesn't make the agent look dead to everyone else. Setting `concurrent_runs: 1` serializes the whole agent.
 
