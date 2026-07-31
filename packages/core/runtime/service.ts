@@ -5,7 +5,7 @@ import { type Redactor, redactorForConfig, setDefaultRedactor } from "../redact/
 import { logError, logInfo } from "./log.ts";
 import type { Provider } from "../providers/types.ts";
 import { createProvider } from "../providers/mod.ts";
-import { type PermissionDecision, PermissionEngine } from "../permissions/engine.ts";
+import { PermissionEngine } from "../permissions/engine.ts";
 import type { NativeTool } from "../tools/types.ts";
 import { currentTimeTool } from "../tools/time.ts";
 import { createRunBashTool } from "../tools/bash.ts";
@@ -643,24 +643,45 @@ export class AgentService {
       const config = this.config.commands!.find((c) => c.name === command.name)!;
       event = { ...event, input: substituteArgs(config.prompt, command.args) };
     }
-    const decisions: PermissionDecision[] = [];
-    const mcpCalls: McpCallRecord[] = [];
-    const engine = new PermissionEngine(this.config.permissions, (e) => {
-      decisions.push(e.decision);
-    });
-    const memoryEvents: MemoryEvent[] = [];
-    const scheduleEvents: ScheduleEvent[] = [];
-    const onScheduleEvent = (e: ScheduleEvent) => {
-      scheduleEvents.push(e);
-      // Arm or disarm the live job now — the row is already persisted.
-      if (e.action === "create") this.#scheduleRunner?.add(e.schedule);
-      else this.#scheduleRunner?.remove(e.schedule.id);
-    };
-
     const useSessions = this.config.memory?.scope === "thread" && event.conversationKey;
     const sessionId = useSessions ? this.store.sessionFor(event.conversationKey!) : undefined;
     const history = sessionId !== undefined ? this.store.loadMessages(sessionId) : [];
     const memories = this.config.memory?.persistent ? this.store.listMemories() : [];
+
+    // The run row opens before any work happens, so audit events have an id to
+    // hang from as they occur and a run the container dies inside still leaves
+    // a trace. Every exit path below closes it, including the throwing one.
+    const runId = this.store.openRun({
+      sessionId,
+      trigger: event.trigger,
+      input: event.input,
+      startedAt,
+    });
+    const engine = new PermissionEngine(this.config.permissions, (e) => {
+      this.store.recordAudit({ runId, kind: "permission", detail: e.decision });
+    });
+    const onScheduleEvent = (e: ScheduleEvent) => {
+      this.store.recordAudit({
+        runId,
+        kind: "schedule",
+        detail: {
+          action: e.action,
+          id: e.schedule.id,
+          when: e.schedule.cron ?? e.schedule.at,
+          prompt: e.schedule.prompt,
+        },
+      });
+      // Arm or disarm the live job now — the row is already persisted.
+      if (e.action === "create") this.#scheduleRunner?.add(e.schedule);
+      else this.#scheduleRunner?.remove(e.schedule.id);
+    };
+    if (command) {
+      this.store.recordAudit({
+        runId,
+        kind: "command",
+        detail: { name: command.name, args: command.args, builtin: false },
+      });
+    }
 
     // Register the abort controller under this event's lane so a /stop
     // arriving mid-run (it skips the queue) can reach into this one.
@@ -685,8 +706,8 @@ export class AgentService {
         provider: this.#provider,
         tools: this.#buildTools(
           engine,
-          (e) => memoryEvents.push(e),
-          (call) => mcpCalls.push(call),
+          (e) => this.store.recordAudit({ runId, kind: "memory", detail: e }),
+          (call) => this.store.recordAudit({ runId, kind: "mcp", detail: call }),
           event.conversationKey,
           onScheduleEvent,
         ),
@@ -694,51 +715,36 @@ export class AgentService {
         images: event.images,
         history,
         onEvent: opts?.onEvent,
+        onPersist: sessionId !== undefined
+          ? (appended) => this.store.appendMessages(sessionId, appended)
+          : undefined,
         redact: (text) => this.redactor.text(text),
       });
+    } catch (err) {
+      // The loop threw rather than returning a typed failure, so nothing
+      // downstream will close the row. Do it here instead of leaving a run
+      // that looks in-flight until the next restart sweeps it.
+      this.store.closeRun(runId, {
+        status: "error_provider",
+        reply: `run failed: ${err instanceof Error ? err.message : String(err)}`,
+        steps: 0,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      });
+      throw err;
     } finally {
       if (lane && this.#aborts.get(lane) === controller) this.#aborts.delete(lane);
     }
 
+    // The incremental appends above already put this run's messages on disk;
+    // this rewrite is the authority on the final shape (the loop may have
+    // dropped the wrap-up prompt, and compaction rewrites wholesale).
     if (sessionId !== undefined) this.store.saveMessages(sessionId, result.messages);
-    const runId = this.store.recordRun({
-      sessionId,
-      trigger: event.trigger,
-      input: event.input,
+    this.store.closeRun(runId, {
       status: result.status,
       reply: result.reply,
       steps: result.steps,
       usage: result.usage,
-      startedAt,
     });
-    for (const decision of decisions) {
-      this.store.recordAudit({ runId, kind: "permission", detail: decision });
-    }
-    for (const memoryEvent of memoryEvents) {
-      this.store.recordAudit({ runId, kind: "memory", detail: memoryEvent });
-    }
-    for (const scheduleEvent of scheduleEvents) {
-      this.store.recordAudit({
-        runId,
-        kind: "schedule",
-        detail: {
-          action: scheduleEvent.action,
-          id: scheduleEvent.schedule.id,
-          when: scheduleEvent.schedule.cron ?? scheduleEvent.schedule.at,
-          prompt: scheduleEvent.schedule.prompt,
-        },
-      });
-    }
-    for (const call of mcpCalls) {
-      this.store.recordAudit({ runId, kind: "mcp", detail: call });
-    }
-    if (command) {
-      this.store.recordAudit({
-        runId,
-        kind: "command",
-        detail: { name: command.name, args: command.args, builtin: false },
-      });
-    }
 
     // Reactive auto-compaction: the context size the provider just reported
     // decides, so the check costs nothing until the threshold is crossed.
@@ -754,6 +760,15 @@ export class AgentService {
 
   /** Start every trigger, routing its events through {@linkcode AgentService.handle}. */
   async start(triggers: Trigger[]) {
+    // Any run still open belongs to a previous process that died holding it.
+    // Reconcile before accepting new work, so `af runs` distinguishes a run
+    // that crashed from one that is happening now.
+    const crashed = this.store.recoverOpenRuns();
+    if (crashed > 0) {
+      logInfo(
+        `recovered ${crashed} run${crashed === 1 ? "" : "s"} left open by a previous start`,
+      );
+    }
     this.#triggers = triggers;
     for (const trigger of triggers) {
       await trigger.start(

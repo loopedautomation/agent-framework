@@ -506,3 +506,65 @@ purpose: The project id is \${TEST_PURPOSE_UNSET_REF}.
   }
   assert(failed, "constructor should throw on a missing purpose reference");
 });
+
+Deno.test("service: a run that dies mid-flight leaves its transcript and an open row", async () => {
+  const { service, provider } = await makeService();
+  const done = service.handle(event("1", "start work", { conversationKey: "k" }));
+
+  await until(() => provider.calls.length === 1, "the run to start");
+  // The row exists before the run does anything, which is the whole point:
+  // a container that dies here still leaves evidence the run happened.
+  const open = service.store.recentRuns()[0];
+  assertEquals(open.status, "running");
+  assertEquals(open.finished_at, null);
+  assertEquals(open.input, "start work");
+
+  provider.release("finished");
+  await done;
+
+  const closed = service.store.recentRuns()[0];
+  assertEquals(closed.id, open.id); // closed in place, not a second row
+  assertEquals(closed.status, "ok");
+  assertEquals(closed.reply, "finished");
+  assert(closed.finished_at !== null);
+  assertEquals(service.store.recentRuns().length, 1);
+});
+
+Deno.test("service: the work a crashed run did survives it", async () => {
+  const { service, provider } = await makeService();
+  const done = service.handle(event("1", "do the thing", { conversationKey: "k" }));
+
+  await until(() => provider.calls.length === 1, "the run to start");
+  provider.releaseTool("current_time", {});
+  await until(() => provider.calls.length === 2, "the second step");
+
+  // Step one is on disk before step two has answered. Previously the whole
+  // transcript was written only after runAgent returned, so a crash here
+  // left the session with no record that the tool call ever happened.
+  const session = service.store.sessionFor("k");
+  const midRun = service.store.loadMessages(session).map((m) => m.role);
+  assertEquals(midRun, ["user", "assistant", "tool"]);
+
+  provider.release("all done");
+  await done;
+
+  assertEquals(
+    service.store.loadMessages(session).map((m) => m.role),
+    ["user", "assistant", "tool", "assistant"],
+  );
+});
+
+Deno.test("service: start reconciles runs a previous process left open", async () => {
+  const { service } = await makeService();
+  const orphan = service.store.openRun({
+    trigger: "cron",
+    input: "interrupted",
+    startedAt: new Date().toISOString(),
+  });
+
+  await service.start([]);
+
+  const row = service.store.recentRuns().find((r) => r.id === orphan)!;
+  assertEquals(row.status, "error_crashed");
+  assert(row.finished_at !== null);
+});

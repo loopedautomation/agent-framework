@@ -16,6 +16,15 @@ export interface MemoryRecord {
   updatedAt: string;
 }
 
+/**
+ * Status as stored, which is wider than what a run can *end* with. `running`
+ * is written when a run opens and replaced when it closes; `error_crashed` is
+ * written by {@linkcode Store.recoverOpenRuns} for rows still open after a
+ * restart. Neither is ever returned by `runAgent` — the loop's
+ * {@linkcode RunStatus} stays honest about outcomes it can actually produce.
+ */
+export type StoredRunStatus = RunStatus | "running" | "error_crashed";
+
 /** One completed run, as written to the runs table. */
 export interface RunRecord {
   /** Session the run belonged to; absent for sessionless runs. */
@@ -34,6 +43,30 @@ export interface RunRecord {
   usage: Usage;
   /** ISO timestamp of when the run started. */
   startedAt: string;
+}
+
+/** What is known about a run at the moment it opens. */
+export interface OpenRunRecord {
+  /** Session the run belongs to; absent for sessionless runs. */
+  sessionId?: number;
+  /** Which trigger produced the event, e.g. "cron" or "cli". */
+  trigger: string;
+  /** The input text the agent received. */
+  input: string;
+  /** ISO timestamp of when the run started. */
+  startedAt: string;
+}
+
+/** What is known once a run has ended. */
+export interface RunOutcome {
+  /** How the run ended. */
+  status: RunStatus;
+  /** The agent's final reply. */
+  reply: string;
+  /** Inner-loop iterations consumed. */
+  steps: number;
+  /** Token usage for the whole run. */
+  usage: Usage;
 }
 
 /** One agent-created schedule, as written to the schedules table. */
@@ -148,6 +181,34 @@ export class Store {
   }
 
   /**
+   * Append messages to a session's transcript as a run produces them, so a
+   * crash mid-run leaves the work that already happened on disk. Cheaper than
+   * {@linkcode Store.saveMessages}, which rewrites the whole transcript: this
+   * only inserts, continuing from the highest `seq` already stored.
+   *
+   * The final {@linkcode Store.saveMessages} at the end of a run is still the
+   * authority. It replaces whatever these appends wrote with the run's final
+   * message list, which is what makes the two safe to use together.
+   */
+  appendMessages(sessionId: number, messages: Message[]) {
+    if (messages.length === 0) return;
+    const row = this.#db
+      .prepare("SELECT COALESCE(MAX(seq) + 1, 0) AS next FROM messages WHERE session_id = ?")
+      .get(sessionId) as { next: number };
+    const ins = this.#db.prepare(
+      "INSERT INTO messages (session_id, seq, message_json) VALUES (?, ?, ?)",
+    );
+    this.#db.exec("BEGIN");
+    try {
+      messages.forEach((m, i) => ins.run(sessionId, row.next + i, JSON.stringify(this.#clean(m))));
+      this.#db.exec("COMMIT");
+    } catch (err) {
+      this.#db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  /**
    * Clear a conversation's transcript (the `/reset` command). Persistent
    * memories are untouched. Returns false when the key has no session or
    * the session was already empty.
@@ -182,13 +243,18 @@ export class Store {
     return { runs: row.runs, inputTokens: row.input_tokens, outputTokens: row.output_tokens };
   }
 
-  /** Insert a run record; returns the new run id. */
+  /**
+   * Insert a run that has already ended; returns the new run id. For runs
+   * that complete within one synchronous step (built-ins, queue refusals)
+   * there is nothing to crash between opening and closing the row, so they
+   * skip {@linkcode Store.openRun}.
+   */
   recordRun(run: RunRecord): number {
     const result = this.#db
       .prepare(
         `INSERT INTO runs (session_id, trigger, input, status, reply, steps,
-          input_tokens, output_tokens, started_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          input_tokens, output_tokens, started_at, finished_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       )
       .run(
         run.sessionId ?? null,
@@ -202,6 +268,62 @@ export class Store {
         run.startedAt,
       );
     return Number(result.lastInsertRowid);
+  }
+
+  /**
+   * Open a run row before the work starts, so audit events have an id to hang
+   * from and a run that dies mid-flight leaves a trace. The row carries
+   * `status = 'running'` and a null `finished_at` until
+   * {@linkcode Store.closeRun}.
+   */
+  openRun(run: OpenRunRecord): number {
+    const result = this.#db
+      .prepare(
+        `INSERT INTO runs (session_id, trigger, input, status, reply, steps,
+          input_tokens, output_tokens, started_at, finished_at)
+         VALUES (?, ?, ?, 'running', '', 0, 0, 0, ?, NULL)`,
+      )
+      .run(run.sessionId ?? null, run.trigger, this.#clean(run.input), run.startedAt);
+    return Number(result.lastInsertRowid);
+  }
+
+  /** Finalize a run opened by {@linkcode Store.openRun}. */
+  closeRun(runId: number, outcome: RunOutcome) {
+    this.#db
+      .prepare(
+        `UPDATE runs SET status = ?, reply = ?, steps = ?, input_tokens = ?,
+           output_tokens = ?, finished_at = datetime('now')
+         WHERE id = ?`,
+      )
+      .run(
+        outcome.status,
+        this.#clean(outcome.reply),
+        outcome.steps,
+        outcome.usage.inputTokens,
+        outcome.usage.outputTokens,
+        runId,
+      );
+  }
+
+  /**
+   * Close out runs left open by a previous process: a row still `running`
+   * when the service starts is a run the container died in the middle of.
+   * Returns how many were reconciled, so startup can say so.
+   *
+   * Only the service calls this, and only at startup. Doing it on every
+   * {@linkcode Store} open would let a short-lived `af runs` mark the live
+   * service's in-flight runs as crashed.
+   */
+  recoverOpenRuns(): number {
+    const result = this.#db
+      .prepare(
+        `UPDATE runs SET status = 'error_crashed',
+           reply = 'run did not finish: the agent stopped before this run completed',
+           finished_at = datetime('now')
+         WHERE finished_at IS NULL`,
+      )
+      .run();
+    return Number(result.changes);
   }
 
   /** Insert an audit event. */

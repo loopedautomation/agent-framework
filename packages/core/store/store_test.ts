@@ -176,3 +176,86 @@ Deno.test("runStats aggregates run count and token totals", () => {
   assertEquals(store.runStats(), { runs: 2, inputTokens: 17, outputTokens: 8 });
   store.close();
 });
+
+Deno.test("an open run stays open until it is closed", () => {
+  const store = tempStore();
+  const runId = store.openRun({
+    trigger: "cron",
+    input: "nightly sweep",
+    startedAt: "2026-08-01T00:00:00.000Z",
+  });
+
+  const open = store.recentRuns()[0];
+  assertEquals(open.status, "running");
+  assertEquals(open.finished_at, null);
+  assertEquals(open.input, "nightly sweep");
+
+  store.closeRun(runId, {
+    status: "ok",
+    reply: "swept",
+    steps: 3,
+    usage: { inputTokens: 100, outputTokens: 20 },
+  });
+
+  const closed = store.recentRuns()[0];
+  assertEquals(closed.status, "ok");
+  assertEquals(closed.reply, "swept");
+  assertEquals(closed.steps, 3);
+  assertEquals(closed.input_tokens, 100);
+  assert(closed.finished_at !== null);
+  store.close();
+});
+
+Deno.test("recoverOpenRuns closes what a dead process left behind", () => {
+  const store = tempStore();
+  const crashed = store.openRun({
+    trigger: "cli",
+    input: "one",
+    startedAt: "2026-08-01T00:00:00Z",
+  });
+  const clean = store.openRun({ trigger: "cli", input: "two", startedAt: "2026-08-01T00:00:00Z" });
+  store.closeRun(clean, {
+    status: "ok",
+    reply: "done",
+    steps: 1,
+    usage: { inputTokens: 1, outputTokens: 1 },
+  });
+
+  assertEquals(store.recoverOpenRuns(), 1);
+
+  const rows = store.recentRuns();
+  const recovered = rows.find((r) => r.id === crashed)!;
+  const untouched = rows.find((r) => r.id === clean)!;
+  assertEquals(recovered.status, "error_crashed");
+  assert(recovered.finished_at !== null);
+  assert(String(recovered.reply).includes("did not finish"));
+  assertEquals(untouched.status, "ok");
+  assertEquals(untouched.reply, "done");
+
+  // Nothing is left open, so a second sweep is a no-op.
+  assertEquals(store.recoverOpenRuns(), 0);
+  store.close();
+});
+
+Deno.test("appendMessages continues the transcript instead of replacing it", () => {
+  const store = tempStore();
+  const session = store.sessionFor("k");
+  store.saveMessages(session, [{ role: "user", content: "first" }]);
+
+  store.appendMessages(session, [
+    { role: "assistant", content: "second" },
+    { role: "tool", toolCallId: "t1", content: "third" },
+  ]);
+  store.appendMessages(session, [{ role: "assistant", content: "fourth" }]);
+  store.appendMessages(session, []); // no-op, and must not disturb the sequence
+
+  assertEquals(
+    store.loadMessages(session).map((m) => m.content),
+    ["first", "second", "third", "fourth"],
+  );
+
+  // saveMessages stays the authority: it replaces whatever the appends wrote.
+  store.saveMessages(session, [{ role: "user", content: "only" }]);
+  assertEquals(store.loadMessages(session).map((m) => m.content), ["only"]);
+  store.close();
+});
