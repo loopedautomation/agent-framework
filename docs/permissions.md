@@ -85,3 +85,48 @@ Two honest notes on where the layers actually sit:
 
 - If your agent spawns something, whether that's a `permissions.run` grant or a stdio MCP server, the Deno layer allows all *network* egress in the container (`--allow-net`). Per-host enforcement happens in the app-level permission engine, and the container's egress policy is layer 2; restrict it with your network setup where it matters. An agent that spawns nothing gets its `net:` list compiled straight into `--allow-net`, so the runtime enforces it for the whole process ([hermetic mode](permission-model.md#hermetic-mode)).
 - `bash` subprocesses escape the Deno sandbox by design; the container boundary is what contains them. That is why there is no "run on the host" mode.
+
+## An operator's floor
+
+Everything above assumes the person who wrote the agent file and the person running it are the same. That holds while you're writing your own agents. It stops holding the moment files get shared, which is something we want: one file, plain words, a template someone can copy is most of the point. When you copy an `agent.yaml` from a repo or a gallery and run `docker compose up`, its `permissions:` block is a request you grant in full, and nothing on your side gets a say.
+
+A floor is the operator's side of that conversation. Put a file at `/etc/af/floor.yaml`, or point `AF_PERMISSION_FLOOR` at one:
+
+```yaml
+run: [gh, git, jq]
+net: ["api.github.com", "*.internal.example.com"]
+write: [/data]
+deny:
+  net: [metadata.google.internal]
+  read: [/run/secrets]
+```
+
+An agent file that asks for anything outside this doesn't start. The error names every grant that was refused and the floor entry that refused it, so you fix it in one pass:
+
+```
+agent.yaml asks for more than this host allows:
+  - permissions.run asks for "curl", which is not covered by /etc/af/floor.yaml's run list
+  - permissions.net asks for "*.google.internal", which /etc/af/floor.yaml denies (deny.net: "metadata.google.internal")
+```
+
+### The floor only refuses
+
+Nothing in a floor grants an agent anything. It has no way to add a host or an executable that the agent file didn't already ask for, so reading the agent file still tells you the agent's maximum blast radius. That property is what the rest of this page is built on, and a floor that could widen would break it.
+
+It also means a refused file fails to start rather than running with less than it declares. Quietly trimming grants would leave you with a file that no longer describes the agent, which is worse than an error at boot.
+
+### How entries match
+
+Each axis matches the same way the permission engine does, one level up: the floor's entry has to be at least as wide as what the file asks for.
+
+- **`run`** is exact basenames. A floor of `[gh]` covers a file asking for `gh` and refuses `curl`. Only a floor of `*` covers a file asking for `*`.
+- **`net`** follows the wildcard rule from [Deny by default](#deny-by-default). A floor of `*.example.com` covers `api.example.com` and `*.eu.example.com`, and refuses `example.com` (the apex isn't a subdomain) and `*.github.com`.
+- **`read` and `write`** are path prefixes. A floor of `/data` covers `/data/runs` and refuses `/` and `/database`.
+
+An axis you leave out of the floor is unconstrained, so a floor naming only `run` says nothing about network access.
+
+`deny` works the other way round: it refuses a grant that *overlaps* the denied entry in either direction. Denying `metadata.google.internal` refuses a file asking for that host, and also refuses one asking for `*.google.internal`, because that grant could reach it. Use `deny` when you want to forbid a few specific things without enumerating everything you'd permit.
+
+### When there's no floor
+
+Neither file present means no floor and no change: a developer on their own machine sees the same behaviour as before. If `AF_PERMISSION_FLOOR` names a file that can't be read, startup fails instead - an operator who pointed at a policy shouldn't end up with an unpoliced agent because of a typo.

@@ -90,6 +90,16 @@ export {
   permissionsToDenoFlags,
 } from "./permissions/engine.ts";
 export {
+  DEFAULT_FLOOR_PATH,
+  describeViolation,
+  FLOOR_ENV,
+  type FloorViolation,
+  floorViolations,
+  loadFloor,
+  parseFloor,
+  type PermissionFloor,
+} from "./permissions/floor.ts";
+export {
   runGrantAdvisories,
   type RunGrantAdvisory,
   type RunGrantHazard,

@@ -1,5 +1,6 @@
 import { parse } from "@std/yaml";
 import { z } from "zod";
+import { describeViolation, floorViolations, loadFloor } from "../permissions/floor.ts";
 import {
   type AgentConfig,
   AgentConfigSchema,
@@ -104,7 +105,15 @@ export async function resolveAgentConfig(
   return parseAgentConfig(inline, "AF_AGENT_CONFIG");
 }
 
-/** Load an agent definition from a YAML file. */
+/**
+ * Load an agent definition from a YAML file, and refuse it if an operator's
+ * permission floor does not allow what it asks for.
+ *
+ * The floor is checked here rather than at the tool boundary because a file
+ * whose grants are refused should never start. Running it with less authority
+ * than it declares would make the file stop describing the agent, and the file
+ * describing the agent is the property the whole permission model rests on.
+ */
 export async function loadAgentConfig(path: string): Promise<AgentConfig> {
   let text: string;
   try {
@@ -112,7 +121,21 @@ export async function loadAgentConfig(path: string): Promise<AgentConfig> {
   } catch (err) {
     throw new ConfigError(`cannot read ${path}: ${(err as Error).message}`, path);
   }
-  return parseAgentConfig(text, path);
+  const config = parseAgentConfig(text, path);
+  const active = await loadFloor();
+  if (active) {
+    const violations = floorViolations(config.permissions, active.floor);
+    if (violations.length > 0) {
+      throw new ConfigError(
+        `${path} asks for more than this host allows:\n` +
+          violations.map((v) => `  - ${describeViolation(v, active.source)}`).join("\n") +
+          `\n\nThe floor can only refuse, so there is nothing to grant here: either narrow ` +
+          `the agent file or change ${active.source}.`,
+        path,
+      );
+    }
+  }
+  return config;
 }
 
 const ENV_REF = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;

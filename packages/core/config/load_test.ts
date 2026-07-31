@@ -1,8 +1,10 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { agentConfigJsonSchema } from "./schema.ts";
+import { FLOOR_ENV } from "../permissions/floor.ts";
 import {
   collectEnvRefs,
   ConfigError,
+  loadAgentConfig,
   parseAgentConfig,
   requiredEnvRefs,
   resolveAgentConfig,
@@ -600,4 +602,56 @@ http:
   ]);
   // collectEnvRefs keeps its narrower, secrets-oriented view.
   assertEquals(collectEnvRefs(config), ["OPENAI_API_KEY"]);
+});
+
+Deno.test("loadAgentConfig refuses a file that asks past the operator's floor", async () => {
+  const dir = await Deno.makeTempDir();
+  const floorPath = `${dir}/floor.yaml`;
+  const agentPath = `${dir}/agent.yaml`;
+  await Deno.writeTextFile(floorPath, "run: [gh, jq]\ndeny:\n  net: [metadata.google.internal]\n");
+  await Deno.writeTextFile(
+    agentPath,
+    `handle: floored
+description: an agent asking for too much
+model:
+  provider: anthropic
+  id: claude-opus-5
+purpose: You do a job.
+permissions:
+  run: [gh, curl]
+  net: ["*.google.internal"]
+`,
+  );
+
+  Deno.env.set(FLOOR_ENV, floorPath);
+  try {
+    const err = await assertRejects(() => loadAgentConfig(agentPath), ConfigError);
+    // Both problems are named at once: fixing one and rediscovering the other
+    // on the next start is the wrong shape for a startup check.
+    assert(err.message.includes('permissions.run asks for "curl"'));
+    assert(err.message.includes('permissions.net asks for "*.google.internal"'));
+    assert(err.message.includes("deny.net"));
+    // The grants the floor allows are not mentioned.
+    assert(!err.message.includes('"gh"'));
+
+    // Narrowing the agent file is the fix; the floor never grants anything.
+    await Deno.writeTextFile(
+      agentPath,
+      `handle: floored
+description: an agent within the floor
+model:
+  provider: anthropic
+  id: claude-opus-5
+purpose: You do a job.
+permissions:
+  run: [gh]
+`,
+    );
+    const config = await loadAgentConfig(agentPath);
+    // The file's grants stand exactly as written: the floor refuses, never rewrites.
+    assertEquals(config.permissions?.run, ["gh"]);
+  } finally {
+    Deno.env.delete(FLOOR_ENV);
+    await Deno.remove(dir, { recursive: true });
+  }
 });
