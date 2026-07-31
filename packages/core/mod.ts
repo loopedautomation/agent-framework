@@ -48,6 +48,7 @@ export {
   requiredEnvRefs,
   resolveAgentConfig,
 } from "./config/load.ts";
+export { type InertDeclaration, inertDeclarations, type InertKind } from "./config/inert.ts";
 export {
   envRefsIn,
   expandConfigHosts,

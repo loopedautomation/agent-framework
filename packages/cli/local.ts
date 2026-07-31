@@ -7,6 +7,7 @@ import {
   expandConfigHosts,
   hermeticPlan,
   IMAGE_ENV,
+  inertDeclarations,
   requiredEnvRefs,
   resolveAgentConfig,
   runGrantAdvisories,
@@ -44,6 +45,9 @@ export async function validate(path: string) {
   }
   for (const advisory of runGrantAdvisories(config.permissions?.run)) {
     console.log(`  ${warn("⚠")} ${advisory.advice}`);
+  }
+  for (const inert of inertDeclarations(config)) {
+    console.log(`  ${warn("⚠")} ${inert.advice}`);
   }
   const refs = requiredEnvRefs(config);
   if (refs.length) {
@@ -179,6 +183,9 @@ export async function runLocal(path: string) {
 
   for (const advisory of runGrantAdvisories(config.permissions?.run)) {
     console.log(`${warn("⚠")} ${advisory.advice}`);
+  }
+  for (const inert of inertDeclarations(config)) {
+    console.log(`${warn("⚠")} ${inert.advice}`);
   }
 
   const baseDir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ".";

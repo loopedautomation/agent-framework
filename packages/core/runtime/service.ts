@@ -12,7 +12,8 @@ import { createRunBashTool } from "../tools/bash.ts";
 import { createHttpRequestTool, type HttpCredential } from "../tools/http.ts";
 import { createReadFileTool, createWriteFileTool } from "../tools/files.ts";
 import { runAgent, type RunEvent, type RunResult } from "../loop/loop.ts";
-import { formatCost, priceFor } from "../providers/pricing.ts";
+import { formatCost } from "../providers/pricing.ts";
+import { inertDeclarations } from "../config/inert.ts";
 import { Store } from "../store/store.ts";
 import { type AgentIdentity, ensureIdentity, identityNote } from "./identity.ts";
 import { createSkillTool, loadSkills, type Skill, skillsPromptSection } from "../skills/skills.ts";
@@ -768,17 +769,11 @@ export class AgentService {
 
   /** Start every trigger, routing its events through {@linkcode AgentService.handle}. */
   async start(triggers: Trigger[]) {
-    // A budget that cannot be computed is a budget that silently does nothing,
-    // so say it at startup rather than letting the agent file imply a ceiling
-    // the runtime will never apply.
-    if (this.config.limits.max_cost > 0 && !this.config.model.pricing) {
-      if (!priceFor(this.config.model.id)) {
-        logInfo(
-          `limits.max_cost is set to ${formatCost(this.config.limits.max_cost)} but no price is ` +
-            `known for model "${this.config.model.id}", so the cap cannot be enforced and run ` +
-            `costs will not be recorded. Set model.pricing to fix this.`,
-        );
-      }
+    // Anything in the file the runtime will never act on. Saying so at startup
+    // is the whole point: an author who wrote one of these believes they
+    // configured something, and silence is what makes that belief stick.
+    for (const inert of inertDeclarations(this.config)) {
+      logInfo(`${inert.where}: ${inert.advice}`);
     }
 
     // Any run still open belongs to a previous process that died holding it.
