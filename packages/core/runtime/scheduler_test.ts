@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
-import { QueueFullError, RunScheduler } from "./scheduler.ts";
+import { DrainingError, QueueFullError, RunScheduler } from "./scheduler.ts";
 
 // A promise the test opens by hand — tasks block on it to hold a slot.
 function gated() {
@@ -112,4 +112,64 @@ Deno.test("scheduler: a failing task rejects its own promise and the lane moves 
   await assertRejects(() => boom, Error, "boom");
   assertEquals(await after, "after");
   assertEquals(s.running, 0);
+});
+
+Deno.test("drain lets accepted work finish and refuses anything new", async () => {
+  const scheduler = new RunScheduler({ concurrentRuns: 2, queueDepth: 5 });
+  const release: Array<() => void> = [];
+  const blocked = () => new Promise<string>((r) => release.push(() => r("done")));
+
+  const first = scheduler.submit("a", blocked);
+  const second = scheduler.submit("b", blocked);
+  assertEquals(scheduler.draining, false);
+  // A lane task starts on a microtask, so let both reach the slot first.
+  await new Promise((r) => setTimeout(r, 5));
+
+  const drained = scheduler.drain();
+  assertEquals(scheduler.draining, true);
+
+  // Work accepted before the drain still runs.
+  assertEquals(scheduler.running, 2);
+  // Anything after it is refused rather than queued behind the shutdown.
+  assertThrows(() => scheduler.submit("c", blocked), DrainingError);
+  assertThrows(() => scheduler.submit(undefined, blocked), DrainingError);
+
+  release[0]();
+  release[1]();
+  assertEquals(await first, "done");
+  assertEquals(await second, "done");
+  await drained;
+  assertEquals(scheduler.running, 0);
+});
+
+Deno.test("draining an idle scheduler resolves immediately", async () => {
+  const scheduler = new RunScheduler({ concurrentRuns: 2, queueDepth: 5 });
+  await scheduler.drain();
+  assertEquals(scheduler.draining, true);
+});
+
+Deno.test("drain waits for work that is queued behind a lane, not just running", async () => {
+  const scheduler = new RunScheduler({ concurrentRuns: 1, queueDepth: 5 });
+  const release: Array<() => void> = [];
+  const blocked = () => new Promise<void>((r) => release.push(() => r()));
+
+  const first = scheduler.submit("lane", blocked);
+  const second = scheduler.submit("lane", blocked); // waiting behind the first
+  await new Promise((r) => setTimeout(r, 5));
+  assertEquals(scheduler.running, 1);
+  assertEquals(scheduler.queued, 1);
+
+  let settled = false;
+  const drained = scheduler.drain().then(() => (settled = true));
+
+  release[0]();
+  await first;
+  await new Promise((r) => setTimeout(r, 5));
+  // The second was accepted before the drain, so the drain is not done yet.
+  assertEquals(settled, false);
+
+  release[1]();
+  await second;
+  await drained;
+  assertEquals(settled, true);
 });

@@ -96,6 +96,7 @@ limits:
   max_steps: 20        # default: 20 LLM calls per run
   max_cost: 5          # default: $5 of model spend per run; 0 disables
   max_runtime: 0       # default: off. Wall-clock seconds per run
+  drain_timeout: 8     # default: 8s to finish in-flight runs on shutdown
   concurrent_runs: 4   # default: 4 conversations running at once
   queue_depth: 10      # default: 10 waiting events per conversation
 ```
@@ -122,6 +123,12 @@ model:
 Without a price the runtime can't compute spend, so `max_cost` can't be enforced. It says so on startup and names the model, rather than leaving a cap in your agent file that quietly does nothing. Run costs are recorded per run and totalled in `/status`, where an unpriced run is left out of the total rather than counted as free.
 
 `max_runtime` caps wall-clock seconds per run, checked at step boundaries. It's off by default: a slow run costs nothing extra, and legitimate work can be slow. Turn it on when a run holding a lane matters more than the run finishing - a cron schedule that must not overlap the next firing, say. A single long tool call can overshoot the limit, because the check happens between steps rather than interrupting work in flight.
+
+`drain_timeout` covers the other end of a run's life. When the container gets SIGTERM, Docker waits before killing it - 10 seconds by default, `stop_grace_period` in compose. That window used to be spent exiting. Now it's spent finishing: the agent stops accepting events, lets the ones it already accepted run, and exits when the last one is done.
+
+While it's draining, new events get an immediate refusal rather than being queued behind a shutdown they won't survive, and the refusal lands in the audit trail like any other. `/healthz` reports `draining` and `in_flight`, so a deployment can watch the drain rather than guess at it.
+
+Keep the timeout under your orchestrator's grace period so the normal path completes. Past it, the agent stops anyway, and whatever was still running is left with an open row in the runs table - the next start marks those `error_crashed`, so a run that outlasted its drain is recorded rather than lost. `drain_timeout: 0` skips draining and exits straight away.
 
 `concurrent_runs` and `queue_depth` decide what happens when events arrive faster than the agent finishes them. Within one conversation, runs are serial and ordered: a message that arrives mid-run waits its turn, and each run loads the history its predecessor saved, so message four's run sees what messages one through three did. Across conversations the agent runs in parallel, up to `concurrent_runs` at a time, so one person's long task doesn't make the agent look dead to everyone else. Setting `concurrent_runs: 1` serializes the whole agent.
 

@@ -599,6 +599,11 @@ const LimitsSchema = z.strictObject({
       "The run ends with error_max_cost. 0 disables the cap; there is a non-zero default because " +
       "an unattended agent with no ceiling is one loop away from an unbounded bill.",
   ),
+  drain_timeout: z.number().nonnegative().default(8).describe(
+    "Seconds a drain waits for in-flight runs after SIGTERM before giving up and exiting. Keep " +
+      "it under the orchestrator's grace period (docker stop allows 10s by default) so the " +
+      "normal path finishes rather than being killed partway. 0 skips draining entirely.",
+  ),
   max_runtime: z.number().nonnegative().default(0).describe(
     "Wall-clock seconds one run may take, measured from when it starts. Checked at step " +
       "boundaries, so a single long tool call can overshoot it. The run ends with " +
@@ -670,6 +675,7 @@ const agentConfigSchema = z.strictObject({
     max_images_per_message: 4,
     max_cost: 5,
     max_runtime: 0,
+    drain_timeout: 8,
   }),
 }).describe(
   "A Looped AF agent: one job, one file. https://github.com/loopedautomation/agent-framework",
@@ -1157,6 +1163,11 @@ export interface LimitsConfig {
    * error_max_runtime. 0 disables it, which is the default.
    */
   max_runtime: number;
+  /**
+   * Seconds a drain waits for in-flight runs after SIGTERM. Keep it under the orchestrator's
+   * grace period. 0 skips draining entirely.
+   */
+  drain_timeout: number;
 }
 
 /** A parsed and validated agent.yaml, with defaults applied. */
