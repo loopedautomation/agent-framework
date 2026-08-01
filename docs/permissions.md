@@ -83,7 +83,7 @@ Enforcement is layered: the app-level engine described above runs inside a runti
 
 Two honest notes on where the layers actually sit:
 
-- If your agent spawns something, whether that's a `permissions.run` grant or a stdio MCP server, the Deno layer allows all *network* egress in the container (`--allow-net`). Per-host enforcement happens in the app-level permission engine, and the container's egress policy is layer 2; restrict it with your network setup where it matters. An agent that spawns nothing gets its `net:` list compiled straight into `--allow-net`, so the runtime enforces it for the whole process ([hermetic mode](permission-model.md#hermetic-mode)).
+- If your agent spawns something, whether that's a `permissions.run` grant or a stdio MCP server, the Deno layer allows all *network* egress in the container (`--allow-net`). Per-host enforcement happens in the app-level permission engine, and for a subprocess that engine never sees the socket. The [egress proxy](#the-egress-proxy) below closes that gap. An agent that spawns nothing gets its `net:` list compiled straight into `--allow-net`, so the runtime enforces it for the whole process ([hermetic mode](permission-model.md#hermetic-mode)).
 - `bash` subprocesses escape the Deno sandbox by design; the container boundary is what contains them. That is why there is no "run on the host" mode.
 
 ## An operator's floor
@@ -134,3 +134,51 @@ Neither file present means no floor and no change: a developer on their own mach
 The two failure cases are treated differently, because they mean different things. If `AF_PERMISSION_FLOOR` names a file that can't be read, startup fails - an operator who pointed at a policy shouldn't end up with an unpoliced agent because of a typo. If the *default* path can't be read for some reason other than being absent, the agent starts without a floor and prints a warning naming the path. Stopping an agent because of a file it was never told about would be wrong, and staying quiet about a policy that might exist and isn't applying would be worse.
 
 In the [base image](docker-run.md#what-the-base-image-gives-you), `/etc/af` is in the runtime's read paths, so a floor mounted there is readable under the sandbox flags the agent runs with.
+
+## The egress proxy
+
+`http_request` goes through the permission engine, so `permissions.net` holds. A subprocess does not: `gh`, `curl`, a stdio MCP server, anything a `permissions.run` grant spawns opens its own sockets, and nothing in the app can see them. The Deno sandbox can't help either, because an agent that spawns anything gets a broad `--allow-net` by design. That leaves the container, and a container with a default route reaches the whole internet.
+
+So the allowlist moves somewhere a subprocess can't walk around. `af init` generates two networks:
+
+```yaml
+networks:
+  my-bot-internal:
+    internal: true    # no route off the host
+  my-bot-egress:
+```
+
+The agent sits on the internal one. The proxy service sits on both, and holds the same host list `permissions.net` compiles to - your entries, plus the model endpoint, your triggers' hosts and any HTTP MCP servers. It's the only way out.
+
+The agent also gets the proxy in its environment:
+
+```yaml
+HTTP_PROXY: http://my-bot-egress:3128
+HTTPS_PROXY: http://my-bot-egress:3128
+NO_PROXY: localhost,127.0.0.1,my-bot-egress
+```
+
+Deno's `fetch` honours those, and so do `gh`, `curl` and `git` over HTTPS. The env vars are the polite path; the network split is what actually holds. A binary that ignores proxy variables doesn't get out either - it has nowhere to send packets.
+
+When the proxy refuses a host, the client gets a 403 whose body names the host and the line to add:
+
+```
+egress denied: "api.stripe.com" is not in this agent's permissions.net allowlist.
+Add it to agent.yaml if the agent should reach it:
+
+permissions:
+  net: ["api.stripe.com"]
+```
+
+and the refusal is on the proxy's stdout, so `docker logs my-bot-egress` shows what was turned away.
+
+### What it doesn't cover
+
+- **TLS is not terminated.** A hostname allowlist only needs the CONNECT line, and terminating would hand the proxy every credential the agent sends. The consequence is that the check is per-host: a permitted host can be reached at any path.
+- **SSH is not HTTP.** `run: [git]` over `git@github.com` won't traverse a CONNECT proxy at all, so it fails outright on the internal network. Use HTTPS remotes, or give that agent its own network setup.
+- **DNS still resolves.** The proxy checks the name in the request, so a permitted hostname pointing somewhere new resolves wherever it points.
+- **The refusal isn't in the agent's audit trail.** It's in the proxy's logs, which is a different container. Getting it into the agent's own audit table needs a channel between the two that doesn't exist yet.
+
+### Running it yourself
+
+`af egress agent.yaml` runs the proxy for an agent file, printing the hosts it will allow. `AF_EGRESS_PORT` picks the port; it defaults to 3128. That's the same command the compose file runs, so what you test locally is what the deployment enforces.

@@ -125,6 +125,15 @@ export {
   RUNTIME_READ_PATHS,
   RUNTIME_WRITE_PATHS,
 } from "./permissions/hermetic.ts";
+export {
+  egressAllowed,
+  type EgressDecision,
+  type EgressEvent,
+  type EgressProxy,
+  type EgressProxyOptions,
+  refusalBody,
+  startEgressProxy,
+} from "./net/egress_proxy.ts";
 export { defineTool, type NativeTool, type ToolArgs, type ToolSchema } from "./tools/types.ts";
 export { currentTimeTool } from "./tools/time.ts";
 export { createRunBashTool, extractExecutables, type RunBashOptions } from "./tools/bash.ts";
