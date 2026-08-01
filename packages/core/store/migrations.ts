@@ -152,6 +152,16 @@ CREATE INDEX runs_open ON runs (id) WHERE finished_at IS NULL;
       }
     },
   },
+  {
+    id: "005_run_cost",
+    // What a run spent, in USD, when the model's price is known. NULL means
+    // unpriced rather than free: an unknown model, or a run from before this
+    // column existed. SUM() over the column skips nulls, so an agent on an
+    // unpriced model reports no spend instead of an authoritative zero.
+    up(db) {
+      db.exec("ALTER TABLE runs ADD COLUMN cost_usd REAL");
+    },
+  },
 ];
 
 /**

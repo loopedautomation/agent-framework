@@ -67,6 +67,8 @@ export interface RunOutcome {
   steps: number;
   /** Token usage for the whole run. */
   usage: Usage;
+  /** USD spent, when the model's price is known. Absent stores NULL: unpriced, not free. */
+  cost?: number;
 }
 
 /** One agent-created schedule, as written to the schedules table. */
@@ -230,17 +232,42 @@ export class Store {
     return rows.map((r) => JSON.parse(r.message_json));
   }
 
-  /** Lifetime run count and token totals (the /status command). */
-  runStats(): { runs: number; inputTokens: number; outputTokens: number } {
+  /**
+   * Lifetime run count, token totals and spend (the /status command). `cost`
+   * sums only the runs whose model had a known price, so an agent on an
+   * unpriced model reports 0 spend over 0 priced runs rather than claiming
+   * its runs were free.
+   */
+  runStats(): {
+    runs: number;
+    inputTokens: number;
+    outputTokens: number;
+    cost: number;
+    pricedRuns: number;
+  } {
     const row = this.#db
       .prepare(
         `SELECT COUNT(*) AS runs,
                 COALESCE(SUM(input_tokens), 0) AS input_tokens,
-                COALESCE(SUM(output_tokens), 0) AS output_tokens
+                COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                COALESCE(SUM(cost_usd), 0) AS cost,
+                COUNT(cost_usd) AS priced_runs
          FROM runs`,
       )
-      .get() as { runs: number; input_tokens: number; output_tokens: number };
-    return { runs: row.runs, inputTokens: row.input_tokens, outputTokens: row.output_tokens };
+      .get() as {
+        runs: number;
+        input_tokens: number;
+        output_tokens: number;
+        cost: number;
+        priced_runs: number;
+      };
+    return {
+      runs: row.runs,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      cost: row.cost,
+      pricedRuns: row.priced_runs,
+    };
   }
 
   /**
@@ -292,7 +319,7 @@ export class Store {
     this.#db
       .prepare(
         `UPDATE runs SET status = ?, reply = ?, steps = ?, input_tokens = ?,
-           output_tokens = ?, finished_at = datetime('now')
+           output_tokens = ?, cost_usd = ?, finished_at = datetime('now')
          WHERE id = ?`,
       )
       .run(
@@ -301,6 +328,7 @@ export class Store {
         outcome.steps,
         outcome.usage.inputTokens,
         outcome.usage.outputTokens,
+        outcome.cost ?? null,
         runId,
       );
   }

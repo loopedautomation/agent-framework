@@ -2,15 +2,25 @@ import type { AgentConfig } from "../config/schema.ts";
 import type { ImageContent, Message, Provider, Usage } from "../providers/types.ts";
 import { ProviderError } from "../providers/types.ts";
 import type { NativeTool } from "../tools/types.ts";
+import { costOf, formatCost, type ModelPrice, priceFor } from "../providers/pricing.ts";
 
 /**
  * How a run ended: cleanly, out of steps, or on a provider failure.
  * `rejected` means no run happened — the event was refused at the queue
  * (its conversation already held too much waiting work). `aborted` means
  * the run's abort signal fired (the /stop command) and the loop halted at
- * the next step boundary.
+ * the next step boundary. `error_max_cost` and `error_max_runtime` are the
+ * spend and wall-clock ceilings from `limits`, both checked before a call
+ * rather than after, so neither can be exceeded by the call that trips it.
  */
-export type RunStatus = "ok" | "error_max_steps" | "error_provider" | "rejected" | "aborted";
+export type RunStatus =
+  | "ok"
+  | "error_max_steps"
+  | "error_max_cost"
+  | "error_max_runtime"
+  | "error_provider"
+  | "rejected"
+  | "aborted";
 
 /**
  * Injected as the final user turn of the wrap-up call when a run exhausts
@@ -52,6 +62,12 @@ export interface RunResult {
   steps: number;
   /** Token usage summed over the run's LLM calls. */
   usage: Usage;
+  /**
+   * What the run's model calls cost in USD, when the model's price is known
+   * (from the built-in list or `model.pricing`). Absent when it is not, which
+   * is also when `limits.max_cost` cannot be enforced.
+   */
+  cost?: number;
   /**
    * Input tokens of the run's final LLM call — the context size this
    * conversation has reached, as the provider reported it. Absent when the
@@ -151,15 +167,58 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
     opts.onPersist(appended);
   };
 
+  // An explicit `model.pricing` block wins over the built-in list; when
+  // neither knows this model, cost stays undefined and max_cost cannot be
+  // enforced. The service says so at startup rather than letting the cap look
+  // active while doing nothing.
+  const price: ModelPrice | undefined = config.model.pricing
+    ? {
+      inputPerMTok: config.model.pricing.input_per_mtok,
+      outputPerMTok: config.model.pricing.output_per_mtok,
+    }
+    : priceFor(config.model.id);
+  const spent = () => (price ? costOf(usage, price) : undefined);
+  const startedAtMs = performance.now();
+  const elapsedSecs = () => (performance.now() - startedAtMs) / 1000;
+
   const finish = (status: RunStatus, reply: string): RunResult => {
     flush();
-    return { status, reply: redact(reply), steps, usage, contextTokens, messages };
+    return { status, reply: redact(reply), steps, usage, cost: spent(), contextTokens, messages };
   };
 
   const aborted = (): RunResult => finish("aborted", `run stopped after ${steps} steps`);
 
+  /**
+   * The budgets that end a run without a wrap-up call. Both are checked
+   * before spending, so the call that would breach the cap is the one that
+   * never happens; `max_steps` deliberately keeps its wrap-up call because
+   * it has budget left to pay for one and these two, by definition, do not.
+   */
+  const exhausted = (): RunResult | undefined => {
+    const cost = spent();
+    const cap = config.limits.max_cost;
+    if (cap > 0 && cost !== undefined && cost >= cap) {
+      return finish(
+        "error_max_cost",
+        `run stopped after spending ${formatCost(cost)} of its ${formatCost(cap)} budget ` +
+          `in ${steps} step${steps === 1 ? "" : "s"}`,
+      );
+    }
+    const seconds = config.limits.max_runtime;
+    if (seconds > 0 && elapsedSecs() >= seconds) {
+      return finish(
+        "error_max_runtime",
+        `run stopped after ${Math.round(elapsedSecs())}s, over its ${seconds}s budget, ` +
+          `in ${steps} step${steps === 1 ? "" : "s"}`,
+      );
+    }
+    return undefined;
+  };
+
   while (steps < config.limits.max_steps) {
     if (opts.signal?.aborted) return aborted();
+    const over = exhausted();
+    if (over) return over;
     steps++;
     emit({ type: "step", n: steps });
     // Re-resolve per iteration: a search_tools call in the previous step may
@@ -229,8 +288,13 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   }
 
   if (opts.signal?.aborted) return aborted();
+  // No wrap-up call when the run is out of money or time: it is another
+  // billable call, and spending past a cap to explain the cap is the wrong
+  // trade. The status and reply already say what happened.
+  const over = exhausted();
+  if (over) return over;
 
-  // Budget exhausted with the model still calling tools. Spend one extra
+  // Step budget exhausted with the model still calling tools. Spend one extra
   // tool-less call so the run ends with the model's own account of where it
   // got to; downstream (chat replies, the runs table) sees that instead of a
   // canned string. The prompt stays out of the persisted transcript.

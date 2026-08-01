@@ -58,6 +58,27 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "pricing": {
+          "description": "What this model costs, in USD per million tokens, overriding the built-in price list. Set it when the model isn't in the list, when you're behind a proxy or a negotiated rate, or whenever limits.max_cost has to be exact — the built-in list is published list prices and can go stale.",
+          "type": "object",
+          "properties": {
+            "input_per_mtok": {
+              "type": "number",
+              "minimum": 0,
+              "description": "USD per million input tokens."
+            },
+            "output_per_mtok": {
+              "type": "number",
+              "minimum": 0,
+              "description": "USD per million output tokens."
+            }
+          },
+          "required": [
+            "input_per_mtok",
+            "output_per_mtok"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -1150,7 +1171,9 @@
         "concurrent_runs": 4,
         "queue_depth": 10,
         "max_image_bytes": 5000000,
-        "max_images_per_message": 4
+        "max_images_per_message": 4,
+        "max_cost": 5,
+        "max_runtime": 0
       },
       "type": "object",
       "properties": {
@@ -1188,6 +1211,18 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
+        },
+        "max_cost": {
+          "default": 5,
+          "description": "Most one run may spend on model calls, in USD. Checked before each call using what the run has already spent, so the cap is a ceiling on committed spend rather than a prediction. The run ends with error_max_cost. 0 disables the cap; there is a non-zero default because an unattended agent with no ceiling is one loop away from an unbounded bill.",
+          "type": "number",
+          "minimum": 0
+        },
+        "max_runtime": {
+          "default": 0,
+          "description": "Wall-clock seconds one run may take, measured from when it starts. Checked at step boundaries, so a single long tool call can overshoot it. The run ends with error_max_runtime. 0 disables it, which is the default: unlike spend, a slow run costs nothing extra and legitimate work can be slow.",
+          "type": "number",
+          "minimum": 0
         }
       },
       "additionalProperties": false,
