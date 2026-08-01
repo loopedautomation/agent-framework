@@ -1,0 +1,65 @@
+---
+title: Meet
+description: An agent in a meeting, over WebSocket.
+---
+
+A `meet` trigger puts an agent in a meeting. It shares a transport with [tty](tty.mdx) and means the opposite thing.
+
+`tty` is a terminal, and its contract is "each connection is a conversation" - a new window should be a fresh start. A meeting works the other way round. The meeting is the conversation, and connections come and go inside it: someone's laptop sleeps, a bridge reconnects, a second client attaches. None of that should start a new conversation.
+
+```yaml
+triggers:
+  - type: meet
+    token_env: MEET_TOKEN
+    summarize_on_end: |
+      The meeting is over. Write the record: what was decided,
+      what is still open, and who owns what.
+```
+
+Auth is the same bearer token as tty - the `authorization` header, or the `bearer.<token>` subprotocol for browsers.
+
+## The handshake
+
+A connection does nothing until it names its meeting:
+
+```json
+{"type": "join", "meeting_id": "room-42", "participants": ["ratul", "sam"]}
+```
+
+The server answers with `hello`, carrying the agent's name and whether this meeting was already in progress:
+
+```json
+{"type": "hello", "handle": "notes-bot", "name": "Juniper", "meeting_id": "room-42", "resumed": true}
+```
+
+The conversation key is `meet:<meeting_id>`, so with [`memory.scope: thread`](memory.md) the whole meeting is one thread however many times the socket drops. There is no default and no query parameter: a connection that never names a meeting is refused rather than given an invented id whose history nothing could reach again.
+
+## Frames
+
+Client to agent:
+
+| Frame | |
+| --- | --- |
+| `{type: "join", meeting_id, participants?}` | required first; also the resume path |
+| `{type: "input", text, images?}` | a turn, same as tty |
+| `{type: "participant", name, action}` | `joined` or `left` |
+| `{type: "cancel"}` | abort the run in flight |
+| `{type: "end", reason?}` | the meeting is over |
+
+Agent to client: `hello`, then tty's run frames (`step`, `assistant`, `tool_call`, `tool_result`, `compaction`, `result`), plus `summary` and `error`.
+
+`participant` frames don't start a run. A busy room would otherwise spend a turn on every arrival.
+
+## Ending a meeting
+
+`end` is the frame that earns this trigger. A socket closing is ambiguous - it might be a dropped connection or a finished meeting - and the agent can't tell the difference. `end` says which one happened, while the conversation is still in context.
+
+With `summarize_on_end` set, the agent gets one more turn with that prompt, and the reply comes back as `{type: "summary", text}` before the socket closes. The summary is a normal turn, so it lands in the transcript: that record is the thing that outlives the meeting.
+
+Leave `summarize_on_end` out and an ending costs nothing. A summary is a model call per meeting and not every agent wants one.
+
+## What doesn't work yet
+
+**A summary can only reach an open socket.** If the agent schedules follow-up work during the meeting, the work runs - schedules survive restarts - but when it fires, the meeting is gone and the reply falls back to a log line. Giving a meeting somewhere else to report to is [#190](https://github.com/loopedautomation/agent-framework/issues/190)'s remaining half.
+
+**A dropped connection and a meeting that ends without an `end` frame look the same.** If your bridge can't always tell that a meeting finished, the agent will never write the record. That's worth checking before relying on it.
