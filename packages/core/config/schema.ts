@@ -178,6 +178,22 @@ const TtyTriggerSchema = z.strictObject({
   "Interactive terminal over WebSocket: connect to {path}, send {type: 'input', text} frames and receive the run's progress and result as JSON frames. This is the REPL as a network surface, for hosted terminals.",
 );
 
+const MeetTriggerSchema = z.strictObject({
+  type: z.literal("meet"),
+  path: z.string().startsWith("/").default("/meet").describe(
+    "HTTP path that accepts the WebSocket upgrade.",
+  ),
+  port: z.number().int().min(1).max(65535).default(8091).describe("Port to listen on."),
+  token_env: z.string().min(1).describe(
+    "Env var holding the bearer token clients must present (authorization header, or the Sec-WebSocket-Protocol value `bearer.<token>`). Required, like tty's.",
+  ),
+  summarize_on_end: z.string().min(1).optional().describe(
+    "What to ask the agent when a meeting sends its end frame, producing the record of the meeting while the conversation is still in context. Omit it and an ending costs no model call.",
+  ),
+}).describe(
+  "A meeting over WebSocket. Same transport as tty, opposite contract: the meeting is the conversation and connections come and go inside it, so the meeting id arrives in a required join frame rather than a query parameter.",
+);
+
 const ResendEmailTriggerSchema = z.strictObject({
   type: z.literal("email"),
   transport: z.literal("resend").describe(
@@ -333,6 +349,7 @@ const TriggerSchema = z.discriminatedUnion("type", [
   TelegramTriggerSchema,
   WebhookTriggerSchema,
   TtyTriggerSchema,
+  MeetTriggerSchema,
   EmailTriggerSchema,
   GithubTriggerSchema,
   CronTriggerSchema,
@@ -854,6 +871,23 @@ export interface TtyTriggerConfig {
   token_env: string;
 }
 
+/** A meeting over WebSocket: the meeting is the conversation, not the connection. */
+export interface MeetTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "meet";
+  /** HTTP path that accepts the WebSocket upgrade. */
+  path: string;
+  /** Port to listen on. */
+  port: number;
+  /** Env var holding the bearer token clients must present. */
+  token_env: string;
+  /**
+   * What to ask the agent when a meeting ends, producing the meeting's record while the
+   * conversation is still in context. Omit it and an ending costs no model call.
+   */
+  summarize_on_end?: string;
+}
+
 /** An email trigger on the Resend pushed transport: signed inbound-mail webhooks wake the agent. */
 export interface ResendEmailTriggerConfig {
   /** Discriminant for TriggerConfig. */
@@ -988,6 +1022,7 @@ export type TriggerConfig =
   | TelegramTriggerConfig
   | WebhookTriggerConfig
   | TtyTriggerConfig
+  | MeetTriggerConfig
   | EmailTriggerConfig
   | GithubTriggerConfig
   | CronTriggerConfig;

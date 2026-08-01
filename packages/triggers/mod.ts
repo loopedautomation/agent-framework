@@ -24,6 +24,7 @@ import { OutlookEmailTrigger } from "./email_outlook.ts";
 import { SlackTrigger } from "./slack.ts";
 import { TelegramTrigger } from "./telegram.ts";
 import { TtyTrigger } from "./tty.ts";
+import { MeetTrigger } from "./meet.ts";
 import { voiceFromConfig } from "./voice.ts";
 
 export type {
@@ -69,6 +70,12 @@ export {
   TtyTrigger,
   type TtyTriggerOptions,
 } from "./tty.ts";
+export {
+  type MeetClientFrame,
+  type MeetServerFrame,
+  MeetTrigger,
+  type MeetTriggerOptions,
+} from "./meet.ts";
 export {
   addressAllowed,
   EmailTrigger,
@@ -195,6 +202,26 @@ export function triggersFromConfig(
           );
         }
         triggers.push(new WebhookTrigger({ path: t.path, port: t.port, token }));
+        break;
+      }
+      case "meet": {
+        const token = getEnv(t.token_env);
+        if (!token) {
+          throw new Error(
+            `meet trigger: token env var ${t.token_env} is not set (required for bearer auth)`,
+          );
+        }
+        triggers.push(
+          new MeetTrigger({
+            path: t.path,
+            port: t.port,
+            token,
+            handle: config.handle,
+            name: identityName,
+            description: config.description,
+            summarizeOnEnd: t.summarize_on_end,
+          }),
+        );
         break;
       }
       case "tty": {

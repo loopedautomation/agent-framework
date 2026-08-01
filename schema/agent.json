@@ -389,6 +389,44 @@
             "description": "Interactive terminal over WebSocket: connect to {path}, send {type: 'input', text} frames and receive the run's progress and result as JSON frames. This is the REPL as a network surface, for hosted terminals."
           },
           {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "meet"
+              },
+              "path": {
+                "default": "/meet",
+                "description": "HTTP path that accepts the WebSocket upgrade.",
+                "type": "string",
+                "pattern": "^\\/.*"
+              },
+              "port": {
+                "default": 8091,
+                "description": "Port to listen on.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "token_env": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Env var holding the bearer token clients must present (authorization header, or the Sec-WebSocket-Protocol value `bearer.<token>`). Required, like tty's."
+              },
+              "summarize_on_end": {
+                "description": "What to ask the agent when a meeting sends its end frame, producing the record of the meeting while the conversation is still in context. Omit it and an ending costs no model call.",
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "type",
+              "token_env"
+            ],
+            "additionalProperties": false,
+            "description": "A meeting over WebSocket. Same transport as tty, opposite contract: the meeting is the conversation and connections come and go inside it, so the meeting id arrives in a required join frame rather than a query parameter."
+          },
+          {
             "oneOf": [
               {
                 "type": "object",
