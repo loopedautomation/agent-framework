@@ -124,3 +124,46 @@ Deno.test("a database from a newer build is refused", () => {
   assertThrows(() => migrate(db), Error, "newer version");
   db.close();
 });
+
+Deno.test("004 rebuilds runs without losing rows or their audit trail", () => {
+  const db = new DatabaseSync(":memory:");
+  // A database as it stood before open runs existed.
+  migrate(db, MIGRATIONS.slice(0, 3));
+  db.exec(`
+INSERT INTO sessions (id, conversation_key) VALUES (1, 'k');
+INSERT INTO runs (id, session_id, trigger, input, status, reply, steps,
+                  input_tokens, output_tokens, started_at, finished_at)
+  VALUES (1, 1, 'cron', 'old input', 'ok', 'old reply', 2, 30, 10,
+          '2026-07-01T00:00:00Z', '2026-07-01T00:00:05Z');
+INSERT INTO audit (run_id, kind, detail_json) VALUES (1, 'permission', '{"allowed":true}');
+`);
+
+  migrate(db);
+  assertEquals(version(db), MIGRATIONS.length);
+
+  const run = db.prepare("SELECT * FROM runs WHERE id = 1").get() as Record<string, unknown>;
+  assertEquals(run.trigger, "cron");
+  assertEquals(run.input, "old input");
+  assertEquals(run.reply, "old reply");
+  assertEquals(run.steps, 2);
+  assertEquals(run.input_tokens, 30);
+  assertEquals(run.started_at, "2026-07-01T00:00:00Z");
+  assertEquals(run.finished_at, "2026-07-01T00:00:05Z");
+
+  // The audit row still points at the rebuilt table.
+  const audit = db.prepare("SELECT run_id FROM audit").get() as { run_id: number };
+  assertEquals(audit.run_id, 1);
+  assertEquals(db.prepare("PRAGMA foreign_key_check").all().length, 0);
+
+  // And the column the rebuild existed for now accepts "not yet".
+  db.exec(`
+INSERT INTO runs (session_id, trigger, input, status, reply, steps,
+                  input_tokens, output_tokens, started_at, finished_at)
+  VALUES (1, 'cli', 'open', 'running', '', 0, 0, 0, '2026-08-01T00:00:00Z', NULL);
+`);
+  const open = db.prepare("SELECT finished_at FROM runs WHERE status = 'running'").get() as {
+    finished_at: string | null;
+  };
+  assertEquals(open.finished_at, null);
+  db.close();
+});

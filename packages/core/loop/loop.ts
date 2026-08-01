@@ -91,6 +91,18 @@ export interface RunOptions {
    * a loop run without one redacts nothing.
    */
   redact?: (text: string) => string;
+  /**
+   * Called at each step boundary with the messages produced since the last
+   * call, so a caller can persist a run as it happens rather than only when
+   * it returns. Never called with an empty list, and called once more before
+   * the loop returns so the last step is not left behind.
+   *
+   * `history` is assumed to be on disk already, so the first call starts at
+   * the run's own user turn. Unlike {@linkcode RunOptions.onEvent} this is
+   * not observational: it is the durability path, so a throw from it fails
+   * the run rather than being swallowed.
+   */
+  onPersist?: (appended: Message[]) => void;
 }
 
 /**
@@ -129,14 +141,20 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
   let steps = 0;
   let contextTokens: number | undefined;
 
-  const finish = (status: RunStatus, reply: string): RunResult => ({
-    status,
-    reply: redact(reply),
-    steps,
-    usage,
-    contextTokens,
-    messages,
-  });
+  // Everything before this index is already durable: the caller loaded it
+  // from the store. Appends start at the run's own user turn.
+  let persisted = opts.history?.length ?? 0;
+  const flush = () => {
+    if (!opts.onPersist || persisted >= messages.length) return;
+    const appended = messages.slice(persisted);
+    persisted = messages.length;
+    opts.onPersist(appended);
+  };
+
+  const finish = (status: RunStatus, reply: string): RunResult => {
+    flush();
+    return { status, reply: redact(reply), steps, usage, contextTokens, messages };
+  };
 
   const aborted = (): RunResult => finish("aborted", `run stopped after ${steps} steps`);
 
@@ -204,6 +222,10 @@ export async function runAgent(opts: RunOptions): Promise<RunResult> {
       });
       messages.push({ role: "tool", toolCallId: call.id, content: result });
     }
+    // Step boundary: the assistant turn and every tool result it asked for are
+    // now in the transcript, so this is the point where a crash should leave
+    // a coherent record rather than a half-written step.
+    flush();
   }
 
   if (opts.signal?.aborted) return aborted();

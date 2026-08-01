@@ -258,3 +258,62 @@ Deno.test("a pre-aborted signal ends the run before any provider call", async ()
   assertEquals(result.steps, 0);
   assertEquals(provider.requests.length, 0);
 });
+
+Deno.test("onPersist hands over each step's messages, skipping history", async () => {
+  const provider = scripted([
+    { toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"one"}' }] },
+    { toolCalls: [{ id: "c2", name: "echo", arguments: '{"message":"two"}' }] },
+    { content: "done" },
+  ]);
+  const batches: string[][] = [];
+  const result = await runAgent({
+    config: CONFIG,
+    provider,
+    tools: [echoTool],
+    input: "go",
+    history: [{ role: "user", content: "old" }, { role: "assistant", content: "older" }],
+    onPersist: (appended) => batches.push(appended.map((m) => m.content)),
+  });
+
+  // History is already on disk, so the first batch starts at this run's input.
+  assertEquals(batches[0], ["go", "", "echo: one"]);
+  assertEquals(batches[1], ["", "echo: two"]);
+  assertEquals(batches[2], ["done"]);
+
+  // Every message after the history was handed over exactly once, in order.
+  assertEquals(
+    batches.flat(),
+    result.messages.slice(2).map((m) => m.content),
+  );
+});
+
+Deno.test("onPersist still fires for the steps a failed run completed", async () => {
+  let call = 0;
+  const provider: Provider = {
+    id: "half-broken",
+    complete(): Promise<Completion> {
+      call++;
+      if (call === 1) {
+        return Promise.resolve({
+          content: "",
+          toolCalls: [{ id: "c1", name: "echo", arguments: '{"message":"kept"}' }],
+          stopReason: "tool_calls",
+          usage: { inputTokens: 10, outputTokens: 5 },
+        });
+      }
+      return Promise.reject(new ProviderError("upstream is down", "overloaded"));
+    },
+  };
+  const batches: string[][] = [];
+  const result = await runAgent({
+    config: CONFIG,
+    provider,
+    tools: [echoTool],
+    input: "go",
+    onPersist: (appended) => batches.push(appended.map((m) => m.content)),
+  });
+
+  assertEquals(result.status, "error_provider");
+  // The step that did happen is durable even though the run ended badly.
+  assertEquals(batches[0], ["go", "", "echo: kept"]);
+});

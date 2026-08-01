@@ -115,6 +115,43 @@ CREATE TABLE schedules (
 `);
     },
   },
+  {
+    id: "004_open_runs",
+    // A run row is now written when the run starts rather than when it ends,
+    // so `finished_at` has to be able to say "not yet". It was NOT NULL with a
+    // datetime('now') default, which would stamp every open run at insert and
+    // leave a crashed run indistinguishable from a clean one. SQLite cannot
+    // drop NOT NULL in place, hence the rebuild; the runner has foreign keys
+    // off while this runs and `audit.run_id` references this table.
+    up(db) {
+      db.exec(`
+CREATE TABLE runs_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER REFERENCES sessions(id),
+  trigger TEXT NOT NULL,
+  input TEXT NOT NULL,
+  status TEXT NOT NULL,
+  reply TEXT NOT NULL,
+  steps INTEGER NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  started_at TEXT NOT NULL,
+  finished_at TEXT
+);
+INSERT INTO runs_new (id, session_id, trigger, input, status, reply, steps,
+                      input_tokens, output_tokens, started_at, finished_at)
+  SELECT id, session_id, trigger, input, status, reply, steps,
+         input_tokens, output_tokens, started_at, finished_at FROM runs;
+DROP TABLE runs;
+ALTER TABLE runs_new RENAME TO runs;
+CREATE INDEX runs_open ON runs (id) WHERE finished_at IS NULL;
+`);
+      const violations = db.prepare("PRAGMA foreign_key_check").all();
+      if (violations.length > 0) {
+        throw new Error("runs rebuild left dangling references");
+      }
+    },
+  },
 ];
 
 /**
