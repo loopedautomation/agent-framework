@@ -1,0 +1,29 @@
+# The whole deployment story: docker compose up -d
+#
+# .env next to this file (see .env.example):
+#   ANTHROPIC_API_KEY, GITHUB_TOKEN, TELEGRAM_BOT_TOKEN, TTY_TOKEN
+#
+# This is the hermetic variant: the stock image, no build step. For the
+# gh + Claude Code variant, use compose.cli.yaml instead.
+services:
+  github-bot:
+    image: ghcr.io/loopedautomation/agent:latest
+    env_file: .env
+    volumes:
+      - ./agent.yaml:/agent/agent.yaml:ro
+      # The skill lives next to agent.yaml and is referenced as
+      # github-profile.md, so it mounts next to the config in the container.
+      - ./github-profile.md:/agent/github-profile.md:ro
+      - github-bot-data:/data
+    ports:
+      # TTY trigger WebSocket: ws://localhost:8090/tty (bearer auth via TTY_TOKEN)
+      - "127.0.0.1:8090:8090"
+      # Status surface: curl localhost:9096/healthz
+      - "127.0.0.1:9096:9090"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  github-bot-data:

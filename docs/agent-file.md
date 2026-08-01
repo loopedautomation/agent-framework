@@ -123,10 +123,14 @@ Each run's status, step count and token usage are recorded in [the data volume](
 
 ```yaml
 env:
-  GITHUB_TOKEN: ${GITHUB_TOKEN}
+  GITHUB_TOKEN: ${GITHUB_TOKEN}   # secret: scoped, and redacted on the way out
+public:
+  POSTHOG_PROJECT_ID: 12345       # configuration: scoped, and left visible
 ```
 
-The `env:` block grants environment variables to tools and MCP servers — and only those; subprocesses never inherit the agent process's ambient environment. Values may be `${VAR}` references, resolved at startup from the process env, then from `/run/secrets/<VAR>` (Docker Compose file secrets). A missing reference fails at startup, before any event is handled. The value is scoped to the tools that need it, and any tool output quoting it back is scrubbed. The full story is in [Secrets](secrets.md).
+The `env:` block grants environment variables to tools and MCP servers — and only those; subprocesses never inherit the agent process's ambient environment. Values may be `${VAR}` references, resolved at startup from the process env, then from `/run/secrets/<VAR>` (Docker Compose file secrets). A missing reference fails at startup, before any event is handled. The value is scoped to the tools that need it, and any tool output quoting it back is scrubbed.
+
+Everything in `env:` is treated as a secret, which is wrong for configuration the agent has to read back — a project id redacted out of the URLs it builds looks like an agent that can't see its own settings. `public:` is the same block without the redaction, and it takes bare numbers without quoting. The full story, and when not to reach for it, is in [Secrets](secrets.md#configuration-the-agent-has-to-read-public).
 
 ## The blocks with their own pages
 

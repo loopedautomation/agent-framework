@@ -8,7 +8,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { z } from "zod";
 import { REDACTED, Redactor, redactorForConfig } from "./redact.ts";
-import { parseAgentConfig } from "../config/load.ts";
+import { collectEnvRefs, parseAgentConfig, requiredEnvRefs } from "../config/load.ts";
 import { PermissionEngine } from "../permissions/engine.ts";
 import { createHttpRequestTool } from "../tools/http.ts";
 import { mcpToolsFromClient } from "../tools/mcp.ts";
@@ -60,6 +60,114 @@ Deno.test("redactor: jsonText reaches credential fields inside a serialized tool
   assertStringIncludes(r.jsonText(result), REDACTED);
   // Not JSON: still a string, still returned.
   assertEquals(r.jsonText("plain output"), "plain output");
+});
+
+Deno.test("public: configuration the agent must be able to read is never redacted", () => {
+  // `env` is secret by definition and everything in it is scrubbed on the way
+  // out. That is wrong for a project id, an account number, a region: redact
+  // one and it vanishes from the very URLs and responses the agent has to
+  // read, which presents as an agent that cannot see its own configuration.
+  // `public` is the same scoping without the redaction. posthog-bot depends
+  // on this, with an id well over MIN_SECRET_LENGTH.
+  const config = parseAgentConfig(`
+handle: public-bot
+description: public vs env
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+  api_key_env: ANTHROPIC_API_KEY
+purpose: Your project id is \${PROJECT_ID}.
+permissions:
+  net: [us.posthog.com]
+env:
+  POSTHOG_API_KEY: \${POSTHOG_API_KEY}
+public:
+  PROJECT_ID: \${PROJECT_ID}
+`);
+  const env: Record<string, string> = {
+    PROJECT_ID: "987654",
+    POSTHOG_API_KEY: "phx_secretvalue",
+    ANTHROPIC_API_KEY: "sk-ant-secretvalue",
+  };
+  const redactor = redactorForConfig(config, { getEnv: (n) => env[n], secretsDir: "/nonexistent" });
+
+  const result = "POST https://us.posthog.com/api/projects/987654/query -> 200";
+  assertEquals(redactor.text(result), result);
+  // Both real secrets still go, so `public` bought visibility for one value
+  // rather than turning redaction off.
+  assertEquals(redactor.text("key=phx_secretvalue"), `key=${REDACTED}`);
+  assertEquals(redactor.text("key=sk-ant-secretvalue"), `key=${REDACTED}`);
+
+  // Required for provisioning — an unset one fails at startup like any other
+  // reference — but never seeds the redactor. The split between these two
+  // functions is what makes `public` work.
+  assert(requiredEnvRefs(config).includes("PROJECT_ID"));
+  assert(!collectEnvRefs(config).includes("PROJECT_ID"));
+});
+
+Deno.test("public: scoped into subprocesses like env, and env wins a collision", async () => {
+  const config = parseAgentConfig(`
+handle: public-bash-bot
+description: public reaches subprocesses
+model:
+  provider: openai-compatible
+  id: test-model
+purpose: You run commands.
+permissions:
+  run: [printenv]
+env:
+  BOTH: from-env
+public:
+  PROJECT_ID: 987654
+  BOTH: from-public
+`);
+  // One variable per run: BSD printenv takes a single name, so asking for two
+  // at once silently reports only the first.
+  let asked: string;
+  const provider: Provider = {
+    id: "stub",
+    complete: (req: CompletionRequest): Promise<Completion> => {
+      const usage = { inputTokens: 1, outputTokens: 1 };
+      const tool = req.messages.find((m) => m.role === "tool");
+      if (!tool) {
+        return Promise.resolve({
+          content: "",
+          toolCalls: [{
+            id: "1",
+            name: "run_bash",
+            arguments: JSON.stringify({ command: `printenv ${asked}` }),
+          }],
+          stopReason: "tool_calls",
+          usage,
+        });
+      }
+      return Promise.resolve({ content: tool.content, toolCalls: [], stopReason: "end", usage });
+    },
+  };
+
+  const service = new AgentService({
+    config,
+    provider,
+    dataDir: await Deno.makeTempDir(),
+    identity: { name: "pub", isNew: false, source: "chosen" },
+  });
+  const read = async (name: string) => {
+    asked = name;
+    const result = await service.handle({
+      id: `e-${name}`,
+      trigger: "cli",
+      input: `print ${name}`,
+    });
+    return result.reply;
+  };
+
+  // The subprocess saw the public value, and it survived the trip back out
+  // rather than coming back as [redacted].
+  assertStringIncludes(await read("PROJECT_ID"), "987654");
+  // A name in both blocks is a secret somewhere, so the secret wins.
+  const both = await read("BOTH");
+  assertStringIncludes(both, "from-env");
+  assert(!both.includes("from-public"));
 });
 
 Deno.test("redactorForConfig: seeded from every env var the config references", () => {

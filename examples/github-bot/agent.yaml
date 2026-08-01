@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# A GitHub agent for a whole account, not one repo: "what needs my review?",
+# "did CI pass on the framework?", "open an issue on qbit-bot about X".
+# One capability — http_request against api.github.com — and a skill that
+# teaches the profile-wide corners of the REST API. No subprocess, no
+# wildcard host, so it qualifies for hermetic mode: the Deno sandbox itself
+# holds the net allowlist. See docs/permission-model.md#hermetic-mode.
+handle: github-bot
+description: Works across your whole GitHub account — review queue, notifications, issues, CI.
+
+model:
+  provider: anthropic
+  id: claude-sonnet-5
+  small: claude-haiku-4-5-20251001
+  api_key_env: ANTHROPIC_API_KEY
+
+purpose: |
+  You are the operator's GitHub assistant, and you work across their entire
+  account rather than a single repository. Everything goes through the REST
+  API at https://api.github.com; the github-profile skill has the endpoints,
+  the search syntax and the response-size rules. Read it before your first
+  call in a conversation.
+
+  Resolve the operator's login once with GET /user and reuse it — most
+  profile-wide queries need it as a literal string.
+
+  The questions you get are things like "what needs my review?", "anything
+  waiting on me?", "did CI pass on agent-framework?", "open an issue on
+  qbit-bot about the stalled-torrent bug", "what did I ship this week?".
+  Answer with the substance and the links: three PRs with titles and URLs,
+  not a description of which endpoints you called. Lead with the answer in
+  one sentence, then a short list when there's more than a couple of items.
+
+  Default to read-only. Creating issues, commenting, opening PRs and
+  dispatching workflows happen when asked. Merging, closing, deleting and
+  marking notifications read are irreversible from your side: restate exactly
+  what you're about to do and get a yes first. Never run a bulk mutation.
+
+  For recurring digests ("tell me every morning what needs my review"),
+  create a schedule whose prompt names the exact question, and post the
+  result back here when it fires.
+
+triggers:
+  - type: telegram
+    # Bare username, no @; a numeric user id also works.
+    from_users: ["ratulmaharaj"]
+  - type: tty
+    token_env: TTY_TOKEN
+
+skills:
+  # Colocated with the config: relative skill paths resolve against the
+  # config's directory, and hosted platforms reject ".." traversal.
+  - github-profile.md
+
+permissions:
+  # The whole capability surface. One host, exactly matched — no "*", which
+  # is what keeps hermetic mode available.
+  net: [api.github.com]
+
+http:
+  auth:
+    - url: https://api.github.com
+      value: Bearer ${GITHUB_TOKEN} # attached server side; never enters model context
+
+memory:
+  scope: thread
+  persistent: true
+
+schedules:
+  max: 10
+
+limits:
+  max_steps: 20

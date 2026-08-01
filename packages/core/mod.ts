@@ -50,6 +50,7 @@ export {
 } from "./config/load.ts";
 export {
   envRefsIn,
+  expandConfigHosts,
   expandEnvRefs,
   lookupSecret,
   resolveEnv,

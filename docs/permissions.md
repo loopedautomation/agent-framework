@@ -19,6 +19,8 @@ permissions:
 
 - **`net`** - hosts, matched exactly; `*.example.com` matches subdomains, and the apex needs its own entry.
 - **`run`** - executables, matched by basename.
+A `net` entry may be an env reference — `net: ["${COOLIFY_HOST}"]`, and likewise `http.auth`'s `url`. An instance hostname is deployment configuration, not a secret, and this keeps it out of a committed agent file. The reference resolves at startup, before the [sandbox flags](#the-layers) are compiled from it, so what the runtime enforces is the real host. A missing one fails at startup like any other reference; `af validate` and `af flags` describe rather than run, so they leave it visible and warn instead.
+
 - **`read` / `write`** - path prefixes: granting `/workspace` grants everything beneath it. A path is normalized and its symlinks are expanded before the check, so neither `..` traversal nor a link pointing out of the root steps outside the allowlist. The tools then act on the resolved path, so what was authorized is what gets opened. A symlink that stays inside the root is fine, which means an allowed root can itself be a link, the way `/tmp` is on macOS.
 
 Tools follow permissions: `run_bash` only exists for the agent if `run:` grants something, `http_request` only if `net:` does and `read_file`/`write_file` only if `read:`/`write:` do. This means that no unused tool schema takes up context. The full toolset is in [Tools](tools.md).
