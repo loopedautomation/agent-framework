@@ -122,7 +122,7 @@ export async function loadAgentConfig(path: string): Promise<AgentConfig> {
     throw new ConfigError(`cannot read ${path}: ${(err as Error).message}`, path);
   }
   const config = parseAgentConfig(text, path);
-  const active = await loadFloor();
+  const active = await loadFloor(undefined, (message) => console.error(`warning: ${message}`));
   if (active) {
     const violations = floorViolations(config.permissions, active.floor);
     if (violations.length > 0) {

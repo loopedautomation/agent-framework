@@ -49,6 +49,10 @@ export const RUNTIME_READ_PATHS: string[] = [
   "/looped",
   "/deno-dir",
   "/run/secrets",
+  // The operator's permission floor, when one is mounted. Without this the
+  // runtime's own narrowed flags would make a deployed floor unreadable, and
+  // the policy would apply to nobody.
+  "/etc/af",
 ];
 
 /** Write paths the runtime needs: the data volume, where identity and memory live. */

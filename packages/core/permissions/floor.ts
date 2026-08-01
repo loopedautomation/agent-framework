@@ -206,11 +206,18 @@ export function parseFloor(yamlText: string, source: string): PermissionFloor {
  *
  * A path named explicitly in the env var that cannot be read is an error: an
  * operator who pointed at a policy file should not get an unpoliced agent
- * because of a typo. The default path missing is not an error, because that is
- * every developer on their own machine.
+ * because of a typo.
+ *
+ * The default path is treated more gently, because two ordinary situations
+ * produce a read failure there. It is absent on every developer machine, and
+ * under the runtime's own narrowed Deno flags it is not readable at all unless
+ * the flags include it. Neither may stop an agent starting. Absent is silent;
+ * unreadable calls `onUnreadable`, because a floor that exists and does not
+ * apply is exactly the kind of silence this whole feature is against.
  */
 export async function loadFloor(
   env: (key: string) => string | undefined = Deno.env.get,
+  onUnreadable?: (message: string) => void,
 ): Promise<{ floor: PermissionFloor; source: string } | undefined> {
   const explicit = env(FLOOR_ENV);
   const path = explicit ?? DEFAULT_FLOOR_PATH;
@@ -218,11 +225,26 @@ export async function loadFloor(
   try {
     text = await Deno.readTextFile(path);
   } catch (err) {
-    if (explicit === undefined && err instanceof Deno.errors.NotFound) return undefined;
-    throw new Error(
-      `cannot read the permission floor at ${path}: ${(err as Error).message}` +
-        (explicit !== undefined ? ` (${FLOOR_ENV} names it)` : ""),
+    // A named path that cannot be read is always an error: an operator who
+    // pointed at a policy should not get an unpoliced agent from a typo.
+    if (explicit !== undefined) {
+      throw new Error(
+        `cannot read the permission floor at ${path}: ${(err as Error).message} ` +
+          `(${FLOOR_ENV} names it)`,
+      );
+    }
+    // The default path is different. Nothing there is the normal case for a
+    // developer, and for anyone running under narrowed Deno flags the path is
+    // not even readable, which must not stop the agent starting.
+    if (err instanceof Deno.errors.NotFound) return undefined;
+    // Anything else means a file may exist that we cannot read, so the floor
+    // would apply to nobody without saying so. Name it rather than run on.
+    onUnreadable?.(
+      `a permission floor may exist at ${path} but it could not be read ` +
+        `(${(err as Error).message}); running without one. Set ${FLOOR_ENV} to a readable ` +
+        `path, or grant read access to ${path}.`,
     );
+    return undefined;
   }
   return { floor: parseFloor(text, path), source: path };
 }

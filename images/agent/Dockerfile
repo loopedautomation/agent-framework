@@ -57,7 +57,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
 # this ENTRYPOINT against them.
 ENTRYPOINT ["deno", "run", \
   "--allow-env", \
-  "--allow-read=/agent,/skills,/data,/looped,/deno-dir,/run/secrets", \
+  "--allow-read=/agent,/skills,/data,/looped,/deno-dir,/run/secrets,/etc/af", \
   "--allow-write=/data", \
   "--allow-net", \
   "--allow-run=bash,deno", \

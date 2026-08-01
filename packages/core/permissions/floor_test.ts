@@ -1,5 +1,6 @@
-import { assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import {
+  DEFAULT_FLOOR_PATH,
   describeViolation,
   FLOOR_ENV,
   floorViolations,
@@ -138,4 +139,45 @@ Deno.test("loadFloor is absent by default and loud when a named file is missing"
     Error,
     "cannot read the permission floor",
   );
+});
+
+Deno.test("an unreadable default path does not stop the agent, and says so", async () => {
+  // What the sandboxed image actually produces: the runtime's narrowed Deno
+  // flags make /etc/af/floor.yaml unreadable, so readTextFile throws
+  // PermissionDenied rather than NotFound. Treating only NotFound as "no
+  // floor" took the whole agent down at startup.
+  const warnings: string[] = [];
+  const denied = await loadFloor(() => undefined, (m) => warnings.push(m));
+  // With no env var set the real default path is missing on a dev machine,
+  // which is the silent case: absent means no floor and nothing to say.
+  assertEquals(denied, undefined);
+  assertEquals(warnings, []);
+});
+
+Deno.test("a floor that exists and cannot be read is never silent", async () => {
+  const dir = await Deno.makeTempDir();
+  const path = `${dir}/floor.yaml`;
+  await Deno.writeTextFile(path, "run: [gh]\n");
+  // Simulate the sandbox refusing the default path: the loader is handed an
+  // env lookup that produces no explicit path, and a reader that denies.
+  const realRead = Deno.readTextFile;
+  const warnings: string[] = [];
+  try {
+    // deno-lint-ignore no-explicit-any
+    (Deno as any).readTextFile = () => {
+      throw new Deno.errors.PermissionDenied(`Requires read access to "${DEFAULT_FLOOR_PATH}"`);
+    };
+    const loaded = await loadFloor(() => undefined, (m) => warnings.push(m));
+    // The agent still starts: a floor it cannot read must not be fatal.
+    assertEquals(loaded, undefined);
+    // But it is named, because a floor that applies to nobody is the exact
+    // silence this feature exists to remove.
+    assertEquals(warnings.length, 1);
+    assert(warnings[0].includes(DEFAULT_FLOOR_PATH));
+    assert(warnings[0].includes("could not be read"));
+  } finally {
+    // deno-lint-ignore no-explicit-any
+    (Deno as any).readTextFile = realRead;
+    await Deno.remove(dir, { recursive: true });
+  }
 });

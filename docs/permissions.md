@@ -129,4 +129,8 @@ An axis you leave out of the floor is unconstrained, so a floor naming only `run
 
 ### When there's no floor
 
-Neither file present means no floor and no change: a developer on their own machine sees the same behaviour as before. If `AF_PERMISSION_FLOOR` names a file that can't be read, startup fails instead - an operator who pointed at a policy shouldn't end up with an unpoliced agent because of a typo.
+Neither file present means no floor and no change: a developer on their own machine sees the same behaviour as before.
+
+The two failure cases are treated differently, because they mean different things. If `AF_PERMISSION_FLOOR` names a file that can't be read, startup fails - an operator who pointed at a policy shouldn't end up with an unpoliced agent because of a typo. If the *default* path can't be read for some reason other than being absent, the agent starts without a floor and prints a warning naming the path. Stopping an agent because of a file it was never told about would be wrong, and staying quiet about a policy that might exist and isn't applying would be worse.
+
+In the [base image](docker-run.md#what-the-base-image-gives-you), `/etc/af` is in the runtime's read paths, so a floor mounted there is readable under the sandbox flags the agent runs with.
