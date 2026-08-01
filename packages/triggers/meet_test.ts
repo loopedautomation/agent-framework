@@ -264,3 +264,64 @@ Deno.test("triggersFromConfig: builds a meet trigger, and names a missing token"
   }
   assert(message.includes("MEET_TOKEN"), message);
 });
+
+Deno.test("meet: a second end frame does not buy a second summary", async () => {
+  // A bridge can race itself into sending end twice. Two model calls for one
+  // meeting is the kind of duplicate that only shows up on the bill.
+  const { service, port } = await startService(
+    [{ content: "noted" }, { content: "the record" }, { content: "SECOND SUMMARY" }],
+    "Write the record.",
+  );
+  const url = `ws://127.0.0.1:${port()}/meet`;
+
+  const first = connect(url);
+  await first.opened;
+  first.send({ type: "join", meeting_id: "room-twice" });
+  await first.until((f) => f.type === "hello");
+  first.send({ type: "input", text: "hello" });
+  await first.until((f) => f.type === "result");
+  first.send({ type: "end" });
+  await first.until((f) => f.type === "summary");
+  const after = service.store.loadMessages(service.store.sessionFor("meet:room-twice")).length;
+
+  // A fresh connection replaying end on the same meeting adds nothing.
+  const second = connect(url);
+  await second.opened;
+  second.send({ type: "join", meeting_id: "room-twice" });
+  await second.until((f) => f.type === "hello");
+  second.send({ type: "end" });
+  await new Promise((r) => setTimeout(r, 80));
+
+  assertEquals(
+    service.store.loadMessages(service.store.sessionFor("meet:room-twice")).length,
+    after,
+  );
+  assert(!second.frames.some((f) => f.type === "summary"));
+  await service.stop();
+});
+
+Deno.test("meet: the summary survives a client that closes on end", async () => {
+  // The bridge fires end and goes. The summary frame lands on a closed socket
+  // and is dropped, which is fine: the transcript is the record, not the wire.
+  const { service, port } = await startService(
+    [{ content: "noted" }, { content: "what we agreed" }],
+    "Write the record.",
+  );
+  const c = connect(`ws://127.0.0.1:${port()}/meet`);
+  await c.opened;
+  c.send({ type: "join", meeting_id: "room-gone" });
+  await c.until((f) => f.type === "hello");
+  c.send({ type: "input", text: "hello" });
+  await c.until((f) => f.type === "result");
+
+  c.send({ type: "end" });
+  c.socket.close(); // the client does not wait
+  await new Promise((r) => setTimeout(r, 120));
+
+  const history = service.store.loadMessages(service.store.sessionFor("meet:room-gone"));
+  assert(
+    history.some((m) => m.content === "what we agreed"),
+    history.map((m) => m.content).join(" | "),
+  );
+  await service.stop();
+});

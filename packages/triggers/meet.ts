@@ -243,6 +243,13 @@ export class MeetTrigger implements Trigger {
       }
 
       if (frame.type === "end") {
+        // A bridge can race itself into sending this twice (a reconnect
+        // delivering an end that was already in flight). The second one must
+        // not spend a second summary call on a meeting that already has one.
+        if (this.#ended.has(meetingId!)) {
+          socket.close(1000, "meeting ended");
+          return;
+        }
         this.#ended.add(meetingId!);
         const prompt = this.#opts.summarizeOnEnd;
         // Without a configured prompt an ending costs nothing: not every
