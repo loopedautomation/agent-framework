@@ -231,11 +231,51 @@ function composeYaml(o: InitOptions, withBuild: boolean): string {
     "    read_only: true",
     "    tmpfs:",
     "      - /tmp",
+    ...egressLines(o, withBuild),
     "",
     "volumes:",
     `  ${o.handle}-data:`,
+    "",
+    "networks:",
+    // The agent sits on a network with no route off the host, so a subprocess
+    // that ignores the proxy env vars has nowhere to go. The proxy is the only
+    // service on both, which is what makes permissions.net true below the app.
+    `  ${o.handle}-internal:`,
+    "    internal: true",
+    `  ${o.handle}-egress:`,
   );
   return lines.join("\n") + "\n";
+}
+
+/**
+ * The egress proxy service, and the network split that makes it the only way
+ * out. Without this a `permissions.run` grant reaches the whole internet: the
+ * app-level engine never sees a subprocess's sockets, and the Deno sandbox
+ * hands such an agent a broad --allow-net by design.
+ */
+function egressLines(o: InitOptions, withBuild: boolean): string[] {
+  return [
+    "    networks:",
+    `      - ${o.handle}-internal`,
+    "    environment:",
+    "      # Everything outbound goes through the proxy: Deno's fetch honours",
+    "      # these, and so do gh, curl and git over HTTPS.",
+    `      HTTP_PROXY: http://${o.handle}-egress:3128`,
+    `      HTTPS_PROXY: http://${o.handle}-egress:3128`,
+    `      NO_PROXY: localhost,127.0.0.1,${o.handle}-egress`,
+    "",
+    `  ${o.handle}-egress:`,
+    withBuild ? `    image: ${o.handle.toLowerCase()}` : `    image: ${IMAGE}`,
+    '    command: ["egress", "/agent/agent.yaml"]',
+    "    volumes:",
+    "      - ./agent.yaml:/agent/agent.yaml:ro",
+    "    env_file: .env",
+    "    networks:",
+    `      - ${o.handle}-internal # the agent reaches it here`,
+    `      - ${o.handle}-egress   # and it reaches the internet here`,
+    "    restart: unless-stopped",
+    "    read_only: true",
+  ];
 }
 
 function readme(o: InitOptions): string {

@@ -1173,7 +1173,8 @@
         "max_image_bytes": 5000000,
         "max_images_per_message": 4,
         "max_cost": 5,
-        "max_runtime": 0
+        "max_runtime": 0,
+        "drain_timeout": 8
       },
       "type": "object",
       "properties": {
@@ -1215,6 +1216,12 @@
         "max_cost": {
           "default": 5,
           "description": "Most one run may spend on model calls, in USD. Checked before each call using what the run has already spent, so the cap is a ceiling on committed spend rather than a prediction. The run ends with error_max_cost. 0 disables the cap; there is a non-zero default because an unattended agent with no ceiling is one loop away from an unbounded bill.",
+          "type": "number",
+          "minimum": 0
+        },
+        "drain_timeout": {
+          "default": 8,
+          "description": "Seconds a drain waits for in-flight runs after SIGTERM before giving up and exiting. Keep it under the orchestrator's grace period (docker stop allows 10s by default) so the normal path finishes rather than being killed partway. 0 skips draining entirely.",
           "type": "number",
           "minimum": 0
         },

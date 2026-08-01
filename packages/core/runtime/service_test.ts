@@ -568,3 +568,51 @@ Deno.test("service: start reconciles runs a previous process left open", async (
   assertEquals(row.status, "error_crashed");
   assert(row.finished_at !== null);
 });
+
+Deno.test("service: a drain finishes the in-flight run and refuses new events", async () => {
+  const { service, provider } = await makeService();
+  const inFlight = service.handle(event("1", "long job", { conversationKey: "k" }));
+  await until(() => provider.calls.length === 1, "the run to start");
+
+  assertEquals(service.draining, false);
+  assertEquals(service.inFlight, 1);
+  const drained = service.drain(5);
+  assertEquals(service.draining, true);
+
+  // Anything arriving now is told the agent is going away, rather than being
+  // queued behind a shutdown it will not survive.
+  const late = await service.handle(event("2", "too late", { conversationKey: "other" }));
+  assertEquals(late.status, "rejected");
+  assert(late.reply.includes("shutting down"));
+  // The refusal is in the audit trail like any other.
+  assert(
+    service.store.recentAudit().some((a) =>
+      a.kind === "queue" && String(a.detail_json).includes("draining")
+    ),
+  );
+
+  // The run that was already going still completes normally.
+  provider.release("finished before the door closed");
+  assertEquals((await inFlight).reply, "finished before the door closed");
+  assertEquals(await drained, 0);
+});
+
+Deno.test("service: a drain gives up on a run that outlasts the timeout", async () => {
+  const { service, provider } = await makeService();
+  const stuck = service.handle(event("1", "never ends", { conversationKey: "k" }));
+  await until(() => provider.calls.length === 1, "the run to start");
+
+  // The row is open while the run is: that is what the next start reconciles
+  // (see "start reconciles runs a previous process left open").
+  const open = service.store.recentRuns()[0];
+  assertEquals(open.status, "running");
+  assertEquals(open.finished_at, null);
+
+  // The run never gets its completion, so the drain hits its deadline and
+  // stops anyway rather than holding the process past the grace period.
+  const remaining = await service.drain(0.05);
+  assertEquals(remaining, 1);
+
+  provider.release("too late"); // let the dangling promise settle
+  await stuck;
+});

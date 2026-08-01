@@ -12,7 +12,8 @@ import { createRunBashTool } from "../tools/bash.ts";
 import { createHttpRequestTool, type HttpCredential } from "../tools/http.ts";
 import { createReadFileTool, createWriteFileTool } from "../tools/files.ts";
 import { runAgent, type RunEvent, type RunResult } from "../loop/loop.ts";
-import { formatCost, priceFor } from "../providers/pricing.ts";
+import { formatCost } from "../providers/pricing.ts";
+import { inertDeclarations } from "../config/inert.ts";
 import { Store } from "../store/store.ts";
 import { type AgentIdentity, ensureIdentity, identityNote } from "./identity.ts";
 import { createSkillTool, loadSkills, type Skill, skillsPromptSection } from "../skills/skills.ts";
@@ -41,7 +42,7 @@ import {
   type ParsedCommand,
   substituteArgs,
 } from "./commands.ts";
-import { QueueFullError, RunScheduler } from "./scheduler.ts";
+import { DrainingError, QueueFullError, RunScheduler } from "./scheduler.ts";
 
 /** An event from the outside world, normalized by a trigger. */
 export interface AgentEvent {
@@ -450,6 +451,7 @@ export class AgentService {
       return await this.#scheduler.submit(lane, () => this.#run(event, opts), { queueDepth });
     } catch (err) {
       if (err instanceof QueueFullError) return this.#refuse(event, lane!, err);
+      if (err instanceof DrainingError) return this.#refuseDraining(event);
       throw err;
     }
   }
@@ -552,6 +554,69 @@ export class AgentService {
         detail: { trigger: "auto", error: `${err.kind}: ${err.message}` },
       });
     }
+  }
+
+  /**
+   * Whether the agent has stopped accepting work and is finishing what it
+   * holds. Exposed so the status surface, and anything routing to this agent,
+   * can see the state rather than infer it from failures.
+   */
+  get draining(): boolean {
+    return this.#scheduler.draining;
+  }
+
+  /** Runs in flight plus events accepted and waiting. */
+  get inFlight(): number {
+    return this.#scheduler.running + this.#scheduler.queued;
+  }
+
+  /**
+   * Stop accepting events, let the accepted ones finish, then stop.
+   *
+   * SIGTERM gives us a grace period that was previously spent doing nothing:
+   * the process exited and whatever was mid-run died with it. Draining spends
+   * that window finishing work instead. Past `limits.drain_timeout` the
+   * remaining runs are left to the crash-recovery sweep at next start, which
+   * records them rather than losing them.
+   *
+   * Returns how many runs were still in flight when it gave up, so a caller
+   * can say so. Zero means everything finished.
+   */
+  async drain(timeoutSeconds = this.config.limits.drain_timeout): Promise<number> {
+    if (timeoutSeconds <= 0) {
+      await this.stop();
+      return this.inFlight;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, timeoutSeconds * 1000);
+    });
+    await Promise.race([this.#scheduler.drain(), deadline]);
+    if (timer !== undefined) clearTimeout(timer);
+    const remaining = this.inFlight;
+    // Closing the store under a run that is still going turns a slow run into
+    // a crashed write: it would reach closeRun and find the database gone.
+    // When the deadline wins, everything else shuts down and the store is left
+    // to the process exit, so a run that does finish in the last moments still
+    // records itself. WAL makes an unclosed file safe to reopen.
+    await this.#stopExceptStore();
+    if (remaining === 0) this.store.close();
+    return remaining;
+  }
+
+  /** The draining refusal: this agent is going away, so say so rather than queueing. */
+  #refuseDraining(event: AgentEvent): RunResult {
+    this.store.recordAudit({
+      kind: "queue",
+      detail: { eventId: event.id, trigger: event.trigger, refused: "draining" },
+    });
+    return {
+      status: "rejected",
+      reply: "This agent is shutting down and is not taking new work. Try again shortly.",
+      steps: 0,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      messages: [],
+    };
   }
 
   /** The queue-full refusal: an immediate reply plus an audit row, no run. */
@@ -768,17 +833,11 @@ export class AgentService {
 
   /** Start every trigger, routing its events through {@linkcode AgentService.handle}. */
   async start(triggers: Trigger[]) {
-    // A budget that cannot be computed is a budget that silently does nothing,
-    // so say it at startup rather than letting the agent file imply a ceiling
-    // the runtime will never apply.
-    if (this.config.limits.max_cost > 0 && !this.config.model.pricing) {
-      if (!priceFor(this.config.model.id)) {
-        logInfo(
-          `limits.max_cost is set to ${formatCost(this.config.limits.max_cost)} but no price is ` +
-            `known for model "${this.config.model.id}", so the cap cannot be enforced and run ` +
-            `costs will not be recorded. Set model.pricing to fix this.`,
-        );
-      }
+    // Anything in the file the runtime will never act on. Saying so at startup
+    // is the whole point: an author who wrote one of these believes they
+    // configured something, and silence is what makes that belief stick.
+    for (const inert of inertDeclarations(this.config)) {
+      logInfo(`${inert.where}: ${inert.advice}`);
     }
 
     // Any run still open belongs to a previous process that died holding it.
@@ -820,9 +879,18 @@ export class AgentService {
 
   /** Stop triggers and schedules, close MCP connections, and close the store. */
   async stop() {
+    await this.#stopExceptStore();
+    this.store.close();
+  }
+
+  /**
+   * Everything {@linkcode AgentService.stop} does except closing the store.
+   * A timed-out drain needs this: the runs it gave up waiting for may still
+   * be holding the database.
+   */
+  async #stopExceptStore() {
     this.#scheduleRunner?.stop();
     for (const trigger of this.#triggers) await trigger.stop();
     await this.#mcp?.close();
-    this.store.close();
   }
 }

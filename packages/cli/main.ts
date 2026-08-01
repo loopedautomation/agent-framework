@@ -19,11 +19,13 @@
 import {
   agentConfigJsonSchema,
   ConfigError,
+  derivedHosts,
   expandConfigHosts,
   hermeticPlan,
   IMAGE_ENV,
   ProviderError,
   resolveAgentConfig,
+  startEgressProxy,
   VERSION,
 } from "@looped/core";
 import { discordInvite } from "./discord.ts";
@@ -58,6 +60,7 @@ function usage(): string {
     ["af validate [agent.yaml]", "Validate an agent definition"],
     ["af test [agent.yaml]", "Run the agent's test cases (real model, mocked tools)"],
     ["af flags [agent.yaml]", "Print the Deno sandbox flags this agent runs under"],
+    ["af egress [agent.yaml]", "Run the egress proxy that holds this agent's permissions.net"],
     ["af schema", "Print the agent.yaml JSON Schema"],
     ["af discord-invite [agent.yaml]", "Print the bot's OAuth invite URL (no bitfield math)"],
     ["af login [key]", "Store a Looped platform API key (from the dashboard)"],
@@ -134,6 +137,24 @@ async function main() {
           for (const blocker of plan.blockers) console.error(dim(`#   ${blocker}`));
         }
         console.log(plan.flags.join(" "));
+        break;
+      }
+      case "egress": {
+        // The compose file starts this in its own service. Run it here too, so
+        // the same enforcement is testable without docker.
+        const config = expandConfigHosts(
+          await resolveAgentConfig(arg ?? DEFAULT_CONFIG),
+          { lenient: true },
+        );
+        const hosts = derivedHosts(config, IMAGE_ENV);
+        const port = Number(Deno.env.get("AF_EGRESS_PORT") ?? "3128");
+        const proxy = startEgressProxy({ hosts, port });
+        console.error(
+          `egress proxy for ${config.handle} on :${proxy.port} — ` +
+            `${hosts.length} host${hosts.length === 1 ? "" : "s"} allowed`,
+        );
+        for (const host of hosts) console.error(`  ${host}`);
+        await proxy.done;
         break;
       }
       case "schema":

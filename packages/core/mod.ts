@@ -48,6 +48,7 @@ export {
   requiredEnvRefs,
   resolveAgentConfig,
 } from "./config/load.ts";
+export { type InertDeclaration, inertDeclarations, type InertKind } from "./config/inert.ts";
 export {
   envRefsIn,
   expandConfigHosts,
@@ -90,6 +91,16 @@ export {
   permissionsToDenoFlags,
 } from "./permissions/engine.ts";
 export {
+  DEFAULT_FLOOR_PATH,
+  describeViolation,
+  FLOOR_ENV,
+  type FloorViolation,
+  floorViolations,
+  loadFloor,
+  parseFloor,
+  type PermissionFloor,
+} from "./permissions/floor.ts";
+export {
   runGrantAdvisories,
   type RunGrantAdvisory,
   type RunGrantHazard,
@@ -114,6 +125,15 @@ export {
   RUNTIME_READ_PATHS,
   RUNTIME_WRITE_PATHS,
 } from "./permissions/hermetic.ts";
+export {
+  egressAllowed,
+  type EgressDecision,
+  type EgressEvent,
+  type EgressProxy,
+  type EgressProxyOptions,
+  refusalBody,
+  startEgressProxy,
+} from "./net/egress_proxy.ts";
 export { defineTool, type NativeTool, type ToolArgs, type ToolSchema } from "./tools/types.ts";
 export { currentTimeTool } from "./tools/time.ts";
 export { createRunBashTool, extractExecutables, type RunBashOptions } from "./tools/bash.ts";

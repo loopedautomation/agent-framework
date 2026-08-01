@@ -54,6 +54,11 @@ export function startStatusServer(
           model: `${service.config.model.provider}/${service.config.model.id}`,
           triggers: service.config.triggers?.map((t) => t.type) ?? [],
           uptime_s: Math.floor((Date.now() - startedAt) / 1000),
+          // A deployment watching this needs to tell "alive and working" from
+          // "alive and leaving"; both are ok: true, and only one should be
+          // sent more work.
+          draining: service.draining,
+          in_flight: service.inFlight,
         });
       case "/runs":
         if (!authorized(req, remoteHost)) {

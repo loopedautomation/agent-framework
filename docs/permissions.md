@@ -83,5 +83,102 @@ Enforcement is layered: the app-level engine described above runs inside a runti
 
 Two honest notes on where the layers actually sit:
 
-- If your agent spawns something, whether that's a `permissions.run` grant or a stdio MCP server, the Deno layer allows all *network* egress in the container (`--allow-net`). Per-host enforcement happens in the app-level permission engine, and the container's egress policy is layer 2; restrict it with your network setup where it matters. An agent that spawns nothing gets its `net:` list compiled straight into `--allow-net`, so the runtime enforces it for the whole process ([hermetic mode](permission-model.md#hermetic-mode)).
+- If your agent spawns something, whether that's a `permissions.run` grant or a stdio MCP server, the Deno layer allows all *network* egress in the container (`--allow-net`). Per-host enforcement happens in the app-level permission engine, and for a subprocess that engine never sees the socket. The [egress proxy](#the-egress-proxy) below closes that gap. An agent that spawns nothing gets its `net:` list compiled straight into `--allow-net`, so the runtime enforces it for the whole process ([hermetic mode](permission-model.md#hermetic-mode)).
 - `bash` subprocesses escape the Deno sandbox by design; the container boundary is what contains them. That is why there is no "run on the host" mode.
+
+## An operator's floor
+
+Everything above assumes the person who wrote the agent file and the person running it are the same. That holds while you're writing your own agents. It stops holding the moment files get shared, which is something we want: one file, plain words, a template someone can copy is most of the point. When you copy an `agent.yaml` from a repo or a gallery and run `docker compose up`, its `permissions:` block is a request you grant in full, and nothing on your side gets a say.
+
+A floor is the operator's side of that conversation. Put a file at `/etc/af/floor.yaml`, or point `AF_PERMISSION_FLOOR` at one:
+
+```yaml
+run: [gh, git, jq]
+net: ["api.github.com", "*.internal.example.com"]
+write: [/data]
+deny:
+  net: [metadata.google.internal]
+  read: [/run/secrets]
+```
+
+An agent file that asks for anything outside this doesn't start. The error names every grant that was refused and the floor entry that refused it, so you fix it in one pass:
+
+```
+agent.yaml asks for more than this host allows:
+  - permissions.run asks for "curl", which is not covered by /etc/af/floor.yaml's run list
+  - permissions.net asks for "*.google.internal", which /etc/af/floor.yaml denies (deny.net: "metadata.google.internal")
+```
+
+### The floor only refuses
+
+Nothing in a floor grants an agent anything. It has no way to add a host or an executable that the agent file didn't already ask for, so reading the agent file still tells you the agent's maximum blast radius. That property is what the rest of this page is built on, and a floor that could widen would break it.
+
+It also means a refused file fails to start rather than running with less than it declares. Quietly trimming grants would leave you with a file that no longer describes the agent, which is worse than an error at boot.
+
+### How entries match
+
+Each axis matches the same way the permission engine does, one level up: the floor's entry has to be at least as wide as what the file asks for.
+
+- **`run`** is exact basenames. A floor of `[gh]` covers a file asking for `gh` and refuses `curl`. Only a floor of `*` covers a file asking for `*`.
+- **`net`** follows the wildcard rule from [Deny by default](#deny-by-default). A floor of `*.example.com` covers `api.example.com` and `*.eu.example.com`, and refuses `example.com` (the apex isn't a subdomain) and `*.github.com`.
+- **`read` and `write`** are path prefixes. A floor of `/data` covers `/data/runs` and refuses `/` and `/database`.
+
+An axis you leave out of the floor is unconstrained, so a floor naming only `run` says nothing about network access.
+
+`deny` works the other way round: it refuses a grant that *overlaps* the denied entry in either direction. Denying `metadata.google.internal` refuses a file asking for that host, and also refuses one asking for `*.google.internal`, because that grant could reach it. Use `deny` when you want to forbid a few specific things without enumerating everything you'd permit.
+
+### When there's no floor
+
+Neither file present means no floor and no change: a developer on their own machine sees the same behaviour as before.
+
+The two failure cases are treated differently, because they mean different things. If `AF_PERMISSION_FLOOR` names a file that can't be read, startup fails - an operator who pointed at a policy shouldn't end up with an unpoliced agent because of a typo. If the *default* path can't be read for some reason other than being absent, the agent starts without a floor and prints a warning naming the path. Stopping an agent because of a file it was never told about would be wrong, and staying quiet about a policy that might exist and isn't applying would be worse.
+
+In the [base image](docker-run.md#what-the-base-image-gives-you), `/etc/af` is in the runtime's read paths, so a floor mounted there is readable under the sandbox flags the agent runs with.
+
+## The egress proxy
+
+`http_request` goes through the permission engine, so `permissions.net` holds. A subprocess does not: `gh`, `curl`, a stdio MCP server, anything a `permissions.run` grant spawns opens its own sockets, and nothing in the app can see them. The Deno sandbox can't help either, because an agent that spawns anything gets a broad `--allow-net` by design. That leaves the container, and a container with a default route reaches the whole internet.
+
+So the allowlist moves somewhere a subprocess can't walk around. `af init` generates two networks:
+
+```yaml
+networks:
+  my-bot-internal:
+    internal: true    # no route off the host
+  my-bot-egress:
+```
+
+The agent sits on the internal one. The proxy service sits on both, and holds the same host list `permissions.net` compiles to - your entries, plus the model endpoint, your triggers' hosts and any HTTP MCP servers. It's the only way out.
+
+The agent also gets the proxy in its environment:
+
+```yaml
+HTTP_PROXY: http://my-bot-egress:3128
+HTTPS_PROXY: http://my-bot-egress:3128
+NO_PROXY: localhost,127.0.0.1,my-bot-egress
+```
+
+Deno's `fetch` honours those, and so do `gh`, `curl` and `git` over HTTPS. The env vars are the polite path; the network split is what actually holds. A binary that ignores proxy variables doesn't get out either - it has nowhere to send packets.
+
+When the proxy refuses a host, the client gets a 403 whose body names the host and the line to add:
+
+```
+egress denied: "api.stripe.com" is not in this agent's permissions.net allowlist.
+Add it to agent.yaml if the agent should reach it:
+
+permissions:
+  net: ["api.stripe.com"]
+```
+
+and the refusal is on the proxy's stdout, so `docker logs my-bot-egress` shows what was turned away.
+
+### What it doesn't cover
+
+- **TLS is not terminated.** A hostname allowlist only needs the CONNECT line, and terminating would hand the proxy every credential the agent sends. The consequence is that the check is per-host: a permitted host can be reached at any path.
+- **SSH is not HTTP.** `run: [git]` over `git@github.com` won't traverse a CONNECT proxy at all, so it fails outright on the internal network. Use HTTPS remotes, or give that agent its own network setup.
+- **DNS still resolves.** The proxy checks the name in the request, so a permitted hostname pointing somewhere new resolves wherever it points.
+- **The refusal isn't in the agent's audit trail.** It's in the proxy's logs, which is a different container. Getting it into the agent's own audit table needs a channel between the two that doesn't exist yet.
+
+### Running it yourself
+
+`af egress agent.yaml` runs the proxy for an agent file, printing the hosts it will allow. `AF_EGRESS_PORT` picks the port; it defaults to 3128. That's the same command the compose file runs, so what you test locally is what the deployment enforces.

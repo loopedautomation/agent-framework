@@ -4,6 +4,15 @@
 // through, so no trigger carries its own concurrency behaviour.
 
 /** Thrown by {@linkcode RunScheduler.submit} when a lane already holds its limit. */
+/** Thrown by {@linkcode RunScheduler.submit} once a drain has started. */
+export class DrainingError extends Error {
+  /** Create a DrainingError. */
+  constructor() {
+    super("the agent is draining and is not accepting new work");
+    this.name = "DrainingError";
+  }
+}
+
 export class QueueFullError extends Error {
   /** Events the lane held at rejection time: the running one plus everything waiting. */
   readonly held: number;
@@ -47,6 +56,8 @@ export class RunScheduler {
   #queued = 0;
   #waiters: Array<() => void> = [];
   #lanes = new Map<string, Lane>();
+  #draining = false;
+  #idleWaiters: Array<() => void> = [];
 
   /** Create a scheduler with the given cap and default lane depth. */
   constructor(opts: RunSchedulerOptions) {
@@ -64,6 +75,35 @@ export class RunScheduler {
     return this.#queued;
   }
 
+  /** Whether the scheduler has stopped accepting work. */
+  get draining(): boolean {
+    return this.#draining;
+  }
+
+  /**
+   * Stop accepting work and resolve once everything already accepted has
+   * finished. Further {@linkcode RunScheduler.submit} calls throw
+   * {@linkcode DrainingError}, so a caller can turn them into a refusal the
+   * sender actually sees.
+   *
+   * Draining is a state rather than a slower stop: what is queued still runs,
+   * because it was accepted, and a caller that wants a deadline imposes one on
+   * the returned promise.
+   */
+  drain(): Promise<void> {
+    this.#draining = true;
+    if (this.#running === 0 && this.#queued === 0) return Promise.resolve();
+    return new Promise<void>((resolve) => this.#idleWaiters.push(resolve));
+  }
+
+  /** Resolve the drain when the last accepted task settles. */
+  #checkIdle() {
+    if (!this.#draining || this.#running > 0 || this.#queued > 0) return;
+    const waiters = this.#idleWaiters;
+    this.#idleWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
+
   /**
    * Submit work. With a lane, the task runs after every earlier task on that
    * lane, in arrival order; without one, it runs as soon as a slot frees up.
@@ -76,6 +116,7 @@ export class RunScheduler {
     task: () => Promise<T>,
     opts?: { queueDepth?: number },
   ): Promise<T> {
+    if (this.#draining) throw new DrainingError();
     if (lane === undefined) {
       this.#queued++;
       return this.#withSlot(task);
@@ -102,6 +143,7 @@ export class RunScheduler {
       return await task();
     } finally {
       this.#release();
+      this.#checkIdle();
     }
   }
 

@@ -104,3 +104,30 @@ Deno.test("compose-inline: one file, embedded config is schema-valid", () => {
   assertEquals(config.handle, "test-agent");
   assertEquals(config.triggers?.[0].type, "webhook");
 });
+
+Deno.test("init: the generated compose gives the agent no way out except the proxy", () => {
+  const files = generateProject({
+    ...BASE,
+    handle: "egress-bot",
+    provider: "anthropic",
+    trigger: "cron",
+    deploy: "compose",
+  });
+  const compose = files["docker-compose.yml"] ?? files["compose.yaml"];
+  assert(compose !== undefined, `no compose file in ${Object.keys(files).join(", ")}`);
+
+  // The agent is on the internal network only. That network has no route off
+  // the host, so a subprocess ignoring HTTP_PROXY has nowhere to send packets.
+  assert(compose.includes("egress-bot-internal:"));
+  assert(compose.includes("    internal: true"));
+
+  // The proxy is the one service on both networks.
+  assert(compose.includes("  egress-bot-egress:"));
+  assert(compose.includes('command: ["egress", "/agent/agent.yaml"]'));
+
+  // And the polite path points at it, for everything that does honour it.
+  assert(compose.includes("HTTP_PROXY: http://egress-bot-egress:3128"));
+  assert(compose.includes("HTTPS_PROXY: http://egress-bot-egress:3128"));
+  // The proxy itself must stay reachable without recursing through itself.
+  assert(compose.includes("NO_PROXY: localhost,127.0.0.1,egress-bot-egress"));
+});

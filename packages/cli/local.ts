@@ -7,6 +7,7 @@ import {
   expandConfigHosts,
   hermeticPlan,
   IMAGE_ENV,
+  inertDeclarations,
   requiredEnvRefs,
   resolveAgentConfig,
   runGrantAdvisories,
@@ -44,6 +45,9 @@ export async function validate(path: string) {
   }
   for (const advisory of runGrantAdvisories(config.permissions?.run)) {
     console.log(`  ${warn("⚠")} ${advisory.advice}`);
+  }
+  for (const inert of inertDeclarations(config)) {
+    console.log(`  ${warn("⚠")} ${inert.advice}`);
   }
   const refs = requiredEnvRefs(config);
   if (refs.length) {
@@ -115,9 +119,24 @@ async function serve(config: AgentConfig, service: AgentService, name: string) {
     Deno.addSignalListener("SIGINT", () => resolve());
     Deno.addSignalListener("SIGTERM", () => resolve());
   });
-  console.log("\nshutting down...");
+  // The grace period after SIGTERM used to be spent exiting. Spend it
+  // finishing instead: stop accepting events, let the accepted ones run, and
+  // keep the status surface up so a deployment can watch the drain.
+  const inFlight = service.inFlight;
+  console.log(
+    inFlight > 0
+      ? `\ndraining ${inFlight} run${inFlight === 1 ? "" : "s"} ` +
+        `(up to ${config.limits.drain_timeout}s)...`
+      : "\nshutting down...",
+  );
+  const remaining = await service.drain();
+  if (remaining > 0) {
+    console.log(
+      `${remaining} run${remaining === 1 ? "" : "s"} did not finish in time; ` +
+        `they are recorded and will be marked crashed at next start`,
+    );
+  }
   await status.shutdown();
-  await service.stop();
 }
 
 /**
@@ -179,6 +198,9 @@ export async function runLocal(path: string) {
 
   for (const advisory of runGrantAdvisories(config.permissions?.run)) {
     console.log(`${warn("⚠")} ${advisory.advice}`);
+  }
+  for (const inert of inertDeclarations(config)) {
+    console.log(`${warn("⚠")} ${inert.advice}`);
   }
 
   const baseDir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ".";
