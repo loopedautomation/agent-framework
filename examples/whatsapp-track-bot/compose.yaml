@@ -1,0 +1,32 @@
+# The whole deployment story: docker compose up -d
+#
+# Unlike the other examples, this one is not useful on a laptop: the Cloud
+# API is webhook-only, so Meta has to be able to reach port 8080 over HTTPS.
+# Put it behind whatever terminates TLS for you.
+#
+# .env next to this file:
+#   OPENAI_API_KEY, LOOPED_API_KEY,
+#   WHATSAPP_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN
+services:
+  whatsapp-track-bot:
+    image: ghcr.io/loopedautomation/agent:latest
+    env_file: .env
+    volumes:
+      - ./agent.yaml:/agent/agent.yaml:ro
+      # Conversation history lives here, and so does the wamid dedup table.
+      # Lose the volume mid-retry and a webhook Meta is still retrying can
+      # run a second time — which for a capture bot means a duplicate todo.
+      - whatsapp-track-bot-data:/data
+    ports:
+      # The WhatsApp callback URL points here.
+      - "8080:8080"
+      # Status surface: curl localhost:9099/healthz
+      # 9099 on the host so this can run next to the other examples.
+      - "127.0.0.1:9099:9090"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  whatsapp-track-bot-data:

@@ -487,4 +487,79 @@ export class Store {
     const result = this.#db.prepare("DELETE FROM memories WHERE key = ?").run(key);
     return result.changes > 0;
   }
+
+  /**
+   * Claim a delivery id for a channel, for surfaces where the platform
+   * delivers at-least-once. Returns true the first time an id is seen and
+   * false for every repeat, so the caller can drop a retried webhook before
+   * it becomes a second billed run. The insert is the claim: two concurrent
+   * deliveries of the same id race on the primary key, and exactly one wins.
+   */
+  claimEvent(channel: string, eventId: string): boolean {
+    const result = this.#db
+      .prepare("INSERT OR IGNORE INTO seen_events (channel, event_id) VALUES (?, ?)")
+      .run(channel, eventId);
+    return result.changes > 0;
+  }
+
+  /**
+   * Give a claim back, so the next copy of the same delivery is handled
+   * instead of dropped. This is what a channel calls when the run behind a
+   * claimed event failed: platforms that deliver at-least-once will send it
+   * again, and a claim left behind turns one failure into permanent silence.
+   */
+  releaseEvent(channel: string, eventId: string): boolean {
+    const result = this.#db
+      .prepare("DELETE FROM seen_events WHERE channel = ? AND event_id = ?")
+      .run(channel, eventId);
+    return result.changes > 0;
+  }
+
+  /**
+   * Drop claimed ids older than the platform's retry window; anything the
+   * platform will never send again is not worth remembering.
+   */
+  pruneEvents(channel: string, olderThanDays: number): number {
+    const result = this.#db
+      .prepare(
+        `DELETE FROM seen_events WHERE channel = ?
+           AND seen_at < datetime('now', ?)`,
+      )
+      .run(channel, `-${olderThanDays} days`);
+    return Number(result.changes);
+  }
+
+  /** Read a channel's durable per-key state (e.g. a WhatsApp service window). */
+  getChannelState(channel: string, key: string): string | undefined {
+    const row = this.#db
+      .prepare("SELECT value FROM channel_state WHERE channel = ? AND key = ?")
+      .get(channel, key) as { value: string } | undefined;
+    return row?.value;
+  }
+
+  /**
+   * Drop channel state untouched for longer than it can still mean anything.
+   * These rows are keyed by whoever the channel was talking to, so on a public
+   * endpoint the table otherwise grows by one row per stranger, forever.
+   */
+  pruneChannelState(channel: string, olderThanDays: number): number {
+    const result = this.#db
+      .prepare(
+        `DELETE FROM channel_state WHERE channel = ?
+           AND updated_at < datetime('now', ?)`,
+      )
+      .run(channel, `-${olderThanDays} days`);
+    return Number(result.changes);
+  }
+
+  /** Write a channel's durable per-key state, overwriting any previous value. */
+  setChannelState(channel: string, key: string, value: string) {
+    this.#db
+      .prepare(
+        `INSERT INTO channel_state (channel, key, value) VALUES (?, ?, ?)
+         ON CONFLICT(channel, key) DO UPDATE
+           SET value = excluded.value, updated_at = datetime('now')`,
+      )
+      .run(channel, key, value);
+  }
 }

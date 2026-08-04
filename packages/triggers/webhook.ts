@@ -1,4 +1,4 @@
-import { logInfo } from "@looped/core";
+import { logInfo, timingSafeEqual } from "@looped/core";
 import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 
 /** Options for {@linkcode WebhookTrigger}. */
@@ -11,17 +11,6 @@ export interface WebhookTriggerOptions {
   token: string;
   /** Injectable for tests: 0 picks an ephemeral port. */
   onListen?: (addr: { port: number }) => void;
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const ab = enc.encode(a);
-  const bb = enc.encode(b);
-  let diff = ab.length ^ bb.length;
-  for (let i = 0; i < Math.max(ab.length, bb.length); i++) {
-    diff |= (ab[i % ab.length] ?? 0) ^ (bb[i % bb.length] ?? 0);
-  }
-  return diff === 0;
 }
 
 /**

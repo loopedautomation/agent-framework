@@ -1,6 +1,6 @@
-import { logInfo } from "@looped/core";
+import { logInfo, timingSafeEqual } from "@looped/core";
 import type { AgentEvent, HandleOptions, ImageContent, RunResult, Trigger } from "@looped/core";
-import { MAX_IMAGES, timingSafeEqual, validImages } from "./ws_session.ts";
+import { MAX_IMAGES, validImages } from "./ws_session.ts";
 
 /**
  * A meeting, over the same WebSocket transport as {@linkcode TtyTrigger} and

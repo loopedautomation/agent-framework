@@ -154,6 +154,55 @@ const TelegramTriggerSchema = z.strictObject({
     "registered webhook (inbound HTTP, scale-to-zero friendly); replies go in-chat by default.",
 );
 
+const WhatsAppTriggerSchema = z.strictObject({
+  type: z.literal("whatsapp"),
+  phone_number_id: z.string().min(1).describe(
+    "The sending number's id from the WhatsApp Manager (a number, not the phone number itself).",
+  ),
+  token_env: z.string().min(1).default("WHATSAPP_TOKEN").describe(
+    "Env var holding the system user access token with whatsapp_business_messaging.",
+  ),
+  app_secret_env: z.string().min(1).default("WHATSAPP_APP_SECRET").describe(
+    "Env var holding the Meta app secret. Every delivery's X-Hub-Signature-256 is verified over the raw body before parsing; unsigned POSTs get a 401.",
+  ),
+  verify_token_env: z.string().min(1).default("WHATSAPP_VERIFY_TOKEN").describe(
+    "Env var holding the handshake token you mint and paste into the webhook setup. Unlike a per-boot secret it must survive restarts: Meta re-verifies whenever the subscription changes.",
+  ),
+  public_url: z.url().describe(
+    "The externally reachable HTTPS base you register as the callback URL (e.g. https://my-agent.fly.dev). Required: the Cloud API is webhook-only, there is no polling transport.",
+  ),
+  port: z.number().int().min(1).max(65535).default(8080).describe("Port to listen on."),
+  path: z.string().startsWith("/").default("/whatsapp").describe(
+    "HTTP path Meta POSTs deliveries to (and GETs to verify).",
+  ),
+  from_numbers: z.array(z.string().min(1)).optional().describe(
+    "Only handle messages from these phone numbers (any format; compared digits-only); the filter runs before the model is called. Omit for anyone who messages the business.",
+  ),
+  allow_silence: z.boolean().default(false).describe(
+    "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+  ),
+  graph_version: z.string().regex(/^v\d+\.\d+$/).default("v26.0").describe(
+    "Graph API version, pinned deliberately. A channel that follows the latest version breaks at Meta's convenience, not yours.",
+  ),
+  api_base: z.url().optional().describe(
+    "Graph host override, e.g. a 360dialog pass-through. Defaults to https://graph.facebook.com.",
+  ),
+  out_of_window_template: z.string().min(1).optional().describe(
+    "Name of an approved template to fall back on when a scheduled send lands outside the 24-hour service window. It must take exactly one body parameter, which receives the message text with its whitespace collapsed. Without it, out-of-window sends are refused loudly rather than dropped.",
+  ),
+  out_of_window_template_language: z.string().min(2).default("en_US").describe(
+    "Language code the fallback template is approved in.",
+  ),
+  mark_read: z.boolean().default(false).describe(
+    "Mark inbound messages read and show the typing bubble while the run works. Off by default: a read receipt is a commitment made on the business's behalf.",
+  ),
+}).describe(
+  "Listen to WhatsApp Cloud API messages on your own WhatsApp Business Account. Webhook-only " +
+    "(needs a public HTTPS URL) and subject to Meta's Business Solution Terms: this connects a " +
+    "business's own assistant to its own number, it is not a way to put a general assistant on " +
+    "WhatsApp. Read docs/whatsapp.mdx before configuring.",
+);
+
 const WebhookTriggerSchema = z.strictObject({
   type: z.literal("webhook"),
   path: z.string().startsWith("/").default("/").describe("HTTP path to serve."),
@@ -347,6 +396,7 @@ const TriggerSchema = z.discriminatedUnion("type", [
   DiscordTriggerSchema,
   SlackTriggerSchema,
   TelegramTriggerSchema,
+  WhatsAppTriggerSchema,
   WebhookTriggerSchema,
   TtyTriggerSchema,
   MeetTriggerSchema,
@@ -707,6 +757,27 @@ const agentConfigSchema = z.strictObject({
         message: "voice_channels requires the top-level voice.live block",
       });
     }
+    if (t.type === "whatsapp" && t.api_base && !t.api_base.startsWith("https://")) {
+      // Every Graph call carries the access token in a header, so a plaintext
+      // base would put a long-lived system user token on the wire. The
+      // hermetic allowlist is derived from this value too, so a bad base
+      // authorises itself.
+      ctx.addIssue({
+        code: "custom",
+        path: ["triggers", i, "api_base"],
+        message: "api_base must be https:// — the access token rides every Graph call",
+      });
+    }
+    if (t.type === "whatsapp" && !t.public_url.startsWith("https://")) {
+      // Meta only delivers webhooks over HTTPS, and the Cloud API has no
+      // polling transport to fall back to — an http:// callback is a channel
+      // that never receives anything.
+      ctx.addIssue({
+        code: "custom",
+        path: ["triggers", i, "public_url"],
+        message: "public_url must be https:// — Meta only delivers webhooks over HTTPS",
+      });
+    }
     if (t.type === "telegram") {
       // setWebhook needs somewhere to deliver to, and Telegram only accepts
       // HTTPS; a polling trigger with a public_url would silently never use it.
@@ -845,6 +916,44 @@ export interface TelegramTriggerConfig {
   path: string;
   /** webhook transport: the externally reachable HTTPS base registered via setWebhook. */
   public_url?: string;
+}
+
+/**
+ * A WhatsApp trigger: listen on your own WhatsApp Business Account via the
+ * Cloud API webhook. Read docs/whatsapp.mdx first — Meta's Business Solution
+ * Terms decide whether an agent belongs on the platform at all.
+ */
+export interface WhatsAppTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "whatsapp";
+  /** The sending number's id from the WhatsApp Manager. */
+  phone_number_id: string;
+  /** Env var holding the system user access token. */
+  token_env: string;
+  /** Env var holding the Meta app secret; every delivery's signature is verified. */
+  app_secret_env: string;
+  /** Env var holding the handshake token Meta echoes back on verification. */
+  verify_token_env: string;
+  /** The externally reachable HTTPS base registered as the callback URL. */
+  public_url: string;
+  /** Port to listen on. */
+  port: number;
+  /** HTTP path Meta POSTs deliveries to. */
+  path: string;
+  /** Only handle messages from these phone numbers; compared digits-only. */
+  from_numbers?: string[];
+  /** Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). */
+  allow_silence: boolean;
+  /** Graph API version, pinned deliberately. */
+  graph_version: string;
+  /** Graph host override, e.g. a 360dialog pass-through. */
+  api_base?: string;
+  /** Approved template to fall back on for sends outside the 24-hour window. */
+  out_of_window_template?: string;
+  /** Language code the fallback template is approved in. */
+  out_of_window_template_language: string;
+  /** Mark inbound messages read and show the typing bubble while the run works. */
+  mark_read: boolean;
 }
 
 /** A webhook trigger: POST {path} with a bearer token and JSON body {input, conversation_id?}. */
@@ -1020,6 +1129,7 @@ export type TriggerConfig =
   | DiscordTriggerConfig
   | SlackTriggerConfig
   | TelegramTriggerConfig
+  | WhatsAppTriggerConfig
   | WebhookTriggerConfig
   | TtyTriggerConfig
   | MeetTriggerConfig

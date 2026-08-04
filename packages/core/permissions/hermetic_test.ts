@@ -138,6 +138,107 @@ Deno.test("hermetic/triggers contribute the hosts they reach and the ports they 
   assert(hosts.includes("0.0.0.0:9090")); // the status server
 });
 
+Deno.test("hermetic/a meet trigger gets listen rights like tty", () => {
+  // meet listens on its own port, and without a derivation here a hermetic
+  // agent that declares one fails at startup rather than at config time.
+  const hosts = derivedHosts(
+    agent({
+      triggers: [
+        { type: "meet", path: "/meet", port: 8091, token_env: "MEET_TOKEN" },
+      ] as AgentConfig["triggers"],
+    }),
+    env,
+  );
+  assert(hosts.includes("0.0.0.0:8091"));
+});
+
+Deno.test("hermetic/whatsapp reaches Graph, the media hosts, and its own listener", () => {
+  const hosts = derivedHosts(
+    agent({
+      triggers: [
+        {
+          type: "whatsapp",
+          phone_number_id: "123456789012345",
+          token_env: "WHATSAPP_TOKEN",
+          app_secret_env: "WHATSAPP_APP_SECRET",
+          verify_token_env: "WHATSAPP_VERIFY_TOKEN",
+          public_url: "https://agent.example.com",
+          port: 8080,
+          path: "/whatsapp",
+          allow_silence: false,
+          graph_version: "v26.0",
+          out_of_window_template_language: "en_US",
+          mark_read: false,
+        },
+      ] as AgentConfig["triggers"],
+    }),
+    env,
+  );
+  assert(hosts.includes("graph.facebook.com"));
+  // Media bytes come from somewhere else entirely; without these an inbound
+  // image fails at connect time, not at config time.
+  assert(hosts.includes("lookaside.fbsbx.com"));
+  assert(hosts.includes("mmg.whatsapp.net"));
+  // The Cloud API is webhook-only, so the listener is never optional.
+  assert(hosts.includes("0.0.0.0:8080"));
+});
+
+Deno.test("hermetic/an aggregator's api_base replaces Graph", () => {
+  const hosts = derivedHosts(
+    agent({
+      triggers: [
+        {
+          type: "whatsapp",
+          phone_number_id: "1",
+          token_env: "WHATSAPP_TOKEN",
+          app_secret_env: "WHATSAPP_APP_SECRET",
+          verify_token_env: "WHATSAPP_VERIFY_TOKEN",
+          public_url: "https://agent.example.com",
+          api_base: "https://waba-v2.360dialog.io",
+          port: 8080,
+          path: "/whatsapp",
+          allow_silence: false,
+          graph_version: "v26.0",
+          out_of_window_template_language: "en_US",
+          mark_read: false,
+        },
+      ] as AgentConfig["triggers"],
+    }),
+    env,
+  );
+  assert(hosts.includes("waba-v2.360dialog.io"));
+  assert(!hosts.includes("graph.facebook.com"));
+});
+
+Deno.test("hermetic/the telegram webhook transport listens; polling does not", () => {
+  const webhook = derivedHosts(
+    agent({
+      triggers: [
+        {
+          type: "telegram",
+          token_env: "TELEGRAM_BOT_TOKEN",
+          allow_silence: false,
+          transport: "webhook",
+          port: 8081,
+          path: "/telegram",
+          public_url: "https://agent.example.com",
+        },
+      ] as AgentConfig["triggers"],
+    }),
+    env,
+  );
+  assert(webhook.includes("0.0.0.0:8081"));
+  const polling = derivedHosts(
+    agent({
+      triggers: [
+        { type: "telegram", token_env: "TELEGRAM_BOT_TOKEN", allow_silence: false },
+      ] as AgentConfig["triggers"],
+    }),
+    env,
+  );
+  assert(!polling.includes("0.0.0.0:8081"));
+});
+
 Deno.test("hermetic/voice engines contribute their hosts", () => {
   const hosts = derivedHosts(
     agent({

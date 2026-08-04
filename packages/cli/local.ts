@@ -108,7 +108,7 @@ async function repl(config: AgentConfig, service: AgentService, name: string) {
 }
 
 async function serve(config: AgentConfig, service: AgentService, name: string) {
-  const triggers = triggersFromConfig(config, undefined, name);
+  const triggers = triggersFromConfig(config, undefined, name, service.store);
   await service.start(triggers);
   const status = startStatusServer(service);
   console.log(

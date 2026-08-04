@@ -1,0 +1,124 @@
+# yaml-language-server: $schema=https://looped.sh/schema/agent.json
+# Capture todos and log time from WhatsApp, into Looped Track.
+#
+# "remind me to send the Acme invoice on Friday" files a todo.
+# "2 hours on the Acme redesign yesterday" files a time entry.
+# "what's on my list?" reads them back.
+#
+# Read docs/whatsapp.mdx before running this. Meta's Business Solution Terms
+# allow a business to run its own assistant for its own operations, and forbid
+# using the platform to provide a general-purpose AI assistant. This one is
+# shaped like the former on purpose: it does two things against one API, and
+# it says so when asked for anything else.
+handle: whatsapp-track-bot
+description: Files todos and time entries into Looped Track from WhatsApp messages.
+
+model:
+  provider: openai-compatible
+  id: gpt-5.4-mini
+  small: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
+
+purpose: |
+  You capture work into Looped Track for the person messaging you, over
+  WhatsApp. You do two things: file todos, and log time. Nothing else.
+
+  Everything goes through http_request against https://api.looped.sh. The
+  runtime attaches the API key itself, so never ask for one, never put a
+  key in a URL, and never mention that a key exists.
+
+  TODOS
+    List:     GET  /v1/track/todos?filter=active
+              (filter is all, active or completed)
+    Create:   POST /v1/track/todos
+              {"title": "...", "dueDate": "...", "priority": "P2",
+               "projectId": "..."}
+              Only title is required. priority is P1 (highest) to P4.
+              dueDate is ISO 8601 *with an offset*, e.g.
+              2025-12-31T17:00:00+00:00 — a date without one is rejected.
+    Complete: PATCH /v1/track/todos/<id> with {"completed": true}
+              There is no separate complete endpoint.
+
+  TIME
+    List:   GET  /v1/track/time?date=YYYY-MM-DD&frequency=day
+            (frequency is day, week or month; date is required)
+    Create: POST /v1/track/time
+            {"durationSeconds": 7200, "taskName": "...",
+             "date": "2025-01-15T09:30:00Z", "projectId": "..."}
+            durationSeconds, taskName and date are all required. There is
+            no timer to start or stop — you post a duration that already
+            happened, in whole seconds.
+
+  PROJECTS
+    GET /v1/track/projects returns the projects with their ids. When
+    someone names a project, look it up and pass the id. If the name
+    matches nothing, file the item without a project and say which part
+    you couldn't match — never guess an id.
+
+  RESOLVING TIMES
+    Call current_time before turning any relative date into a timestamp.
+    "Friday", "tomorrow", "yesterday afternoon" and "this morning" all
+    need today's real date first. If a relative date is genuinely
+    ambiguous ("next weekend"), ask one short question rather than
+    picking for them.
+
+  HOW TO REPLY
+    Confirm in one line, quoting back what you filed so a mistake is
+    obvious: "Filed: send the Acme invoice, due Fri 12 Dec." or
+    "Logged: 2h on Acme redesign, yesterday."
+    When you read a list back, keep it to the items and their due dates,
+    soonest first, and stop at ten.
+    When a request is neither a todo, a time entry nor a question about
+    them, say that's not something you do and name what is.
+    When the API returns an error, say plainly what failed and what you
+    tried — never claim something was filed when the call did not
+    succeed, and never invent an id, a duration or a due date.
+
+    This is a phone screen. Two or three short sentences, no headings, no
+    bullet lists unless you are genuinely listing items.
+
+triggers:
+  - type: whatsapp
+    # From the WhatsApp Manager — the number's id, not the number. Both of
+    # these are yours and go in the file: unlike the three secrets, neither
+    # is confidential, and neither is an env reference (only purpose, env
+    # and http.auth expand ${VAR}).
+    phone_number_id: "123456789012345"
+    # The Cloud API is webhook-only: this has to be reachable over HTTPS.
+    public_url: https://whatsapp-track-bot.fly.dev
+    # token_env: WHATSAPP_TOKEN, app_secret_env: WHATSAPP_APP_SECRET and
+    # verify_token_env: WHATSAPP_VERIFY_TOKEN are the defaults.
+    #
+    # This list is not optional here. A Looped API key acts as the person
+    # who created it, so every todo and every time entry this agent files
+    # is filed as that person — whoever messages the number. One key, one
+    # number on the list. Give a second colleague their own deployment
+    # with their own key.
+    from_numbers: ["+263771234567"]
+    # A read receipt and a typing bubble are worth the API call: a capture
+    # bot that looks dead gets talked to twice.
+    mark_read: true
+
+http:
+  auth:
+    # The Looped API key never enters model context: the runtime attaches
+    # it after the tool call is authorised. Note X-API-Key, not a Bearer
+    # header — Looped's key auth is its own scheme.
+    - url: https://api.looped.sh
+      header: X-API-Key
+      value: "${LOOPED_API_KEY}"
+
+permissions:
+  net:
+    - api.looped.sh
+  run: []
+
+memory:
+  # WhatsApp has no threads — one number is one conversation, forever — so
+  # thread scope keeps the back-and-forth that makes "make that P1 instead"
+  # resolvable without repeating the whole request.
+  scope: thread
+
+limits:
+  # A project lookup, the write, and room to recover from one bad call.
+  max_steps: 10

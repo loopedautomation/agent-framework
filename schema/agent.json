@@ -327,6 +327,103 @@
             "properties": {
               "type": {
                 "type": "string",
+                "const": "whatsapp"
+              },
+              "phone_number_id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The sending number's id from the WhatsApp Manager (a number, not the phone number itself)."
+              },
+              "token_env": {
+                "default": "WHATSAPP_TOKEN",
+                "description": "Env var holding the system user access token with whatsapp_business_messaging.",
+                "type": "string",
+                "minLength": 1
+              },
+              "app_secret_env": {
+                "default": "WHATSAPP_APP_SECRET",
+                "description": "Env var holding the Meta app secret. Every delivery's X-Hub-Signature-256 is verified over the raw body before parsing; unsigned POSTs get a 401.",
+                "type": "string",
+                "minLength": 1
+              },
+              "verify_token_env": {
+                "default": "WHATSAPP_VERIFY_TOKEN",
+                "description": "Env var holding the handshake token you mint and paste into the webhook setup. Unlike a per-boot secret it must survive restarts: Meta re-verifies whenever the subscription changes.",
+                "type": "string",
+                "minLength": 1
+              },
+              "public_url": {
+                "type": "string",
+                "format": "uri",
+                "description": "The externally reachable HTTPS base you register as the callback URL (e.g. https://my-agent.fly.dev). Required: the Cloud API is webhook-only, there is no polling transport."
+              },
+              "port": {
+                "default": 8080,
+                "description": "Port to listen on.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "path": {
+                "default": "/whatsapp",
+                "description": "HTTP path Meta POSTs deliveries to (and GETs to verify).",
+                "type": "string",
+                "pattern": "^\\/.*"
+              },
+              "from_numbers": {
+                "description": "Only handle messages from these phone numbers (any format; compared digits-only); the filter runs before the model is called. Omit for anyone who messages the business.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "allow_silence": {
+                "default": false,
+                "description": "Post nothing when the agent replies with exactly __NO_REPLY__ (or nothing). Instruct the sentinel in purpose.",
+                "type": "boolean"
+              },
+              "graph_version": {
+                "default": "v26.0",
+                "description": "Graph API version, pinned deliberately. A channel that follows the latest version breaks at Meta's convenience, not yours.",
+                "type": "string",
+                "pattern": "^v\\d+\\.\\d+$"
+              },
+              "api_base": {
+                "description": "Graph host override, e.g. a 360dialog pass-through. Defaults to https://graph.facebook.com.",
+                "type": "string",
+                "format": "uri"
+              },
+              "out_of_window_template": {
+                "description": "Name of an approved template to fall back on when a scheduled send lands outside the 24-hour service window. It must take exactly one body parameter, which receives the message text with its whitespace collapsed. Without it, out-of-window sends are refused loudly rather than dropped.",
+                "type": "string",
+                "minLength": 1
+              },
+              "out_of_window_template_language": {
+                "default": "en_US",
+                "description": "Language code the fallback template is approved in.",
+                "type": "string",
+                "minLength": 2
+              },
+              "mark_read": {
+                "default": false,
+                "description": "Mark inbound messages read and show the typing bubble while the run works. Off by default: a read receipt is a commitment made on the business's behalf.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "phone_number_id",
+              "public_url"
+            ],
+            "additionalProperties": false,
+            "description": "Listen to WhatsApp Cloud API messages on your own WhatsApp Business Account. Webhook-only (needs a public HTTPS URL) and subject to Meta's Business Solution Terms: this connects a business's own assistant to its own number, it is not a way to put a general assistant on WhatsApp. Read docs/whatsapp.mdx before configuring."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "webhook"
               },
               "path": {

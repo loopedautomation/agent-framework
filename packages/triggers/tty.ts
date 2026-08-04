@@ -1,4 +1,4 @@
-import { logInfo } from "@looped/core";
+import { logInfo, timingSafeEqual } from "@looped/core";
 import type { AgentEvent, HandleOptions, ImageContent, RunResult, Trigger } from "@looped/core";
 
 /** Options for {@linkcode TtyTrigger}. */
@@ -76,17 +76,6 @@ function validImages(
       typeof (i as { data?: string }).data === "string" &&
       (i as { data: string }).data.length <= TTY_MAX_IMAGE_BYTES
     );
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const ab = enc.encode(a);
-  const bb = enc.encode(b);
-  let diff = ab.length ^ bb.length;
-  for (let i = 0; i < Math.max(ab.length, bb.length); i++) {
-    diff |= (ab[i % ab.length] ?? 0) ^ (bb[i % bb.length] ?? 0);
-  }
-  return diff === 0;
 }
 
 /**

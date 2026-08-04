@@ -162,6 +162,37 @@ CREATE INDEX runs_open ON runs (id) WHERE finished_at IS NULL;
       db.exec("ALTER TABLE runs ADD COLUMN cost_usd REAL");
     },
   },
+  {
+    id: "006_channel_state",
+    // Channels whose delivery is at-least-once need somewhere durable to
+    // remember what they have already handled: WhatsApp retries an
+    // undelivered webhook for up to seven days, and a duplicate that gets
+    // past the gate is a second billed run and a second reply. An in-memory
+    // set would lose the lot on every deploy, which is exactly the window
+    // the retries live in.
+    //
+    // channel_state is the same argument for facts a channel has to carry
+    // between restarts — WhatsApp's 24-hour service window per contact.
+    // Both are keyed by channel so a second channel needs no schema change.
+    up(db) {
+      db.exec(`
+CREATE TABLE seen_events (
+  channel TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (channel, event_id)
+);
+CREATE INDEX seen_events_seen_at ON seen_events (seen_at);
+CREATE TABLE channel_state (
+  channel TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (channel, key)
+);
+`);
+    },
+  },
 ];
 
 /**

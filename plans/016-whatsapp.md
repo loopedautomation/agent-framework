@@ -4,7 +4,7 @@ Every channel this framework speaks so far was designed for bots. Discord hands 
 
 That last item is the reason this plan opens with terms rather than transport. WhatsApp is the largest messaging surface on earth and the one users ask for most, and the integration itself is smaller than Discord's. What makes it a plan rather than a pull request is everything around the wire.
 
-Status: design; implementation has not started.
+Status: phases 1 and 2 shipped — the `whatsapp` channel, its config schema, docs and the `whatsapp-track-bot` example are in the tree. Phase 3 (interactive replies, a general template send path) has not started; the open questions below are answered where the code answers them.
 
 ## The constraint that shapes the product
 
@@ -118,6 +118,27 @@ A live test against a real WABA (`whatsapp_live_test.ts`, skipped without creden
 3. **Interactive and templates.** Reply buttons (3 max, 20-char titles), lists (10 rows, 24-char titles), and a template send path — the last of which is what makes out-of-window delivery work properly and is the doorway to Flows, which are their own plan if anyone wants them.
 
 Plan 12's rename lands underneath all of this; if 12 ships first, this is a `channels:` entry from day one, and if it doesn't, this is a `triggers:` entry that gets swept with the rest.
+
+## What shipped, and what the open questions got answered with
+
+Phases 1 and 2 landed together, because a WhatsApp agent that ignores voice notes is one people stop using and the media path is where voice lives.
+
+- **Where the wamid dedup table lives:** the store. `seen_events (channel, event_id)` and `channel_state (channel, key, value)` arrived as migration `006_channel_state`, generic in the channel rather than named after this one. Meta's retry window is measured in days and deploys are not, so an in-memory LRU would lose exactly the ids that matter. `triggersFromConfig` grew an optional `store` parameter to pass it down; without one the channel degrades to `memoryState()` rather than refusing to start.
+- **`mark_read` defaults off.** A read receipt is a commitment made on the business's behalf, and the operator should choose to make it.
+- **Statuses stay operator information.** `failed` deliveries and all three levels of Graph's errors are logged; nothing wakes the agent on a non-message.
+- **The typing indicator is not refreshed.** One call on inbound, and the bubble lapses after 25 seconds on a longer run. Re-sending on a timer costs an API call every 20 seconds per active conversation, which is a real bill for a cosmetic effect.
+- **No template registry.** `out_of_window_template` names a template and passes the run's text as one body parameter; mirroring Meta's approval state in YAML remains a synchronization problem we don't want to own.
+- **The rendering note is one-sided.** `toWhatsAppMarkup()` converts on the way out, and the docs tell operators to prompt for short plain replies — but nothing appends a per-channel note to the agent's context, because no such seam exists yet. Plan 12's channel rename is the natural place to add one.
+- **`timingSafeEqual` is one export in core** (`@looped/core`), replacing seven identical copies across the triggers package rather than the three the plan counted.
+
+What a review pass changed, because these are the parts the plan did not anticipate:
+
+- **`max_image_bytes` was not a cap.** WhatsApp allows a 100 MB document, a document keeps its real mime type, and the webhook carries no size at all — so an image sent as a file reached `resolveAttachments` with `size: undefined`, was downloaded whole, and was only then measured against a 5 MB limit. Every other channel passes a size and never hits this. The ceiling now travels with the fetch: the media lookup's `file_size` makes the common refusal free, and the read is capped regardless, because that number is Graph's claim rather than a guarantee.
+- **A failed run used to lose the message.** The wamid was claimed before the run and never given back, so a run that threw took the message with it: Meta's next copy was dropped as a duplicate of an attempt that never produced a reply. The claim is released on failure, and `stop()` now drains in-flight runs the way `github.ts` already did, because the delivery was acked on arrival and abandoning it is a message accepted and never answered.
+- **The markup conversion had an ordering bug and an unbounded regex.** Headings ran before the bold rule, so `# **Q3 results** are in` came out as `**Q3 results* are in*`; emphasis runs crossed newlines, so one stray `**` bolded every paragraph up to the next one; and the link pattern was quadratic, turning a long quoted document into seconds of blocked event loop. Splits also tore runs in half, which `balanceMarkup` now closes and reopens at the seam.
+- **The service window could move backwards.** Deliveries are unordered, so a first-time copy of an old message arriving after a fresh one overwrote a live window with an expired one, costing a template to reopen a conversation that was actually open. It only moves outwards now.
+
+Still open: Embedded Signup for the hosted platform (Plan 5's problem or this one's), and whether a refused delivery becomes a first-class run status rather than a thrown error the scheduler logs.
 
 ## Open questions
 

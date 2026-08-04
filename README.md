@@ -44,7 +44,7 @@ permissions:
 ## What's here
 
 - **The `af` CLI.** `af init` scaffolds a complete agent project with the agent file, a secrets template and a deployment shape. `af validate` checks it and `af run` runs it: without triggers you get an interactive REPL, with them the agent runs as a service.
-- **Triggers.** Discord, Slack and Telegram (including observer agents), plus webhooks and cron.
+- **Triggers.** Discord, Slack, Telegram and WhatsApp (including observer agents), plus email, webhooks and cron.
 - **Capability, added deliberately.** Markdown [skills](skills/), MCP servers, a small native toolset and tool search, which keeps tool schemas out of a small model's context.
 - **Deny-by-default permissions.** You allowlist the hosts, executables and paths an agent is allowed to touch. Secrets are scoped, and their values stay out of the model's context. Every permission decision lands in a SQLite audit trail.
 - **Docker-native deployment.** We publish a hardened base image (`ghcr.io/loopedautomation/agent`), a one-`apk add` recipe for custom images and a status surface at `/healthz`, `/runs` and `/audit`. Deploys can be file-less, with everything passed through env vars.

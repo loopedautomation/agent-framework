@@ -1,4 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
+import { DatabaseSync } from "node:sqlite";
 import { Store } from "./store.ts";
 
 function tempStore(): Store {
@@ -297,4 +298,62 @@ Deno.test("run cost is recorded, and unpriced runs stay out of the totals", () =
   assertEquals(stats.pricedRuns, 1);
   assertEquals(store.recentRuns().find((r) => r.id === unpriced)!.cost_usd, null);
   store.close();
+});
+
+Deno.test("claimEvent is the at-least-once gate: the first delivery wins", () => {
+  const store = tempStore();
+  assert(store.claimEvent("whatsapp", "wamid.1"));
+  assertEquals(store.claimEvent("whatsapp", "wamid.1"), false);
+  assert(store.claimEvent("whatsapp", "wamid.2"));
+  // Channels don't collide: the same id under another channel is a new claim.
+  assert(store.claimEvent("other", "wamid.1"));
+  // Nothing is old enough to prune yet.
+  assertEquals(store.pruneEvents("whatsapp", 8), 0);
+  store.close();
+});
+
+Deno.test("channel state survives as a per-channel key/value", () => {
+  const store = tempStore();
+  assertEquals(store.getChannelState("whatsapp", "window:263771234567"), undefined);
+  store.setChannelState("whatsapp", "window:263771234567", "1770000000000");
+  assertEquals(store.getChannelState("whatsapp", "window:263771234567"), "1770000000000");
+  store.setChannelState("whatsapp", "window:263771234567", "1770086400000");
+  assertEquals(store.getChannelState("whatsapp", "window:263771234567"), "1770086400000");
+  assertEquals(store.getChannelState("other", "window:263771234567"), undefined);
+  store.close();
+});
+
+Deno.test("a released claim can be made again; a stale one is pruned", () => {
+  const store = tempStore();
+  assert(store.claimEvent("whatsapp", "wamid.1"));
+  assertEquals(store.claimEvent("whatsapp", "wamid.1"), false);
+  // A run that failed hands its claim back, so the platform's next copy of
+  // the same delivery is handled instead of dropped as a duplicate.
+  assert(store.releaseEvent("whatsapp", "wamid.1"));
+  assert(store.claimEvent("whatsapp", "wamid.1"));
+  assertEquals(store.releaseEvent("whatsapp", "never-claimed"), false);
+  store.close();
+});
+
+Deno.test("channel state is pruned once it can no longer mean anything", async () => {
+  // A file-backed store, so a second connection can age a row the way the
+  // clock would.
+  const path = await Deno.makeTempFile({ suffix: ".db" });
+  const store = new Store(path);
+  store.setChannelState("whatsapp", "window:263771234567", "1770000000000");
+  // Nothing is old enough yet.
+  assertEquals(store.pruneChannelState("whatsapp", 4), 0);
+  assertEquals(store.getChannelState("whatsapp", "window:263771234567"), "1770000000000");
+  store.close();
+
+  const raw = new DatabaseSync(path);
+  raw.exec("UPDATE channel_state SET updated_at = datetime('now', '-9 days')");
+  raw.close();
+
+  const reopened = new Store(path);
+  // Past the longest window WhatsApp grants, so the row cannot still matter.
+  assertEquals(reopened.pruneChannelState("whatsapp", 4), 1);
+  assertEquals(reopened.getChannelState("whatsapp", "window:263771234567"), undefined);
+  reopened.close();
+  await Deno.remove(path);
 });

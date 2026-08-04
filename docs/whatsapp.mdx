@@ -1,0 +1,152 @@
+---
+title: "WhatsApp"
+description: "Connect your business's assistant to WhatsApp: eligibility, Cloud API setup, the 24-hour window."
+---
+
+The `whatsapp` channel connects an agent to the WhatsApp Cloud API on your own business number, over an inbound webhook. Whether you are allowed to is the first question, so it comes first.
+
+## Eligibility
+
+Meta's [Business Solution Terms](https://www.whatsapp.com/legal/business-solution-terms) prohibit using the WhatsApp Business Platform to provide "AI or machine-learning technologies, including LLMs, generative AI platforms, or general-purpose AI assistants" **when that AI is the primary functionality being provided**. Enforcement began for new users on 2025-10-15 and reached everyone on 2026-01-15. ChatGPT, Copilot and Perplexity were removed from the platform under it.
+
+The question that decides whether you can use this channel:
+
+> **Is this agent your business's own assistant, doing your business's own work for your own customers?**
+
+If yes, you are on the right side of the line and this page is for you. Support, order status, bookings, delivery notifications, account questions, operations: that is what the platform is for.
+
+If what you want is a general assistant you can chat to on WhatsApp, the platform forbids it, and no amount of framing fixes that. The honest answer is [Telegram](telegram.md): it costs nothing, asks no permission, and takes two minutes.
+
+We ship the framework; you bring your own WhatsApp Business Account, your own number, your own display name and your own use case. The framework never brokers a WABA, never offers a shared number or a pooled sender, and never fronts many agents behind one sender. Your agent authenticates as your business, which is also what keeps quality ratings, messaging tiers and bans scoped to whoever earned them.
+
+**This channel is not free.** Meta bills per conversation, and business verification is a real process with real paperwork. Read [Meta's pricing](https://developers.facebook.com/docs/whatsapp/pricing) before you build something you intend to run at volume.
+
+## What you need
+
+The Cloud API is the only supported architecture. The On-Premises API was fully sunset on 2025-10-23 and can no longer send messages. That has one consequence worth knowing up front: **inbound is webhook-only**. There is no long-poll, no gateway socket, no Socket Mode equivalent, so unlike Telegram and Slack there is no transport that works from a laptop behind NAT. You need somewhere to host this with a public HTTPS URL.
+
+Webhook-only does have one thing going for it: the host can scale to zero. Meta retries an undelivered webhook for up to seven days, and on a host that autostarts on inbound HTTP, the retry is what wakes the machine.
+
+```yaml
+triggers:
+  - type: whatsapp
+    phone_number_id: "123456789012345"
+    public_url: https://my-agent.fly.dev
+    # token_env: WHATSAPP_TOKEN (default)              — system user access token
+    # app_secret_env: WHATSAPP_APP_SECRET (default)    — signs X-Hub-Signature-256
+    # verify_token_env: WHATSAPP_VERIFY_TOKEN (default) — your handshake token
+    # path: /whatsapp   (default)
+    # port: 8080        (default)
+    # from_numbers: ["+263771234567"]  # allow-list, checked before the model
+    # allow_silence: true              # a reply of exactly __NO_REPLY__ posts nothing
+    # graph_version: v26.0             # pinned deliberately
+    # api_base: https://graph.facebook.com
+    # out_of_window_template: service_update
+    # mark_read: true                  # read receipt + typing indicator
+```
+
+## Options
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `phone_number_id` | — | Required. The sending number's id from the WhatsApp Manager — a long numeric id; the phone number itself appears nowhere in this config. |
+| `public_url` | — | Required. The externally reachable **HTTPS** base. Nothing registers it for you; Meta's dashboard is where the callback URL is set. The agent prints `<public_url><path>` at startup, so you have the exact string to paste. |
+| `token_env` | `WHATSAPP_TOKEN` | Env var holding the system user access token (`whatsapp_business_messaging`). |
+| `app_secret_env` | `WHATSAPP_APP_SECRET` | Env var holding the Meta app secret. Every delivery's `X-Hub-Signature-256` is verified over the raw body before parsing; unsigned POSTs get a 401. |
+| `verify_token_env` | `WHATSAPP_VERIFY_TOKEN` | Env var holding the handshake token you mint and paste into the webhook setup. It must survive restarts: Meta re-verifies whenever the subscription changes. |
+| `path` | `/whatsapp` | HTTP path Meta POSTs deliveries to (and GETs to verify). |
+| `port` | `8080` | Port to listen on. |
+| `from_numbers` | anyone | Only handle messages from these numbers. Any format — comparison is digits-only, so `+263 77 123 4567` and `263771234567` are the same number. The filter runs before the model is called. |
+| `allow_silence` | `false` | Post nothing when the agent replies with exactly `__NO_REPLY__`, or nothing at all. Tell the agent about the sentinel in `purpose`. |
+| `graph_version` | `v26.0` | The Graph API version, pinned. Bump it deliberately, the way you bump a model id. `v25.0` is supported to 2028-07-29. |
+| `api_base` | `https://graph.facebook.com` | Graph host override: a [360dialog](https://360dialog.com) pass-through, or a fake in tests. Must be `https://`, because the access token rides every call against it. |
+| `out_of_window_template` | — | Name of an approved template for sends that land outside the 24-hour window. See below. |
+| `out_of_window_template_language` | `en_US` | Language code the fallback template is approved in. |
+| `mark_read` | `false` | Mark the inbound message read and raise the typing bubble. Off by default: a read receipt is a commitment made on your business's behalf. The bubble is raised once and lapses after 25 seconds, so a long run goes quiet before it answers. |
+
+`from_numbers` matters more here than the `from_users` equivalent does elsewhere. An unlisted number reaching the model costs tokens, and it also means a stranger has your business's phone number in their contacts.
+
+Notably absent: `require_mention` and `chats`. The Cloud API has no group messaging for businesses. Every conversation is one person and one business number, so both filters would be furniture.
+
+Multiple HTTP-serving triggers on one agent need distinct `port`/`path` combinations, the same rule as the [`webhook`](webhook.md), `github` and `email` triggers.
+
+## Setup
+
+This is the longest setup of any channel here. Budget an afternoon, plus however long Meta takes to verify your business.
+
+1. **Create a Meta app.** In the [Meta App Dashboard](https://developers.facebook.com/apps), create a Business-type app and add the **WhatsApp** product to it.
+2. **Get a number.** The test number Meta gives you can message five recipients you nominate — enough to build against. For production, add your own number and register it with a PIN. Copy the **Phone number ID** (not the phone number) into `phone_number_id`.
+3. **Mint the secrets.**
+   - Access token: create a **system user** in Business Settings with the `whatsapp_business_messaging` permission and generate a long-lived token. The 24-hour token on the dashboard is for the first ten minutes of experimenting, nothing else. → `WHATSAPP_TOKEN`
+   - App secret: App Dashboard → Settings → Basic → App Secret. → `WHATSAPP_APP_SECRET`
+   - Verify token: any string you invent, e.g. `openssl rand -hex 16`. → `WHATSAPP_VERIFY_TOKEN`
+4. **Start the agent** somewhere with a public HTTPS URL: `af run agent.yaml`. It must be running before the next step — the handshake is a live request.
+5. **Register the webhook.** In the app's WhatsApp → Configuration panel, set the callback URL to `<public_url><path>` (e.g. `https://my-agent.fly.dev/whatsapp`) and the verify token to the one you minted. Meta GETs the URL immediately; the agent echoes the challenge back and the panel goes green.
+6. **Subscribe to fields.** Tick `messages`. That one field carries inbound messages *and* delivery receipts.
+7. **Message the number** from a phone on your allow-list.
+8. **Go to production.** Business verification, a display name review, and moving the app out of development mode are what let numbers other than your test recipients reach the agent.
+
+## The 24-hour window
+
+Any inbound message from a user opens a 24-hour **service window** in which you may send free-form messages. Outside it, only pre-approved templates may be sent, and anything else is a 400 from Graph. A free-entry-point conversation — someone arriving from a Click-to-WhatsApp ad or a Page CTA — opens a 72-hour window instead.
+
+For a request/reply agent this is invisible: the message that woke the agent opened the window, and the reply lands inside it. You never think about it.
+
+It becomes load-bearing the moment your agent sends something unprompted — a [scheduled](scheduling.md) message it created, a cron result routed to WhatsApp, a follow-up hours later. Every one of those can fire into a closed window.
+
+So the channel tracks it. The end of each contact's window is recorded when their message arrives and checked before any proactive send:
+
+- **Window open** → a normal text message. Nothing to think about.
+- **Window closed, `out_of_window_template` set** → the named template is sent with your text as its single body parameter, whitespace collapsed and truncated at 1024 characters. Graph rejects a parameter containing newlines, so a multi-line reply arrives as one paragraph.
+- **Window closed, no template** → the send is **refused, loudly**, with an error naming the reason. Silently dropping a scheduled message is worse than a red line in your logs.
+
+Templates are approved in Meta's UI. Your config only names one. Create one with exactly one body parameter (a "service update" style template is the usual shape), wait for approval, then name it in `out_of_window_template`. A template with zero or two parameters is rejected by Graph at send time.
+
+## Formatting
+
+WhatsApp is not markdown. It has its own markup — `*bold*`, `_italic_`, `~strike~`, and triple-backtick monospace — with no headings, no markdown links and no nested lists. A model that has been talking to Discord all day will emit `**bold**` and `## Heading`, and they render as literal asterisks and hashes.
+
+The channel converts the common constructs on the way out: `**x**` and `__x__` become `*x*`, `# Heading` becomes a bold line, `[text](url)` becomes `text (url)` (WhatsApp autolinks bare URLs anyway), and `* item` becomes `- item`. Fenced and inline code pass through untouched. You don't have to prompt around it, though telling the agent in `purpose` to keep replies short and plain is worth doing regardless — this is a phone screen.
+
+Messages are split at WhatsApp's 4096-character cap on line boundaries, the same as every other chat channel.
+
+## Media and voice notes
+
+Inbound images resolve through the same [attachments](attachments.md) path as every other channel, under the same `limits:` caps. Stickers arrive as WebP images and are read like any other image, which costs vision tokens; audio, video and documents are handed to the agent as honest notes — it can say plainly that it can't watch a video rather than guessing at one. WhatsApp's own caps are 5 MB for images, 16 MB for audio and video, 100 MB for documents.
+
+Voice notes are worth configuring. WhatsApp is a voice-first channel in much of the world, and with a [`voice:`](voice.md) block an inbound voice note is transcribed into the prompt and the reply goes back as an audio message:
+
+```yaml
+voice:
+  stt:
+    provider: openai
+  tts:
+    provider: openai
+    voice: alloy
+```
+
+The agent can override the modality per reply with the `__VOICE__` and `__TEXT__` sentinels, exactly as on Telegram.
+
+## Aggregators
+
+Direct Cloud API is the default and the documented path. Your own Meta app, and Meta bills you.
+
+[360dialog](https://360dialog.com) passes the Cloud API through unchanged for a flat monthly fee, and works with this channel given a different `api_base`. Twilio, Vonage, Bird and Infobip each impose their own payload shape and normalize away fields this channel depends on; they are not supported, and wrapping one would be a separate channel rather than a mode of this one.
+
+## Baileys and the other unofficial libraries
+
+You will find libraries that drive WhatsApp by pretending to be a linked device on an ordinary personal number, with no business account, no verification and no per-message bill. People ask about them constantly, so here is the plain answer: they violate WhatsApp's terms, the bans that follow are unannounced and unappealable, they take the number down with them, and the ecosystem has already had a live supply-chain incident. This framework does not support them and will not.
+
+The legitimate free option is Telegram. If your use case can't justify WhatsApp's cost and paperwork, that is the signal to use a different channel.
+
+## Under the hood
+
+Worth knowing when you're debugging:
+
+- **Signatures are verified over raw bytes.** HMAC-SHA256 with the app secret, compared timing-safely against `X-Hub-Signature-256`. Parsing and re-serializing a body changes the digest, so the verifier only ever sees bytes.
+- **Deliveries are deduplicated on the wamid.** Meta's delivery is at-least-once, unordered, retried for days and fanned out to every subscribed app. Every message id is claimed in the agent's store before the run starts, so a retry can't become a second billed run with a second reply. The claim survives restarts, because the retry window is measured in days and deploys are not.
+- **Deliveries are acked before the run.** A run outlasts any webhook timeout, and a non-2xx puts the delivery straight back in Meta's retry queue.
+- **`conversationKey` is `whatsapp:<phone number>`.** WhatsApp has no threads: one number is one conversation, forever. With `memory.scope: thread` that gives you a per-contact memory, which is the intuitive reading.
+- **Graph reports errors in three places, and they go to two destinations.** `value.errors` and `statuses[].errors` are logged, because they are yours to act on. An error attached to a message is handed to the agent as a note in its prompt, so it can say what arrived broken. A rejected send only ever explains itself in a `failed` status, so watch your logs after your first template send.
+- **The credentials are checked at boot.** The agent reads its own number back through Graph before it serves anything, so a wrong token or `phone_number_id` fails at startup with the reason attached rather than on the first message.
+- **Inbound media is capped before it is downloaded.** The media lookup reports a size, and the read is capped regardless, because WhatsApp allows a 100 MB document and a document keeps its real mime type. Without that, an image sent as a file walks past `max_image_bytes` and into memory before anything measures it.

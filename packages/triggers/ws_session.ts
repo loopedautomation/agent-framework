@@ -29,19 +29,3 @@ export function validImages(
       (i as { data: string }).data.length <= MAX_IMAGE_BYTES
     );
 }
-
-/**
- * Compare two strings without leaking their length or contents through
- * timing. Used on the bearer token, where a fast reject on the first wrong
- * byte would hand an attacker the token a character at a time.
- */
-export function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const ab = enc.encode(a);
-  const bb = enc.encode(b);
-  let diff = ab.length ^ bb.length;
-  for (let i = 0; i < Math.max(ab.length, bb.length); i++) {
-    diff |= (ab[i % ab.length] ?? 0) ^ (bb[i % bb.length] ?? 0);
-  }
-  return diff === 0;
-}
