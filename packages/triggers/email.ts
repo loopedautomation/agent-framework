@@ -1,4 +1,12 @@
-import { logError, logInfo, resolveAttachments, timingSafeEqual, withNotes } from "@looped/core";
+import {
+  BodyTooLargeError,
+  logError,
+  logInfo,
+  readCapped,
+  resolveAttachments,
+  timingSafeEqual,
+  withNotes,
+} from "@looped/core";
 import type {
   AgentEvent,
   Attachment,
@@ -20,6 +28,16 @@ import { NO_REPLY } from "./text.ts";
 // verified before the payload is even parsed.
 
 const RESEND_API = "https://api.resend.com";
+
+/**
+ * Ceiling on a single inbound webhook delivery. The webhook carries metadata
+ * only — addresses, a subject, an email id — and Svix, which signs and sends
+ * it, caps its own messages at a few hundred kilobytes, so a megabyte is orders
+ * of magnitude above any real delivery. The read happens before the signature
+ * can be checked, which is what needs the cap: the mail body is fetched from
+ * the API afterwards, over an authenticated connection, and is not bounded here.
+ */
+const MAX_WEBHOOK_BYTES = 1024 * 1024;
 
 /** The metadata carried by Resend's `email.received` webhook (bodies come from the API). */
 export interface ResendInboundData {
@@ -303,7 +321,19 @@ export class EmailTrigger implements Trigger {
         return Response.json({ error: "method not allowed" }, { status: 405 });
       }
 
-      const body = await req.text();
+      // The signature is over the exact bytes, so they have to arrive before
+      // there is any reason to trust the sender. A chunked request declares no
+      // length, so the count happens as the stream arrives and a sender that
+      // runs over is disconnected rather than followed.
+      let body: string;
+      try {
+        body = new TextDecoder().decode(await readCapped(req.body, MAX_WEBHOOK_BYTES));
+      } catch (err) {
+        if (err instanceof BodyTooLargeError) {
+          return Response.json({ error: "body too large" }, { status: 413 });
+        }
+        return Response.json({ error: "could not read body" }, { status: 400 });
+      }
       const id = req.headers.get("svix-id");
       const timestamp = req.headers.get("svix-timestamp");
       const signature = req.headers.get("svix-signature");
