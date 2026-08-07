@@ -21,6 +21,12 @@ export interface TtyTriggerOptions {
   description?: string;
   /** Injectable for tests: 0 picks an ephemeral port. */
   onListen?: (addr: { port: number }) => void;
+  /**
+   * Trigger name override for triggers that reuse this protocol surface (the
+   * meet trigger serves the same frames under its own name). Sets the event's
+   * `trigger` field and the conversation-key prefix. Defaults to "tty".
+   */
+  triggerName?: string;
 }
 
 /** A frame the server sends to a connected terminal. */
@@ -103,8 +109,8 @@ function timingSafeEqual(a: string, b: string): boolean {
  * the same conversation.
  */
 export class TtyTrigger implements Trigger {
-  /** Trigger name, used as the event's `trigger` field. */
-  readonly name = "tty";
+  /** Trigger name, used as the event's `trigger` field and key prefix. */
+  readonly name: string;
   #opts: TtyTriggerOptions;
   #server?: Deno.HttpServer;
   /** Open sockets by conversation key, for proactive delivery. */
@@ -113,6 +119,7 @@ export class TtyTrigger implements Trigger {
   /** Create the trigger; no server runs until {@linkcode start}. */
   constructor(opts: TtyTriggerOptions) {
     this.#opts = opts;
+    this.name = opts.triggerName ?? "tty";
   }
 
   #authorized(req: Request): { ok: boolean; protocol?: string } {
@@ -137,7 +144,7 @@ export class TtyTrigger implements Trigger {
     this.#server = Deno.serve({
       port,
       onListen: this.#opts.onListen ?? ((addr) => {
-        logInfo(`tty trigger listening on :${addr.port}${path}`);
+        logInfo(`${this.name} trigger listening on :${addr.port}${path}`);
       }),
     }, (req) => {
       const url = new URL(req.url);
@@ -155,7 +162,7 @@ export class TtyTrigger implements Trigger {
         auth.protocol ? { protocol: auth.protocol } : {},
       );
       const conversationId = url.searchParams.get("conversation_id") ?? crypto.randomUUID();
-      const conversationKey = `tty:${conversationId}`;
+      const conversationKey = `${this.name}:${conversationId}`;
       this.#attach(socket, emit, stop, conversationId, conversationKey);
       return response;
     });

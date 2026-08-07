@@ -169,6 +169,33 @@ const TtyTriggerSchema = z.strictObject({
   "Interactive terminal over WebSocket: connect to {path}, send {type: 'input', text} frames and receive the run's progress and result as JSON frames. This is the REPL as a network surface, for hosted terminals.",
 );
 
+const MeetTriggerSchema = z.strictObject({
+  type: z.literal("meet"),
+  base_url: z.url().describe(
+    "The Looped Meet instance to register with, e.g. https://meet.example.com.",
+  ),
+  public_url: z.url().describe(
+    "The externally reachable HTTPS base of this agent (e.g. https://my-agent.fly.dev); " +
+      "registration hands meet the wss:// equivalent of public_url + path to dial back.",
+  ),
+  path: z.string().startsWith("/").default("/meet").describe(
+    "HTTP path that accepts the WebSocket upgrade from the meet bridge.",
+  ),
+  port: z.number().int().min(1).max(65535).default(8091).describe("Port to listen on."),
+  token_env: z.string().min(1).default("MEET_AGENT_TOKEN").describe(
+    "Env var holding the bearer token the meet bridge must present when dialing in " +
+      "(authorization header or the Sec-WebSocket-Protocol value `bearer.<token>`).",
+  ),
+  registration_token_env: z.string().min(1).default("MEET_REGISTRATION_TOKEN").describe(
+    "Env var holding the meet-issued registration token (lreg_…) presented when the trigger " +
+      "self-registers with base_url on startup and when it delivers proactive messages.",
+  ),
+}).describe(
+  "Join a Looped Meet instance as a persistent agent: serves the tty WebSocket protocol for " +
+    "the meet bridge to dial (inbound HTTP, scale-to-zero friendly) and self-registers with " +
+    "the instance on startup; scheduled output is delivered into meet channels over HTTP.",
+);
+
 const ResendEmailTriggerSchema = z.strictObject({
   type: z.literal("email"),
   transport: z.literal("resend").describe(
@@ -324,6 +351,7 @@ const TriggerSchema = z.discriminatedUnion("type", [
   TelegramTriggerSchema,
   WebhookTriggerSchema,
   TtyTriggerSchema,
+  MeetTriggerSchema,
   EmailTriggerSchema,
   GithubTriggerSchema,
   CronTriggerSchema,
@@ -686,6 +714,19 @@ const agentConfigSchema = z.strictObject({
         });
       }
     }
+    if (t.type === "meet") {
+      // Registration hands meet a dial-back URL; ws:// (http://) would be
+      // rejected by any real instance, so fail at config time instead.
+      for (const field of ["base_url", "public_url"] as const) {
+        if (!t[field].startsWith("https://")) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["triggers", i, field],
+            message: `${field} must be https:// — meet dials agents back over TLS`,
+          });
+        }
+      }
+    }
   });
 });
 
@@ -812,6 +853,24 @@ export interface TtyTriggerConfig {
   port: number;
   /** Env var holding the bearer token clients must present. */
   token_env: string;
+}
+
+/** A meet trigger: join a Looped Meet instance as a persistent, dial-back agent. */
+export interface MeetTriggerConfig {
+  /** Discriminant for TriggerConfig. */
+  type: "meet";
+  /** The Looped Meet instance to register with. */
+  base_url: string;
+  /** The externally reachable HTTPS base of this agent; meet dials back its wss:// equivalent. */
+  public_url: string;
+  /** HTTP path that accepts the WebSocket upgrade from the meet bridge. */
+  path: string;
+  /** Port to listen on. */
+  port: number;
+  /** Env var holding the bearer token the meet bridge must present when dialing in. */
+  token_env: string;
+  /** Env var holding the meet-issued registration token (lreg_…). */
+  registration_token_env: string;
 }
 
 /** An email trigger on the Resend pushed transport: signed inbound-mail webhooks wake the agent. */
@@ -948,6 +1007,7 @@ export type TriggerConfig =
   | TelegramTriggerConfig
   | WebhookTriggerConfig
   | TtyTriggerConfig
+  | MeetTriggerConfig
   | EmailTriggerConfig
   | GithubTriggerConfig
   | CronTriggerConfig;

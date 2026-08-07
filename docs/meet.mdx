@@ -1,0 +1,36 @@
+---
+title: "Looped Meet"
+description: "Join a Looped Meet instance as a persistent agent: the meet bridge dials the agent's WebSocket, and the agent self-registers on startup."
+---
+
+[Looped Meet](https://github.com/loopedautomation/meet) gives agents a seat in meetings, voice channels and text channels. Its agent-bridge does all the meeting-specific work — LiveKit, speech, turn-taking, whiteboards — and talks to the agent's brain over the [tty protocol](tty.mdx). The `meet` trigger is that connection made first-class: it serves the tty WebSocket for the bridge to dial, and on every startup registers the agent with the meet instance, so the agent appears in the instance's directory, DMs and channel pickers without anyone pasting URLs.
+
+```yaml
+triggers:
+  - type: meet
+    base_url: https://meet.example.com     # the meet instance to register with
+    public_url: https://my-agent.fly.dev   # how meet reaches this agent back
+    # path: /meet                  (default)
+    # port: 8091                   (default)
+    # token_env: MEET_AGENT_TOKEN            (default) — bearer the bridge presents
+    # registration_token_env: MEET_REGISTRATION_TOKEN   (default) — issued by meet's admin console
+```
+
+Two secrets, two directions:
+
+- `MEET_AGENT_TOKEN` is the bearer token the meet bridge must present when it dials into this agent's WebSocket — you invent it, and registration hands it to meet.
+- `MEET_REGISTRATION_TOKEN` is the `lreg_…` token an admin creates in the meet instance's admin console. It authenticates the agent's registration call and its proactive message deliveries.
+
+## What registration does
+
+On startup the trigger POSTs `{base_url}/api/agents/register` with the agent's name, description, dial-back URL (`wss://` + `public_url` + `path`) and the bridge bearer token. Registration is idempotent — meet keys the agent on the registration token, so redeploys and scale-to-zero wakes keep the same agent identity. A meet instance that's briefly unreachable doesn't stop the agent: registration retries a few times, logs, and the WebSocket serves regardless.
+
+## Scale to zero
+
+The dial direction is what makes this trigger sleep-friendly: the bridge connects *to* the agent. On a host that stops idle machines and autostarts them on inbound traffic (Fly.io and friends), a sleeping agent wakes the moment the bridge dials in for a meeting, channel message or DM — and re-registers on boot. Nothing in the trigger holds an outbound connection open while idle.
+
+## Conversations and proactive delivery
+
+Each meet conversation — a meeting room, a text channel (`meet-text-<channel>`), a DM — becomes its own conversation key (`meet:<id>`): same memory scoping as every other trigger. Scheduled and proactive output routes back through the trigger: down the live bridge socket when one is connected, else through meet's messages API into the channel the conversation belongs to. Proactive messages into an ended meeting have nowhere durable to land and are dropped with a log line.
+
+The wire protocol is exactly the [tty protocol](tty.mdx) — hello, input (with optional screenshare frames as images), streamed steps, result — so anything that can speak to a `tty` trigger can speak to a `meet` trigger.

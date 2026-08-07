@@ -137,6 +137,10 @@ function triggerHosts(trigger: TriggerConfig, listenHost: string): string[] {
     case "github":
     case "tty":
       return [`${listenHost}:${trigger.port}`];
+    case "meet":
+      // The listen port for the bridge's inbound dial, plus the meet instance
+      // itself for registration and proactive message delivery.
+      return [urlHost(trigger.base_url), `${listenHost}:${trigger.port}`];
     case "cron":
       return [];
     case "email":

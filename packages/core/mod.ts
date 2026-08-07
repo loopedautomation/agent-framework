@@ -24,6 +24,7 @@ export {
   type LimitsConfig,
   type LiveVoiceConfig,
   type McpServerConfig,
+  type MeetTriggerConfig,
   type MemoryConfig,
   type ModelConfig,
   type OutlookEmailTriggerConfig,
