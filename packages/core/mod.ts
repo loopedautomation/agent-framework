@@ -21,6 +21,7 @@ export {
   type HttpAuthConfig,
   type HttpConfig,
   type ImapEmailTriggerConfig,
+  type MeetTriggerConfig,
   type LimitsConfig,
   type LiveVoiceConfig,
   type McpServerConfig,

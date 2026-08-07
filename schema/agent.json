@@ -368,6 +368,57 @@
             "description": "Interactive terminal over WebSocket: connect to {path}, send {type: 'input', text} frames and receive the run's progress and result as JSON frames. This is the REPL as a network surface, for hosted terminals."
           },
           {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "meet"
+              },
+              "base_url": {
+                "type": "string",
+                "format": "uri",
+                "description": "The Looped Meet instance to register with, e.g. https://meet.example.com."
+              },
+              "public_url": {
+                "type": "string",
+                "format": "uri",
+                "description": "The externally reachable HTTPS base of this agent (e.g. https://my-agent.fly.dev); registration hands meet the wss:// equivalent of public_url + path to dial back."
+              },
+              "path": {
+                "default": "/meet",
+                "description": "HTTP path that accepts the WebSocket upgrade from the meet bridge.",
+                "type": "string",
+                "pattern": "^\\/.*"
+              },
+              "port": {
+                "default": 8091,
+                "description": "Port to listen on.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "token_env": {
+                "default": "MEET_AGENT_TOKEN",
+                "description": "Env var holding the bearer token the meet bridge must present when dialing in (authorization header or the Sec-WebSocket-Protocol value `bearer.<token>`).",
+                "type": "string",
+                "minLength": 1
+              },
+              "registration_token_env": {
+                "default": "MEET_REGISTRATION_TOKEN",
+                "description": "Env var holding the meet-issued registration token (lreg_…) presented when the trigger self-registers with base_url on startup and when it delivers proactive messages.",
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "type",
+              "base_url",
+              "public_url"
+            ],
+            "additionalProperties": false,
+            "description": "Join a Looped Meet instance as a persistent agent: serves the tty WebSocket protocol for the meet bridge to dial (inbound HTTP, scale-to-zero friendly) and self-registers with the instance on startup; scheduled output is delivered into meet channels over HTTP."
+          },
+          {
             "oneOf": [
               {
                 "type": "object",

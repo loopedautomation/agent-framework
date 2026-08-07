@@ -21,6 +21,7 @@ import { GithubTrigger } from "./github.ts";
 import { ImapEmailTrigger } from "./email_imap.ts";
 import { GmailEmailTrigger } from "./email_gmail.ts";
 import { OutlookEmailTrigger } from "./email_outlook.ts";
+import { MeetTrigger } from "./meet.ts";
 import { SlackTrigger } from "./slack.ts";
 import { TelegramTrigger } from "./telegram.ts";
 import { TtyTrigger } from "./tty.ts";
@@ -40,6 +41,7 @@ export type {
   LimitsConfig,
   LiveVoiceConfig,
   McpServerConfig,
+  MeetTriggerConfig,
   MemoryConfig,
   Message,
   ModelConfig,
@@ -69,6 +71,7 @@ export {
   TtyTrigger,
   type TtyTriggerOptions,
 } from "./tty.ts";
+export { MeetTrigger, type MeetTriggerOptions } from "./meet.ts";
 export {
   addressAllowed,
   EmailTrigger,
@@ -209,6 +212,35 @@ export function triggersFromConfig(
             path: t.path,
             port: t.port,
             token,
+            handle: config.handle,
+            name: identityName,
+            description: config.description,
+          }),
+        );
+        break;
+      }
+      case "meet": {
+        const token = getEnv(t.token_env);
+        if (!token) {
+          throw new Error(
+            `meet trigger: token env var ${t.token_env} is not set (required for bearer auth)`,
+          );
+        }
+        const registrationToken = getEnv(t.registration_token_env);
+        if (!registrationToken) {
+          throw new Error(
+            `meet trigger: registration token env var ${t.registration_token_env} is not set ` +
+              "(issued by the meet instance's admin console)",
+          );
+        }
+        triggers.push(
+          new MeetTrigger({
+            baseUrl: t.base_url,
+            publicUrl: t.public_url,
+            path: t.path,
+            port: t.port,
+            token,
+            registrationToken,
             handle: config.handle,
             name: identityName,
             description: config.description,

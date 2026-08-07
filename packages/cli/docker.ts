@@ -46,10 +46,10 @@ function normalize(path: string): string {
   return abs ? `/${out.join("/")}` : out.join("/") || ".";
 }
 
-/** Host ports HTTP-serving triggers (webhook, tty) need published (container port = host port). */
+/** Host ports HTTP-serving triggers (webhook, tty, meet) need published (container port = host port). */
 export function webhookPorts(config: AgentConfig): number[] {
   return (config.triggers ?? [])
-    .filter((t) => t.type === "webhook" || t.type === "tty")
+    .filter((t) => t.type === "webhook" || t.type === "tty" || t.type === "meet")
     .map((t) => t.port);
 }
 
