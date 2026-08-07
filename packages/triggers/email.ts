@@ -1,4 +1,4 @@
-import { logError, logInfo, resolveAttachments, withNotes } from "@looped/core";
+import { logError, logInfo, resolveAttachments, timingSafeEqual, withNotes } from "@looped/core";
 import type {
   AgentEvent,
   Attachment,
@@ -188,17 +188,6 @@ export async function renderEmailInput(
 ): Promise<{ input: string; images: ResolvedMedia["images"] }> {
   const { images, notes } = await resolveAttachments(email.attachments ?? [], limits);
   return { input: withNotes(renderEmail(email), notes), images };
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const ab = enc.encode(a);
-  const bb = enc.encode(b);
-  let diff = ab.length ^ bb.length;
-  for (let i = 0; i < Math.max(ab.length, bb.length); i++) {
-    diff |= (ab[i % ab.length] ?? 0) ^ (bb[i % bb.length] ?? 0);
-  }
-  return diff === 0;
 }
 
 /** Inputs for {@linkcode verifySvixSignature}. */

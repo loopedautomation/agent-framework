@@ -136,10 +136,25 @@ function triggerHosts(trigger: TriggerConfig, listenHost: string): string[] {
       // serving token-gated file downloads (Plan 14).
       return ["slack.com", "wss-primary.slack.com", "wss-backup.slack.com", "files.slack.com"];
     case "telegram":
-      return ["api.telegram.org"];
+      // The webhook transport also serves inbound deliveries; polling does not.
+      return [
+        "api.telegram.org",
+        ...(trigger.transport === "webhook" ? [`${listenHost}:${trigger.port}`] : []),
+      ];
+    case "whatsapp":
+      // Graph for sends and media lookups, the two hosts Meta actually serves
+      // media bytes from, and the callback listener. The Cloud API is
+      // webhook-only, so the listener is never optional here.
+      return [
+        urlHost(trigger.api_base ?? "https://graph.facebook.com"),
+        "lookaside.fbsbx.com",
+        "mmg.whatsapp.net",
+        `${listenHost}:${trigger.port}`,
+      ];
     case "webhook":
     case "github":
     case "tty":
+    case "meet":
       return [`${listenHost}:${trigger.port}`];
     case "cron":
       return [];

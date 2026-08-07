@@ -1,6 +1,6 @@
 # @looped/triggers
 
-Event sources for [Looped AF](https://github.com/loopedautomation/agent-framework) agents. A trigger connects outward, turns what it hears into events and carries the agent's reply back. This package ships five of them: Discord and Slack over their real-time gateways, Telegram over Bot API long-polling, an authenticated webhook server and a cron schedule. Slack and Telegram also take an inbound-HTTP transport (`events_api` / `webhook`) for scale-to-zero hosts.
+Event sources for [Looped AF](https://github.com/loopedautomation/agent-framework) agents. A trigger connects outward, turns what it hears into events and carries the agent's reply back. This package ships several: Discord and Slack over their real-time gateways, Telegram over Bot API long-polling, WhatsApp over the Cloud API webhook, email over four transports, GitHub webhooks, an authenticated webhook server and a cron schedule. Slack and Telegram also take an inbound-HTTP transport (`events_api` / `webhook`) for scale-to-zero hosts; WhatsApp is inbound-HTTP only, because the Cloud API offers nothing else.
 
 ```ts
 import { AgentService, loadAgentConfig } from "@looped/core";

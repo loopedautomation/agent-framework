@@ -63,7 +63,7 @@ An image only helps if the model has eyes. Every current Claude and GPT model do
 
 ## Permissions
 
-Fetching an image means an outbound request, so hermetic agents need the host that serves it. The framework works that out from your triggers, the same way it already derives `discord.com`: a Discord agent gets `cdn.discordapp.com`, a Slack agent gets `files.slack.com`. Telegram and email need nothing new, because their attachments come from a host the agent already talks to.
+Fetching an image means an outbound request, so hermetic agents need the host that serves it. The framework works that out from your triggers, the same way it already derives `discord.com`: a Discord agent gets `cdn.discordapp.com`, a Slack agent gets `files.slack.com`. Telegram and email need nothing new, because their attachments come from a host the agent already talks to. WhatsApp is the exception that proves the rule: Graph hands back a signed URL on a different host, so a WhatsApp agent also gets `lookaside.fbsbx.com` and `mmg.whatsapp.net`.
 
 You don't add these to `permissions.net` yourself. `af flags` will show you the full list an agent runs under; see [the permission model](permission-model.md#hermetic-mode).
 

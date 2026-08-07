@@ -162,7 +162,7 @@ Everything in `env:` is treated as a secret, which is wrong for configuration th
 
 ## The blocks with their own pages
 
-- **`triggers:`** — the events that wake the agent. With triggers, `af run` starts a long-lived service; without, an interactive REPL. → [Discord](discord.mdx) · [Slack](slack.mdx) · [Telegram](telegram.mdx) · [Email](email.mdx) · [Webhook & GitHub](webhook.mdx) · [TTY](tty.mdx) · [Cron](cron.mdx)
+- **`triggers:`** — the events that wake the agent. With triggers, `af run` starts a long-lived service; without, an interactive REPL. → [Discord](discord.mdx) · [Slack](slack.mdx) · [Telegram](telegram.mdx) · [WhatsApp](whatsapp.mdx) · [Email](email.mdx) · [Webhook & GitHub](webhook.mdx) · [TTY](tty.mdx) · [Cron](cron.mdx)
 - **`skills:`** — markdown files that teach the agent how to use something well; capability stays with the config. → [Skills](skills.md)
 - **`tools:`** — capability beyond the natives: MCP servers, and tool search to keep their schemas out of context. → [Tools](tools.md)
 - **`permissions:`** — deny-by-default allowlists for hosts, executables, and paths. Omit the block and the agent can touch nothing. → [Permissions](permissions.md)

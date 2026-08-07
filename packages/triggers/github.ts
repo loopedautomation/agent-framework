@@ -1,4 +1,4 @@
-import { logError, logInfo } from "@looped/core";
+import { logError, logInfo, timingSafeEqual } from "@looped/core";
 import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 
 // The GitHub trigger: a repository or organization webhook POSTs events here,
@@ -10,17 +10,6 @@ import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 // There is no reply channel: GitHub expects an acknowledgement, nothing more.
 // The agent acts through its own capabilities — typically the gh CLI or
 // http_request against api.github.com, granted through permissions.
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const ab = enc.encode(a);
-  const bb = enc.encode(b);
-  let diff = ab.length ^ bb.length;
-  for (let i = 0; i < Math.max(ab.length, bb.length); i++) {
-    diff |= (ab[i % ab.length] ?? 0) ^ (bb[i % bb.length] ?? 0);
-  }
-  return diff === 0;
-}
 
 /** Inputs for {@linkcode verifyGithubSignature}. */
 export interface GithubVerifyOptions {

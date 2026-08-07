@@ -655,3 +655,53 @@ permissions:
     await Deno.remove(dir, { recursive: true });
   }
 });
+
+Deno.test("whatsapp: defaults apply, and both URLs have to be https", () => {
+  const WA = 'triggers:\n  - type: whatsapp\n    phone_number_id: "123"\n' +
+    "    public_url: https://agent.example\n";
+  const wa = parseAgentConfig(MINIMAL + WA).triggers?.[0];
+  assertEquals(wa, {
+    type: "whatsapp",
+    phone_number_id: "123",
+    public_url: "https://agent.example",
+    token_env: "WHATSAPP_TOKEN",
+    app_secret_env: "WHATSAPP_APP_SECRET",
+    verify_token_env: "WHATSAPP_VERIFY_TOKEN",
+    port: 8080,
+    path: "/whatsapp",
+    allow_silence: false,
+    graph_version: "v26.0",
+    out_of_window_template_language: "en_US",
+    mark_read: false,
+  });
+
+  // The Cloud API is webhook-only, so there is no transport that works
+  // without somewhere for Meta to deliver to.
+  assertThrows(
+    () => parseAgentConfig(MINIMAL + 'triggers:\n  - type: whatsapp\n    phone_number_id: "1"\n'),
+    ConfigError,
+  );
+  assertThrows(
+    () =>
+      parseAgentConfig(
+        MINIMAL + 'triggers:\n  - type: whatsapp\n    phone_number_id: "1"\n' +
+          "    public_url: http://agent.example\n",
+      ),
+    ConfigError,
+  );
+  // The access token rides every Graph call, so a plaintext base would put a
+  // long-lived credential on the wire — and the hermetic allowlist is derived
+  // from this value, so a bad base would authorise itself.
+  assertThrows(
+    () => parseAgentConfig(MINIMAL + WA + "    api_base: http://graph.example\n"),
+    ConfigError,
+  );
+  const aggregator = parseAgentConfig(
+    MINIMAL + WA + "    api_base: https://waba-v2.360dialog.io\n",
+  ).triggers?.[0];
+  assert(aggregator?.type === "whatsapp");
+  assertEquals(aggregator.api_base, "https://waba-v2.360dialog.io");
+
+  // A pinned Graph version, so a channel never silently follows latest.
+  assertThrows(() => parseAgentConfig(MINIMAL + WA + "    graph_version: 26\n"), ConfigError);
+});

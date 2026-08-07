@@ -10,6 +10,7 @@ import {
   type AgentConfig,
   commandSpecs,
   DEFAULT_VOICE_API_KEY_ENV,
+  type Store,
   type Trigger,
 } from "@looped/core";
 import { DiscordVoiceSession } from "./discord_voice.ts";
@@ -23,6 +24,7 @@ import { GmailEmailTrigger } from "./email_gmail.ts";
 import { OutlookEmailTrigger } from "./email_outlook.ts";
 import { SlackTrigger } from "./slack.ts";
 import { TelegramTrigger } from "./telegram.ts";
+import { storeState, WhatsAppTrigger } from "./whatsapp.ts";
 import { TtyTrigger } from "./tty.ts";
 import { MeetTrigger } from "./meet.ts";
 import { voiceFromConfig } from "./voice.ts";
@@ -60,6 +62,7 @@ export type {
   VoiceSttConfig,
   VoiceTtsConfig,
   WebhookTriggerConfig,
+  WhatsAppTriggerConfig,
 } from "@looped/core";
 export { NO_REPLY, TEXT_REPLY, VOICE_REPLY } from "./text.ts";
 export { CronTrigger, type CronTriggerOptions } from "./cron.ts";
@@ -138,6 +141,31 @@ export {
   type TelegramTriggerOptions,
 } from "./telegram.ts";
 export {
+  balanceMarkup,
+  changeValues,
+  DEFAULT_GRAPH_VERSION,
+  FREE_ENTRY_WINDOW_MS,
+  inboundMessages,
+  memoryState,
+  type MetaVerifyOptions,
+  normalizeNumber,
+  SERVICE_WINDOW_MS,
+  storeState,
+  toWhatsAppMarkup,
+  verifyMetaSignature,
+  WHATSAPP_LIMIT,
+  type WhatsAppError,
+  type WhatsAppMedia,
+  type WhatsAppMessage,
+  type WhatsAppState,
+  type WhatsAppStatus,
+  WhatsAppTrigger,
+  type WhatsAppTriggerOptions,
+  type WhatsAppValue,
+  type WhatsAppWebhook,
+  windowEndsAt,
+} from "./whatsapp.ts";
+export {
   oggOpusDurationSecs,
   placeholderWaveform,
   SPEAK_MAX_CHARS,
@@ -165,6 +193,7 @@ export function triggersFromConfig(
   config: AgentConfig,
   getEnv: (name: string) => string | undefined = Deno.env.get,
   identityName: string = config.handle,
+  store?: Store,
 ): Trigger[] {
   const triggers: Trigger[] = [];
   // Built-ins plus config-defined commands, registered natively on the chat
@@ -449,6 +478,51 @@ export function triggersFromConfig(
             replyChannel: t.reply_channel,
             allowSilence: t.allow_silence,
             media,
+          }),
+        );
+        break;
+      }
+      case "whatsapp": {
+        const token = getEnv(t.token_env);
+        if (!token) {
+          throw new Error(`whatsapp trigger: access token env var ${t.token_env} is not set`);
+        }
+        const appSecret = getEnv(t.app_secret_env);
+        if (!appSecret) {
+          throw new Error(
+            `whatsapp trigger: app secret env var ${t.app_secret_env} is not set (every delivery's X-Hub-Signature-256 is verified)`,
+          );
+        }
+        const verifyToken = getEnv(t.verify_token_env);
+        if (!verifyToken) {
+          throw new Error(
+            `whatsapp trigger: verify token env var ${t.verify_token_env} is not set (Meta echoes it back on the webhook handshake)`,
+          );
+        }
+        triggers.push(
+          new WhatsAppTrigger({
+            phoneNumberId: t.phone_number_id,
+            token,
+            appSecret,
+            verifyToken,
+            port: t.port,
+            path: t.path,
+            publicUrl: t.public_url,
+            fromNumbers: t.from_numbers,
+            allowSilence: t.allow_silence,
+            graphVersion: t.graph_version,
+            apiBase: t.api_base,
+            outOfWindowTemplate: t.out_of_window_template,
+            outOfWindowTemplateLanguage: t.out_of_window_template_language,
+            markRead: t.mark_read,
+            // Meta retries an undelivered webhook for days, so the dedup gate
+            // has to survive a deploy; without a store it degrades to memory.
+            // Scoped per number: two business numbers on one agent each keep
+            // their own service windows, since a contact can be inside one
+            // and outside the other.
+            state: store ? storeState(store, `whatsapp:${t.phone_number_id}`) : undefined,
+            media,
+            voice,
           }),
         );
         break;
