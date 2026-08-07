@@ -1,4 +1,12 @@
-import { logError, logInfo, resolveAttachments, timingSafeEqual, withNotes } from "@looped/core";
+import {
+  BodyTooLargeError,
+  logError,
+  logInfo,
+  readCapped,
+  resolveAttachments,
+  timingSafeEqual,
+  withNotes,
+} from "@looped/core";
 import type { AgentEvent, Attachment, MediaLimits, RunResult, Trigger } from "@looped/core";
 import { NO_REPLY, splitMessage } from "./text.ts";
 
@@ -33,6 +41,15 @@ export interface SlackVerifyOptions {
   /** Injectable clock for tests (unix seconds). */
   now?: () => number;
 }
+
+/**
+ * Ceiling on a single Events API delivery. Slack's own ceilings are far under
+ * this — a message tops out at 40k characters, blocks at 50 per message, and a
+ * slash command is a short form post — so a megabyte leaves room for the
+ * largest realistic event and still refuses a body sent to exhaust memory. The
+ * read happens before the signature can be checked, which is what needs the cap.
+ */
+const MAX_WEBHOOK_BYTES = 1024 * 1024;
 
 /** Signatures older than this are replays, not slow networks. */
 const MAX_SIGNATURE_AGE_SECS = 300;
@@ -420,7 +437,19 @@ export class SlackTrigger implements Trigger {
         return Response.json({ error: "method not allowed" }, { status: 405 });
       }
 
-      const body = await req.text();
+      // The signature is over the exact bytes, so they have to arrive before
+      // there is any reason to trust the sender. A chunked request declares no
+      // length, so the count happens as the stream arrives and a sender that
+      // runs over is disconnected rather than followed.
+      let body: string;
+      try {
+        body = new TextDecoder().decode(await readCapped(req.body, MAX_WEBHOOK_BYTES));
+      } catch (err) {
+        if (err instanceof BodyTooLargeError) {
+          return Response.json({ error: "body too large" }, { status: 413 });
+        }
+        return Response.json({ error: "could not read body" }, { status: 400 });
+      }
       const verified = await verifySlackSignature({
         signingSecret,
         timestamp: req.headers.get("x-slack-request-timestamp") ?? "",

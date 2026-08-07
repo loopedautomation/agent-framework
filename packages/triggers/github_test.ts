@@ -211,6 +211,22 @@ Deno.test("GithubTrigger: verifies, filters and acks deliveries", async () => {
   });
   assertEquals(opened.status, 202);
 
+  // Well past GitHub's own 25 MB payload cap, so nothing real looks like this.
+  // A wrong signature rides along: 413 rather than 401 is the proof that the
+  // read gave up before the body was ever verified, which is the only ordering
+  // that bounds what an unauthenticated POST can put in memory.
+  const oversized = await fetch(`http://127.0.0.1:${port}/github`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-github-event": "push",
+      "x-hub-signature-256": "sha256=" + "0".repeat(64),
+    },
+    body: new Uint8Array(26 * 1024 * 1024),
+  });
+  assertEquals(oversized.status, 413);
+  await oversized.body?.cancel();
+
   await trigger.stop();
   assertEquals(seen.length, 1);
   assertEquals(seen[0].id, "delivery-1");

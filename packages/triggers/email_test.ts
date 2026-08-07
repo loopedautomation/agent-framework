@@ -350,6 +350,37 @@ Deno.test("email: unlisted senders and foreign event types are ignored without a
   assertEquals(api.sent.length, 0);
 });
 
+Deno.test("email: an oversized body is refused before the signature is checked", async () => {
+  const api = fakeResendApi(RECEIVED);
+  let runs = 0;
+  const { trigger, url } = await startTrigger(api, () => {
+    runs++;
+    return Promise.resolve(runResult("nope"));
+  });
+
+  // The webhook carries metadata only, so nothing real approaches a megabyte.
+  // The svix headers are deliberately forged: 413 rather than 401 is the proof
+  // that the read gave up before the body was verified, which is the only
+  // ordering that bounds what an unauthenticated POST can put in memory.
+  const res = await fetch(url(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "svix-id": "msg_1",
+      "svix-timestamp": String(Math.floor(Date.now() / 1000)),
+      "svix-signature": "v1,Zm9yZ2Vk",
+    },
+    body: new Uint8Array(2 * 1024 * 1024),
+  });
+  assertEquals(res.status, 413);
+  await res.body?.cancel();
+
+  await trigger.stop();
+  await api.close();
+  assertEquals(runs, 0);
+  assertEquals(api.sent.length, 0);
+});
+
 Deno.test("email: auto-generated mail is dropped after the body fetch", async () => {
   const api = fakeResendApi({ ...RECEIVED, headers: { "Auto-Submitted": "auto-replied" } });
   let runs = 0;

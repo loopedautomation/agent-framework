@@ -327,6 +327,23 @@ Deno.test("SlackTrigger: events_api transport verifies, acks, dedupes and dispat
   assertEquals(seen[1].input, "/status deploys");
   assertEquals(responded[0].text, "done");
 
+  // Far past anything Slack sends — a message tops out at 40k characters. The
+  // signature header is deliberately wrong: 413 rather than 401 is the proof
+  // that the read gave up before the body was verified, which is the only
+  // ordering that bounds what an unauthenticated POST can put in memory.
+  const oversized = await fetch(`http://127.0.0.1:${port}/slack`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-slack-request-timestamp": String(Math.floor(Date.now() / 1000)),
+      "x-slack-signature": "v0=" + "0".repeat(64),
+    },
+    body: new Uint8Array(2 * 1024 * 1024),
+  });
+  assertEquals(oversized.status, 413);
+  await oversized.body?.cancel();
+  assertEquals(seen.length, 2);
+
   await trigger.stop();
   await api.shutdown();
 });

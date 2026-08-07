@@ -1,4 +1,4 @@
-import { logError, logInfo, timingSafeEqual } from "@looped/core";
+import { BodyTooLargeError, logError, logInfo, readCapped, timingSafeEqual } from "@looped/core";
 import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 
 // The GitHub trigger: a repository or organization webhook POSTs events here,
@@ -10,6 +10,15 @@ import type { AgentEvent, RunResult, Trigger } from "@looped/core";
 // There is no reply channel: GitHub expects an acknowledgement, nothing more.
 // The agent acts through its own capabilities — typically the gh CLI or
 // http_request against api.github.com, granted through permissions.
+
+/**
+ * Ceiling on a single webhook delivery. GitHub caps its own payloads at 25 MB
+ * and skips delivery entirely above that, so this is the threshold that cannot
+ * drop a real event: a push touching thousands of files is genuinely megabytes.
+ * The body is read before the signature can be checked, so what this bounds is
+ * an unauthenticated POST, not GitHub.
+ */
+const MAX_WEBHOOK_BYTES = 25 * 1024 * 1024;
 
 /** Inputs for {@linkcode verifyGithubSignature}. */
 export interface GithubVerifyOptions {
@@ -265,7 +274,19 @@ export class GithubTrigger implements Trigger {
         return Response.json({ error: "method not allowed" }, { status: 405 });
       }
 
-      const body = await req.text();
+      // The signature is over the exact bytes, so they have to arrive before
+      // there is any reason to trust the sender. A chunked request declares no
+      // length, so the count happens as the stream arrives and a sender that
+      // runs over is disconnected rather than followed.
+      let body: string;
+      try {
+        body = new TextDecoder().decode(await readCapped(req.body, MAX_WEBHOOK_BYTES));
+      } catch (err) {
+        if (err instanceof BodyTooLargeError) {
+          return Response.json({ error: "body too large" }, { status: 413 });
+        }
+        return Response.json({ error: "could not read body" }, { status: 400 });
+      }
       const signature = req.headers.get("x-hub-signature-256");
       const verified = signature !== null &&
         await verifyGithubSignature({ secret: this.#opts.secret, signature, body });
