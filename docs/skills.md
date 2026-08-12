@@ -40,3 +40,4 @@ The [`skills/`](https://github.com/loopedautomation/agent-framework/tree/main/sk
 
 - [`gh-issues`](https://github.com/loopedautomation/agent-framework/blob/main/skills/gh-issues.md) - create and manage GitHub issues with the `gh` CLI. The [gh-issues-bot example](https://github.com/loopedautomation/agent-framework/tree/main/examples/gh-issues-bot) uses it.
 - [`looped-authoring`](https://github.com/loopedautomation/agent-framework/blob/main/skills/looped-authoring.md) - scaffold and validate Looped agents with the `af` CLI. The [agent-zero-bot example](https://github.com/loopedautomation/agent-framework/tree/main/examples/agent-zero-bot), the agent that builds agents, uses it.
+- [`looped-track`](https://github.com/loopedautomation/agent-framework/blob/main/skills/looped-track.md) - log and manage time, projects, tags and todos through the [Looped Track](https://api.looped.sh) API with `http_request`.
