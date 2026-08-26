@@ -23,6 +23,7 @@ This directory is the source of truth for what Looped AF is and where it's going
 | 14 | [014-multimodal.md](014-multimodal.md) | Images, audio and the attachment pipeline across channels |
 | 15 | [015-live-voice.md](015-live-voice.md) | Live voice on Discord: the realtime bridge, delegation and the sandbox groundwork |
 | 16 | [016-whatsapp.md](016-whatsapp.md) | WhatsApp Cloud API as a channel: eligibility, webhooks, the 24-hour window |
+| 17 | [017-postgres-adapter.md](017-postgres-adapter.md) | A second store engine behind a real interface, and the tenancy problem it exposes |
 
 ## How to read and amend these
 
